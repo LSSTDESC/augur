@@ -153,17 +153,19 @@ analyze:
         - cl_lens{{ i }}_lens{{ i }}
       {% endfor %}
 
-  hessian:
+  # stuff below is made of dreams
+  # but should exist in some form: https://github.com/LSSTDESC/firecrown/issues/82    
+  hessian: 
     parameters: *parameters #same as generation
 
     steps:
       default_frac: 0.01
       Omega_k: 0.01
 
-    output: &fisher_fname srd_v1_output.fits 
+    output: &fisher_fname data/srd_v1_output.fits 
 
 
 postprocess:
   input: *fisher_fname
-  latex_table: srd_v1.tex
-  triangle_plot: srd_v1.pdf
+  latex_table: data/srd_v1.tex
+  triangle_plot: data/srd_v1.pdf
