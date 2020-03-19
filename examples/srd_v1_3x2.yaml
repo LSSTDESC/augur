@@ -42,9 +42,9 @@ generation:
       src{{ i }}:
         kind: WLSource
         sacc_tracer:  src{{ i }}
-	Nz_type: Gaussian
-	Nz_center: {{ 0.3 + 0.2*i} }
-	Nz_sigma: 0.2 
+        Nz_type: Gaussian
+        Nz_center: {{ 0.3 + 0.2*i} }
+        Nz_sigma: 0.2 
         ia_bias: A0
         systematics:
           - delta_z_src{{ i }}
@@ -56,10 +56,10 @@ generation:
       lens{{ i }}:
         kind: NumberCountsSource
         sacc_tracer:  lens{{ i }}
-	Nz_type: TopHate
-	Nz_center: {{ 0.3 + 0.2*i} }
-	Nz_width: 0.2 
-	bias: bias_lens{{ i }}
+        Nz_type: TopHate
+        Nz_center: {{ 0.3 + 0.2*i} }
+        Nz_width: 0.2 
+        bias: bias_lens{{ i }}
         systematics:
           - delta_z_lens{{ i }}
       {% endfor %}
@@ -156,7 +156,7 @@ analysis:
   hessian:
     parameters:
       same_as: generation
-	
+
     steps:
       default_frac: 0.01
       Omega_k:0.01
