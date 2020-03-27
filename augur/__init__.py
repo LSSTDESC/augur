@@ -1,7 +1,7 @@
 # flake8: noqa
 from .parser import parse
+from .generate import generate
 
 ## implement in due time
-generate = lambda config, output, verbose : None
-analyze = lambda config, output, verbose : None
-postprocess = lambda config, output, verbose : None
+analyze = lambda config : None
+postprocess = lambda config : None
