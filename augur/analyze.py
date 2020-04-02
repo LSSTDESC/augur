@@ -4,13 +4,12 @@
 
 import firecrown
 from .generate import firecrown_sanitize
-import numpy as np
 
 
 def analyze(config):
     """ Analyzes the data, i.e. a thin wrapper to firecrown
 
-    Parameters: 
+    Parameters:
     ----------
     config : dict
         The yaml parsed dictional of the input yaml file
@@ -20,5 +19,3 @@ def analyze(config):
     ana_config = config['analyze']
     config, data = firecrown.parse(firecrown_sanitize(ana_config))
     firecrown.run_cosmosis(config, data)
-    
-    

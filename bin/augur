@@ -1,43 +1,41 @@
 #!/usr/bin/env python
-import sys
 import uuid
 import pprint
 import click
-import jinja2
-
-import firecrown
 import augur
 
 
 @click.command()
 @click.argument('config', type=str)
 @click.option('-v', '--verbose', is_flag=True)
-def run(config,  verbose):
+def run(config, verbose):
     """Here comes a Roman guy with a spade in his hand.
     """
-    print("Watch out! Here comes a Roman guy with a spade in his hand!", flush=True)
+    print("Watch out! Here comes a Roman guy with a ",
+          "spade in his hand!", flush=True)
 
     # do we actually need this here?
     # Might be useful to pass this to fc
     analysis_id = uuid.uuid4().hex
     print('analysis id:', analysis_id, flush=True)
-    
+
     _config = augur.parse(config)
     if verbose:
         print("rendered config file:\n", pprint.pformat(_config), flush=True)
     _config['verbose'] = verbose
 
     if 'generate' in _config:
-        print ("Generating...")
-        augur.generate (_config)
+        print("Generating...")
+        augur.generate(_config)
 
     if 'analyze' in _config:
-        print ("Analyzing...")
-        augur.analyze (_config)
+        print("Analyzing...")
+        augur.analyze(_config)
 
     if 'postprocess' in _config:
-        print ("Postprocessing...")
-        augur.postprocess (_config)
-    
+        print("Postprocessing...")
+        augur.postprocess(_config)
+
+
 if __name__ == '__main__':
     run()
