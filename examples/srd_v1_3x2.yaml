@@ -1,4 +1,8 @@
 generate:
+  augur: # general options
+    fsky : &fsky 0.35
+    add_noise: &add_noise False # add a realization of noise?
+      
   parameters: &parameters
     Omega_k: 0.0
     Omega_b: 0.0492
@@ -33,19 +37,22 @@ generate:
     {% for i in range(5) %}
     lens{{ i }}_delta_z: 0.0
     {% endfor %}
-  
 
-  two_point:
+  two_point: &two_point
     module: firecrown.ccl.two_point
-    sacc_file: syndata/srd_v1_3x2.sacc
-    sources:
+    sacc_file: &sacc_file syndata/srd_v1_3x2.sacc
+    fsky: *fsky
+    add_noise: *add_noise
+    sources: &two_point_sources
       {% for i in range(5) %}
       src{{ i }}:
         kind: WLSource
         sacc_tracer:  src{{ i }}
         Nz_type: Gaussian
         Nz_center: {{ 0.3 + 0.2*i }}
-        Nz_sigma: 0.2 
+        Nz_sigma: 0.2
+        ellipticity_error: 0.3
+        number_density: 30 # per arcmin2
         ia_bias: A0
         systematics:
           - delta_z_src{{ i }}
@@ -58,12 +65,13 @@ generate:
         Nz_type: TopHat
         Nz_center: {{ 0.3 + 0.2*i }}
         Nz_width: 0.2 
+        number_density: 30 # per arcmin2
         bias: bias_lens{{ i }}
         systematics:
           - delta_z_lens{{ i }}
       {% endfor %}
   
-    systematics:
+    systematics: &two_point_systematics
       {% for thing in ['lens', 'src'] %}
       {% for i in range(5) %}
       delta_z_{{ thing }}{{ i }}:
@@ -72,15 +80,15 @@ generate:
       {% endfor %}
       {% endfor %}
 
-    statistics:
-      {% if False %} # Fourier space
+    statistics: &two_point_statistics
+      {% if True %} # Fourier space
       {% for i in range(5) %}
       {% for j in range(i, 5) %}
       cl_src{{ i }}_src{{ j }}:
         sources: ['src{{ i }}', 'src{{ j }}']
         sacc_data_type: galaxy_shear_cl_ee
         # is there some jinja2 construct for this:
-        ell: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
+        ell_edges: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
       {% endfor %}
       {% endfor %}
   
@@ -88,14 +96,14 @@ generate:
       cl_src{{ i }}_lens{{ j }}:
         sources: ['src{{ i }}', 'lens{{ j }}']
         sacc_data_type: galaxy_shearDensity_cl_e
-        ell: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
+        ell_edges: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
        {% endfor %}
   
       {% for i in range(5) %}
       cl_lens{{ i }}_lens{{ i }}:
         sources: ['lens{{ i }}', 'lens{{ i }}']
         sacc_data_type: galaxy_density_cl
-        ell: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
+        ell_edges: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
         {% endfor %}
 
 
@@ -105,13 +113,13 @@ generate:
       cl_src{{ i }}_src{{ j }}:
         sources: ['src{{ i }}', 'src{{ j }}']
         sacc_data_type: galaxy_shear_xi_plus
-        theta: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
+        theta_edges: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
 
       cl_src{{ i }}_src{{ j }}:
         sources: ['src{{ i }}', 'src{{ j }}']
         sacc_data_type: galaxy_shear_xi_minus
         # is there some jinja2 construct for this:
-        theta: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
+        theta_edges: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
       {% endfor %}
       {% endfor %}
   
@@ -119,14 +127,14 @@ generate:
       cl_src{{ i }}_lens{{ j }}:
         sources: ['src{{ i }}', 'lens{{ j }}']
         sacc_data_type: galaxy_shearDensity_xi_t
-        theta: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
+        theta_edges: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
        {% endfor %}
   
       {% for i in range(5) %}
       cl_lens{{ i }}_lens{{ i }}:
         sources: ['lens{{ i }}', 'lens{{ i }}']
         sacc_data_type: galaxy_density_xi
-        theta: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
+        theta_edges: [11.0, 14.0, 17.0, 22.0, 28.0, 35.0, 44.0, 55.0, 69.0, 84.0, 85.0, 100.0, 101.0, 102.0, 103.0, 140.0, 176.0, 222.0]
         {% endfor %}
   {% endif %}
 
@@ -134,7 +142,7 @@ generate:
 
 analyze:
   parameters: *parameters #same as generation
-
+  
   priors:
     module: firecrown.priors
     A0:
@@ -161,9 +169,12 @@ analyze:
     {% endfor %}
   
 
-  two_point:
-    same_as: generation 
-
+  two_point: 
+    module: firecrown.ccl.two_point
+    sacc_data: *sacc_file
+    sources: *two_point_sources
+    systematics: *two_point_systematics
+    statistics: *two_point_statistics
     likelihood:
       kind: ConstGaussianLogLike
       data_vector:
@@ -179,18 +190,27 @@ analyze:
         - cl_lens{{ i }}_lens{{ i }}
       {% endfor %}
 
-  # stuff below is made of dreams
-  # but should exist in some form: https://github.com/LSSTDESC/firecrown/issues/82    
-  hessian: 
-    parameters: *parameters #same as generation
-
-    steps:
-      default_frac: 0.01
-      Omega_k: 0.01
-
-    output: &fisher_fname data/srd_v1_output.fits 
-
-
+  cosmosis:
+    sampler: fisher
+    output: &fisher_fname fisher.txt
+    debug: True
+    quiet: False
+    mpi: False
+    # parameters for individual samplers:
+    test:
+      fatal_errors: True
+    emcee:
+      walkers: 10
+      nsample: 20
+    grid:
+      nsample_dimension: 5
+    fisher:
+      step_size: 0.02
+    # which parameters to vary in the chains
+    parameters:
+      Omega_c: [0.1, 0.22, 0.9]
+      sigma8: [0.4, 0.8, 1.2]
+  
 postprocess:
   input: *fisher_fname
   latex_table: data/srd_v1.tex
