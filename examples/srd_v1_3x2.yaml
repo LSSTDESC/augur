@@ -10,7 +10,7 @@ generate:
     w0: -1.0
     wa: 0.0
     h: 0.6727
-    A_s: 2.12655e-9  # has sigma8 = 0.8310036
+    sigma8: 0.83 
     n_s: 0.9645
   
     # IA model
@@ -192,7 +192,7 @@ analyze:
 
   cosmosis:
     sampler: fisher
-    output: &fisher_fname fisher.txt
+    output: &fisher_fname output/fisher.txt
     debug: True
     quiet: False
     mpi: False
@@ -210,6 +210,30 @@ analyze:
     parameters:
       Omega_c: [0.1, 0.22, 0.9]
       sigma8: [0.4, 0.8, 1.2]
+      #w0: [-1.0,  -1.0, -0.5]
+      #wa: [-1, 0.0, 1]
+      h: [0.5, 0.6727, 0.8]
+      n_s: [0.9, 0.9645, 1.0]
+      eta_ia: [-1.0, 0.0, 1.0]
+      eta_ia_highz: [-1.0, 0.0, 1.0]
+      beta_ia: [0.5, 1.0, 1.5 ]
+      A0: [2.0, 5.0, 10.0]
+  
+      mult_bias: [-0.1 0.0 0.1]
+    # SRD bias values. So they are hard coded here.
+      {% for i, bias in [(0, 1.562362), (1, 1.732963), (2, 1.913252), (3, 2.100644), (4, 2.293210)] %}
+      bias_lens{{ i }}: [0, {{ bias }}, 10]
+      {% endfor %}
+
+      # photoz shifts for the lensing sources
+      {% for i in range(5) %}
+      src{{ i }}_delta_z: [-0.2, 0.0, 0.2]
+      {% endfor %}
+  
+      # photoz shifts for the lenses
+      {% for i in range(5) %}
+      lens{{ i }}_delta_z: [-0.2, 0.0, 0.2]
+      {% endfor %}
   
 postprocess:
   input: *fisher_fname
