@@ -42,7 +42,6 @@ def generate(config):
 def firecrown_sanitize(config):
     """ Sanitizes the input for firecrown, that is removes keys that firecrown doesn't recognize
     """
-         
 
     def delkeys(dic, keys):
         for k in keys:
@@ -87,7 +86,7 @@ def two_point_template(config):
     if verbose:
         print("\nGenerating data slots: ", end="")
     for name, scfg in config['statistics'].items():
-        print(name, " ", end="")
+        if verbose: print(name, " ", end="")
         dt = scfg['sacc_data_type']
         src1, src2 = scfg['sources']
         if 'cl' in dt:
@@ -98,7 +97,7 @@ def two_point_template(config):
             thetas = scfg['theta']
             for theta in thetas:
                 S.add_data_point(dt, (src1, src2), 0.0,
-                                 theat=theta, error=1e30)
+                                 theta=theta, error=1e30)
         else:
             print("Cannot process %s. Quitting." % dt)
             stop()
