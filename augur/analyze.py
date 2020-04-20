@@ -14,7 +14,6 @@ def analyze(config):
     ----------
     config : dict
         The yaml parsed dictional of the input yaml file
-
     """
 
     ana_config = config['analyze']
