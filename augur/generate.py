@@ -1,6 +1,10 @@
-#
-# Data generation module
-#
+"""Data Generation module
+
+This code generates synthetic dataset by cobbling 
+together a suitable configuration file for firecrown
+and then convincing it to generate data. 
+
+"""
 
 import firecrown
 import sacc
@@ -9,13 +13,12 @@ import numpy as np
 
 
 def generate(config):
-    """ Generates data using dictionary based config.
+    """Generates data using dictionary based config.
 
     Parameters:
     ----------
     config : dict
         The yaml parsed dictional of the input yaml file
-
     """
 
     verbose = config['verbose']
@@ -64,7 +67,7 @@ def generate(config):
 
 
 def firecrown_sanitize(config):
-    """ Sanitizes the input for firecrown, that is removes keys that firecrown
+    """Sanitizes the input for firecrown, that is removes keys that firecrown
         doesn't recognize
 
     Parameters:
@@ -77,7 +80,6 @@ def firecrown_sanitize(config):
     -------
     config : dict
        The input dictionary with unwanted keys removed
-
     """
 
     def delkeys(dic, keys):
@@ -112,7 +114,6 @@ def two_point_template(config):
        Sacc objects with appropriate tracers and measurement slots
        (i.e. data vectors with associated correlation functions,
        angles, etc), but with zeros for measurement values
-
     """
 
     S = sacc.Sacc()
@@ -181,7 +182,6 @@ def get_noise_power(config, src):
     noise : float
        Noise power for Cls for that particular tracer. That is 1/nbar for
        number counts and e**2/nbar for weak lensing tracer
-
     """
 
     d = config['sources'][src]
@@ -197,7 +197,7 @@ def get_noise_power(config, src):
 
 
 def two_point_insert(config, data):
-    """ Copies the firecrown caclulate theory back into the sacc object
+    """Copies the firecrown caclulate theory back into the sacc object
         and adds noise (as a hack before we get TJPCov running) and then
         saves sacc to disk.
 
@@ -207,7 +207,6 @@ def two_point_insert(config, data):
         The dictinary containt the relevant two_point section of the config
     data : dict
         The firecrown's data strcuture where data predictions are stored
-
     """
 
     verbose = config['verbose']
