@@ -197,9 +197,9 @@ def get_noise_power(config, src):
 
 
 def two_point_insert(config, data):
-    """Copies the firecrown caclulate theory back into the sacc object
-        and adds noise (as a hack before we get TJPCov running) and then
-        saves sacc to disk.
+    """Recreates the sacc object with the theory and adds noise (as a
+        hack before we get TJPCov running) and then saves sacc to
+        disk.
 
     Parameters:
     ----------
@@ -207,14 +207,26 @@ def two_point_insert(config, data):
         The dictinary containt the relevant two_point section of the config
     data : dict
         The firecrown's data strcuture where data predictions are stored
-    """
 
+    """
+    from firecrown.ccl.two_point import build_sacc_data
+    
     verbose = config['verbose']
-    sacc = config['sacc_data']
     add_noise = config['add_noise']
-    preds = {}
+
+    # rebuild the sacc file with predictions  using firecrown
+    _, sacc = build_sacc_data(data['two_point']['data'],None)
+    config['sacc_data'] = sacc
+
+    # now add errors, this is very fragile as it assumes the same
+    # binning everywhere, etc. Needs to be replaced by TJPCov asap
+    
     if verbose:
-        print("Writing predictions back into sacc...")
+        print("Adding errors...")
+    
+    covar = np.zeros(len(sacc.data))
+    # we start by collecting indices and predictions
+    preds = {}
     stats = data['two_point']['data']['statistics']
     for name, scfg in config['statistics'].items():
         pred = stats[name].predicted_statistic_
@@ -224,20 +236,11 @@ def two_point_insert(config, data):
             if ((d.data_type == scfg['sacc_data_type']) and
                 d.tracers[0] == scfg['sources'][0] and
                     d.tracers[1] == scfg['sources'][1]):
-                ndx.append(i)
+                 ndx.append(i)
         assert(len(ndx) == len(pred))
         preds[tuple(scfg['sources'])] = (
-            pred, ndx)  # predicted power for noise
+             pred, ndx)  # predicted power for noise
 
-        for n, p in zip(ndx, pred):
-            sacc.data[n].value = p
-
-    if verbose:
-        print("Adding errors...")
-
-    # now add errors, this is very fragile as it assumes the same
-    # binning everywhere, etc. Needs to be replaced by TJPCov asap
-    covar = np.zeros(len(sacc.data))
     for name, scfg in config['statistics'].items():
         # now add errors -- this is a quick hack
         if "xi" in scfg['sacc_data_type']:
