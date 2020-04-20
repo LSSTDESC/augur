@@ -147,7 +147,12 @@ def two_point_template(config):
         dt = scfg['sacc_data_type']
         src1, src2 = scfg['sources']
         if 'cl' in dt:
-            ell_edges = np.array(scfg['ell_edges'])
+            ell_edges = scfg['ell_edges']
+            if isinstance(ell_edges,str):
+                ell_edges = eval(ell_edges)
+            else:
+                ell_edges = np.array(ell_edges)
+            scfg['ell_edges'] = ell_edges
             ells = 0.5 * (ell_edges[:-1] + ell_edges[1:])
             for ell in ells:
                 S.add_data_point(dt, (src1, src2), 0.0, ell=ell, error=1e30)

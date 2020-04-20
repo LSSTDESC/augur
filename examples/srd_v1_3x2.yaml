@@ -89,8 +89,9 @@ generate:
       cl_src{{ i }}_src{{ j }}:
         sources: ['src{{ i }}', 'src{{ j }}']
         sacc_data_type: galaxy_shear_cl_ee
-        # is there some jinja2 construct for this:
-        ell_edges: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
+        # Note that we can also just put a list of numbers here
+        # as in ell_edgs = [23., 32., 45., 64.]
+        ell_edges: np.logspace(np.log10(23),np.log10(2400),15)
       {% endfor %}
       {% endfor %}
   
@@ -98,14 +99,14 @@ generate:
       cl_src{{ i }}_lens{{ j }}:
         sources: ['src{{ i }}', 'lens{{ j }}']
         sacc_data_type: galaxy_shearDensity_cl_e
-        ell_edges: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
+        ell_edges: np.logspace(np.log10(23),np.log10(2400),15)
        {% endfor %}
   
       {% for i in range(5) %}
       cl_lens{{ i }}_lens{{ i }}:
         sources: ['lens{{ i }}', 'lens{{ i }}']
         sacc_data_type: galaxy_density_cl
-        ell_edges: [23., 32., 45., 64., 89., 123., 172., 240., 333., 464., 646., 900., 1250., 1744., 2400.]
+        ell_edges: np.logspace(np.log10(23),np.log10(2400),15)
         {% endfor %}
 
 
