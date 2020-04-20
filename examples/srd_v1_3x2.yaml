@@ -1,5 +1,7 @@
 generate:
   augur: # general options
+    # the folowing two options are place-holders for what
+    # will once be part of TJPCov interface
     fsky : &fsky 0.35
     add_noise: &add_noise False # add a realization of noise?
       
@@ -192,6 +194,7 @@ analyze:
 
   cosmosis:
     sampler: fisher
+    output_dir: output/
     output: &fisher_fname output/fisher.txt
     debug: True
     quiet: False
@@ -220,7 +223,7 @@ analyze:
       A0: [2.0, 5.0, 10.0]
   
       mult_bias: [-0.1 0.0 0.1]
-    # SRD bias values. So they are hard coded here.
+    # SRD bias values. So far they are hard coded here.
       {% for i, bias in [(0, 1.562362), (1, 1.732963), (2, 1.913252), (3, 2.100644), (4, 2.293210)] %}
       bias_lens{{ i }}: [0, {{ bias }}, 10]
       {% endfor %}

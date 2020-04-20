@@ -3,6 +3,7 @@
 #
 
 import firecrown
+import pathlib
 from .generate import firecrown_sanitize
 
 
@@ -18,4 +19,4 @@ def analyze(config):
 
     ana_config = config['analyze']
     config, data = firecrown.parse(firecrown_sanitize(ana_config))
-    firecrown.run_cosmosis(config, data)
+    firecrown.run_cosmosis(config, data, pathlib.Path(config['cosmosis']['output_dir']))

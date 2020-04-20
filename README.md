@@ -23,5 +23,5 @@ Usage generally follows the firecrown conventions. The input yaml file has three
  
  To run something try:
  ```
- bin/augur examples/srd_v1_3x2.yaml -v
+ augur examples/srd_v1_3x2.yaml -v
  ```

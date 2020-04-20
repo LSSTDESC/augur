@@ -10,14 +10,14 @@ import augur
 @click.option('-v', '--verbose', is_flag=True)
 def run(config, verbose):
     """Here comes a Roman guy with a spade in his hand.
+
+    Augur is a DESC forecasting tool. Specify a yaml formatted config
+    file as a parameter. See examples/srd_v1_3x2.yaml for an example.
+    This code's home is at https://github.com/LSSTDESC/augur.
+
     """
     print("Watch out! Here comes a Roman guy with a ",
           "spade in his hand!", flush=True)
-
-    # do we actually need this here?
-    # Might be useful to pass this to fc
-    analysis_id = uuid.uuid4().hex
-    print('analysis id:', analysis_id, flush=True)
 
     _config = augur.parse(config)
     if verbose:

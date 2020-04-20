@@ -29,20 +29,26 @@ def generate(config):
          two_point_insert)]
     process = []
 
+    
+    # we now loop over generate config items and try
+    # to pick out those items that correspond to a firecrown
+    # sections. We find those by requiring that they have a
+    # "module" attribute (e.g.
+    # two_point.module = firecrown.ccl.two_point). But to check
+    # for this robustly, we first check if the thing is really a
+    # dictionary.
     for dname, ddict in gen_config.items():
-        if (not hasattr(ddict, "__getitem__") or
-                "module" not in ddict):
-            continue  # clearly not our banana
-        for name, moduleid, gen_template, gen_insert in capabilities:
-            if ddict['module'] == moduleid:
-                if verbose:
-                    print(
-                        "Generating %s template for section %s..." %
-                        (name, dname))
-                process.append((dname, name, gen_insert))
-                gen_config[dname]['verbose'] = verbose
-                gen_template(gen_config[dname])
-            continue
+        if isinstance(ddict, dict) and "module" in ddict:
+            for name, moduleid, gen_template, gen_insert in capabilities:
+                if ddict['module'] == moduleid:
+                    if verbose:
+                        print(
+                            "Generating %s template for section %s..." %
+                            (name, dname))
+                    process.append((dname, name, gen_insert))
+                    gen_config[dname]['verbose'] = verbose
+                    gen_template(gen_config[dname])
+                continue
 
     if verbose:
         print("Stoking the bird for predictions...")
@@ -70,7 +76,7 @@ def firecrown_sanitize(config):
     Returns:
     -------
     config : dict
-       The input dictionary with unwatned keys removed
+       The input dictionary with unwanted keys removed
 
     """
 
@@ -159,7 +165,7 @@ def two_point_template(config):
     config['sacc_data'] = S
 
 
-def getNoisePower(config, src):
+def get_noise_power(config, src):
     """ Returns noise power for tracer
 
     Parameters:
@@ -182,12 +188,12 @@ def getNoisePower(config, src):
     nbar = d['number_density'] * (180 * 60 / np.pi)**2  # per steradian
     kind = d['kind']
     if kind == 'WLSource':
-        NPower = d['ellipticity_error']**2 / nbar
+        noise_power = d['ellipticity_error']**2 / nbar
     elif kind == 'NumberCountsSource':
-        NPower = 1 / nbar
+        noise_power = 1 / nbar
     else:
         print("Cannot do error for source of kind %s." % (kind))
-    return NPower
+    return noise_power
 
 
 def two_point_insert(config, data):
@@ -229,9 +235,9 @@ def two_point_insert(config, data):
 
     if verbose:
         print("Adding errors...")
-    # now add errors, this is very fragile as it
-    # assumes the same binning everywhere, etc. Needs to be replaced by TJPCov
-    # asap
+
+    # now add errors, this is very fragile as it assumes the same
+    # binning everywhere, etc. Needs to be replaced by TJPCov asap
     covar = np.zeros(len(sacc.data))
     for name, scfg in config['statistics'].items():
         # now add errors -- this is a quick hack
@@ -247,7 +253,7 @@ def two_point_insert(config, data):
             # now find the two sources and their noise powers
             # the auto powers -- this should work equally well for auto and
             # cross
-            auto1, auto2 = [preds[(src, src)][0] + getNoisePower(config, src)
+            auto1, auto2 = [preds[(src, src)][0] + get_noise_power(config, src)
                             for src in scfg['sources']]
             cross, ndx = preds[tuple(scfg['sources'])]
             var = (auto1 * auto2 + cross * cross) / Nmodes
@@ -258,8 +264,7 @@ def two_point_insert(config, data):
                     sacc.data[n].value += np.random.normal(0, err)
 
     assert(np.all(covar > 0))
-    # because firecrown only supports FullCovariance
-    sacc.add_covariance(np.diag(covar))
+    sacc.add_covariance(covar)
     if 'sacc_file' in config:
         if verbose:
             print("Writing %s ..." % config['sacc_file'])
