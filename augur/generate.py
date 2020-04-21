@@ -186,7 +186,12 @@ def get_noise_power(config, src):
     -------
     noise : float
        Noise power for Cls for that particular tracer. That is 1/nbar for
-       number counts and e**2/nbar for weak lensing tracer
+       number counts and e**2/nbar for weak lensing tracer.
+
+    Note:
+    -----
+    The input number_densities are #/arcmin.
+    The output units are in steradian.
     """
 
     d = config['sources'][src]
@@ -198,6 +203,7 @@ def get_noise_power(config, src):
         noise_power = 1 / nbar
     else:
         print("Cannot do error for source of kind %s." % (kind))
+        raise NotImplementedError
     return noise_power
 
 

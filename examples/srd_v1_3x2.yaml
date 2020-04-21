@@ -196,7 +196,7 @@ analyze:
   cosmosis:
     sampler: fisher
     output_dir: output/
-    output: &fisher_fname output/fisher.txt
+    output: &fisher_fname fisher.txt # not working
     debug: True
     quiet: False
     mpi: False
