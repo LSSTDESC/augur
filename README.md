@@ -14,6 +14,10 @@ or actually inside the augur directory running
 
 ```python setup.py install```
 
+## Step-by-Step Installation
+
+
+
 ## Usage
 
 Usage generally follows the firecrown conventions. The input yaml file has three sections corresponding to three steps of a typical forecasting process
