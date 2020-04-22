@@ -16,7 +16,50 @@ or actually inside the augur directory running
 
 ## Step-by-Step Installation
 
+This step-by-step installaion shows you how to get a working environment with `firecrown` and `augur` that you can hack away efficiently.
 
+Start by creating a new anaconda environment:
+
+```
+conda create --name forecasting
+conda activate forecasting
+```
+
+Next install firecrown and augur.
+First, let's clean any conda-installed firecrown (skip this if no previous firecrown around)
+
+```
+conda uninstall firecrown --force
+```
+
+Install firecrown dependencies only using:
+
+```
+conda install --only-deps firecrown
+```
+
+Install a repo version of firecrown:
+
+```
+git clone git@github.com:LSSTDESC/firecrown.git
+cd firecrown
+pip install --no-deps -e .
+```
+
+
+Now run a `pytest` to see if things work.
+
+Next repeat the same with `augur` but checkout the `dev` branch:
+
+```
+git clone git@github.com:LSSTDESC/augur.git
+cd augur
+git checkout dev
+pip install --no-deps -e .
+```
+and also test it with `pytest`.
+
+You are now ready to try a simple forecast as outlined in the next section.
 
 ## Usage
 
