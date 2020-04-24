@@ -20,6 +20,6 @@ setup(
     include_package_data=True,
     scripts=scripts,
     install_requires=[
-        'pyccl', 'click', 'numpy',
+        'pyccl', 'click', 'numpy', 'firecrown',
         'scipy', 'pandas', 'pyyaml', 'jinja2'],
 )
