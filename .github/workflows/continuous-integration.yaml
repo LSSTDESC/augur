@@ -35,7 +35,8 @@ jobs:
       run: |
         conda install flake8
         # stop the build if there are flake8 fails
-        flake8 . --count --show-source --statistics
+        ls /usr/share/miniconda
+        /usr/share/miniconda/bin/flake8 . --count --show-source --statistics
 
     - name: Test with pytest
       run: |
