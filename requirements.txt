@@ -1,0 +1,10 @@
+pyccl
+click
+numpy
+scipy
+pandas
+pyyaml
+jinja2
+sacc
+firecrown
+
