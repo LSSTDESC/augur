@@ -56,7 +56,6 @@ Next repeat the same with `augur` but checkout the `dev` branch:
 ```
 git clone git@github.com:LSSTDESC/augur.git
 cd augur
-git checkout dev
 pip install --no-deps -e .
 ```
 and also test it with `pytest`.
