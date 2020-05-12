@@ -16,7 +16,7 @@ def parse(filename):
         The raw config file as a dictionary.
     """
 
-    with open(filename, 'r') as fp:
+    with open(filename, "r") as fp:
         config_str = jinja2.Template(fp.read()).render()
     config = yaml.load(config_str, Loader=yaml.Loader)
 

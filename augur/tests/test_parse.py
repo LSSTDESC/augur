@@ -1,6 +1,3 @@
-from ..parser import parse
-
-
 def test_parse(example_yaml):
 
     for i in range(5):

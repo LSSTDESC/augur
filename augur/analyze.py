@@ -20,6 +20,6 @@ def analyze(config):
         The yaml parsed dictional of the input yaml file
     """
 
-    ana_config = config['analyze']
+    ana_config = config["analyze"]
     config, data = firecrown.parse(firecrown_sanitize(ana_config))
-    firecrown.run_cosmosis(config, data, pathlib.Path(config['cosmosis']['output_dir']))
+    firecrown.run_cosmosis(config, data, pathlib.Path(config["cosmosis"]["output_dir"]))

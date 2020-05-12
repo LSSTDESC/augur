@@ -30,15 +30,13 @@ jobs:
       run: |
         conda install -c conda-forge --only-deps firecrown
         pip install --no-deps firecrown/
+        conda install flake8
+        conda install pytest
         
     - name: Lint with flake8
       run: |
-        conda install flake8
-        # stop the build if there are flake8 fails
-        ls /usr/share/miniconda
-        /usr/share/miniconda/bin/flake8 . --count --show-source --statistics
+        /usr/share/miniconda/bin/flake8 . --max-line-length=100 --count --show-source --statistics
 
     - name: Test with pytest
       run: |
-        conda install pytest
         pytest
