@@ -34,9 +34,9 @@ jobs:
         conda install pytest
         
     - name: Lint with flake8
-      run: |
-        /usr/share/miniconda/bin/flake8 . --max-line-length=100 --count --show-source --statistics
+      shell: bash -l {0}
+      run: flake8 . --max-line-length=100 --count --show-source --statistics
 
     - name: Test with pytest
-      run: |
-        /usr/share/miniconda/bin/pytest
+      shell: bash -l {0}
+      run: pytest
