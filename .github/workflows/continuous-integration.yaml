@@ -39,4 +39,4 @@ jobs:
 
     - name: Test with pytest
       run: |
-        pytest
+        /usr/share/miniconda/bin/pytest
