@@ -1,4 +1,4 @@
-![](https://github.com/LSSTDESC/augur/workflows/continuous-integration.yaml/badge.svg)
+![](https://github.com/LSSTDESC/augur/workflows/build/badge.svg)
 
 # Augur
 
