@@ -1,3 +1,4 @@
+![](https://github.com/actions/LSSTDESC/augur/workflows/continuous-integration.yaml/badge.svg)
 # Augur
 
 Augur is a DESC forecasting and inference validation tool. The name comes from the official diviners in ancient Rome whose function was to divine whether the gods approved of a proposed undertaking by observing the behavior of birds. Firecrown is the bird species of choice in DESC.
