@@ -30,6 +30,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        conda activate base
         conda install -q -c conda-forge --only-deps firecrown
         cd firecrown
         pip install --no-deps -e .
