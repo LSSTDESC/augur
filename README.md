@@ -1,4 +1,4 @@
-![](https://github.com/LSSTDESC/augur/workflows/build/badge.svg)
+![](https://github.com/LSSTDESC/augur/workflows/flake8%20pytest/badge.svg)
 
 # Augur
 
