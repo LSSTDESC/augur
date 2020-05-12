@@ -31,7 +31,8 @@ jobs:
     - name: Install dependencies
       run: |
         conda install -q -c conda-forge --only-deps firecrown
-        pip install --no-deps firecrown/
+        cd firecrown
+        pip install --no-deps -e .
         conda install -q flake8
         conda install -q pytest
 
