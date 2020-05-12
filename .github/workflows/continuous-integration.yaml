@@ -16,7 +16,7 @@ jobs:
       with:
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
-
+        
     - name: Checkout
       uses: actions/checkout@v2
 
@@ -32,11 +32,18 @@ jobs:
         pip install --no-deps firecrown/
         conda install -q flake8
         conda install -q pytest
+
+    - name: Environment test
+      shell: bash -l {0}
+      run: |
+        python -c "import numpy; print (numpy.__path__)"
+        python -c "import pyccl; print (pyccl.__path__)"
+        python -c "import firecrown; print (firecrown.__path__)"
         
     - name: Lint with flake8
       shell: bash -l {0}
-      run: flake8 . --max-line-length=100 --count --show-source --statistics
+      run: /usr/share/miniconda/bin/flake8 . --max-line-length=100 --count --show-source --statistics
 
     - name: Test with pytest
       shell: bash -l {0}
-      run: pytest
+      run: /usr/share/miniconda/pytest
