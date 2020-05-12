@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+import uuid
+import pprint
+import click
+import augur
+
+
+@click.command()
+@click.argument('config', type=str)
+@click.option('-v', '--verbose', is_flag=True)
+def run(config, verbose):
+    """Here comes a Roman guy with a spade in his hand.
+
+    Augur is a DESC forecasting tool. Specify a yaml formatted config
+    file as a parameter. See examples/srd_v1_3x2.yaml for an example.
+    This code's home is at https://github.com/LSSTDESC/augur.
+
+    """
+    print("Watch out! Here comes a Roman guy with a ",
+          "spade in his hand!", flush=True)
+
+    _config = augur.parse(config)
+    if verbose:
+        print("rendered config file:\n", pprint.pformat(_config), flush=True)
+    _config['verbose'] = verbose
+
+    if 'generate' in _config:
+        print("Generating...")
+        augur.generate(_config)
+
+    if 'analyze' in _config:
+        print("Analyzing...")
+        augur.analyze(_config)
+
+    if 'postprocess' in _config:
+        print("Postprocessing...")
+        augur.postprocess(_config)
+
+
+if __name__ == '__main__':
+    run()
