@@ -19,7 +19,9 @@ jobs:
         
     - name: Checkout
       uses: actions/checkout@v2
-
+      with:
+        path: augur
+        
     - name: Checkout firecrown
       uses: actions/checkout@v2
       with:
@@ -41,14 +43,15 @@ jobs:
         which python
         python -c "import numpy; print (numpy.__path__)"
         python -c "import pyccl; print (pyccl.__path__)"
-        python -c "import firecrown; print (firecrown.__path__)"
+        python -c "import firecrown.ccl; print (firecrown.__path__)"
         
     - name: Lint with flake8
       shell: bash -l {0}
-      run: /usr/share/miniconda/bin/flake8 . --max-line-length=100 --count --show-source --statistics
+      run: /usr/share/miniconda/bin/flake8 augur --max-line-length=100 --count --show-source --statistics
 
     - name: Test with pytest
       shell: bash -l {0}
       run: |
         conda activate base
+        cd augur
         /usr/share/miniconda/bin/pytest
