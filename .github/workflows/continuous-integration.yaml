@@ -36,6 +36,9 @@ jobs:
     - name: Environment test
       shell: bash -l {0}
       run: |
+        conda info
+        conda activate base
+        which python
         python -c "import numpy; print (numpy.__path__)"
         python -c "import pyccl; print (pyccl.__path__)"
         python -c "import firecrown; print (firecrown.__path__)"
