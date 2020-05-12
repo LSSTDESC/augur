@@ -51,4 +51,4 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate base
-        /usr/share/miniconda/pytest
+        /usr/share/miniconda/bin/pytest
