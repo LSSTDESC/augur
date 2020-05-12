@@ -6,5 +6,7 @@ pandas
 pyyaml
 jinja2
 sacc
-firecrown
+## Firecrown should be installed either via github or
+## conda 
+# firecrown
 
