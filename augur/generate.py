@@ -26,7 +26,8 @@ def generate(config):
     gen_config["verbose"] = verbose
 
     capabilities = [
-        ("two_point", "firecrown.ccl.two_point", two_point_template, two_point_insert)
+        ("two_point", "firecrown.ccl.two_point",
+         two_point_template, two_point_insert)
     ]
     process = []
 
@@ -225,7 +226,7 @@ def two_point_insert(config, data):
         The firecrown's data strcuture where data predictions are stored
 
     """
-    from firecrown.ccl.two_point import build_sacc_data
+    from firecrown.ccl._ccl import build_sacc_data
 
     verbose = config["verbose"]
     add_noise = config["add_noise"]
@@ -266,7 +267,8 @@ def two_point_insert(config, data):
         else:
             ell_edges = np.array(scfg["ell_edges"])
             # note: sum(2l+1,lmin..lmax) = (lmax+1)^2-lmin^2
-            Nmodes = config["fsky"] * ((ell_edges[1:] + 1) ** 2 - (ell_edges[:-1]) ** 2)
+            Nmodes = config["fsky"] * ((ell_edges[1:] + 1) ** 2
+                                       - (ell_edges[:-1]) ** 2)
             # noise power
             # now find the two sources and their noise powers
             # the auto powers -- this should work equally well for auto and
