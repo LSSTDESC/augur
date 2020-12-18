@@ -10,6 +10,7 @@ import firecrown
 import sacc
 import copy
 import numpy as np
+import pyccl as ccl
 
 
 def generate(config):
@@ -125,6 +126,11 @@ def two_point_template(config):
 
     S = sacc.Sacc()
     verbose = config["verbose"]
+    print('Configuration keys', config.keys()) ######## DEBUGGING!!
+    cosmo = firecrown.get_ccl_cosmology(config["parameters"])
+    #  I assume that kmax will be passed in the default CCL units, i.e., Mpc^-1
+    kmax = config["kmax"] if "kmax" in config.keys() else None
+    zmean = {}
     if verbose:
         print("Generating tracers: ", end="")
     for src, tcfg in config["sources"].items():
@@ -138,11 +144,13 @@ def two_point_template(config):
             zar = np.linspace(max(0, mu - 5 * sig), mu + 5 * sig, 500)
             Nz = np.exp(-((zar - mu) ** 2) / (2 * sig ** 2))
             S.add_tracer("NZ", src, zar, Nz)
+            zmean[src] = np.average(zar, weights=Nz/np.sum(Nz))
         elif tcfg["Nz_type"] == "TopHat":
             mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
             zar = np.linspace(max(0, mu - wi / 2), mu + wi / 2, 5)
             Nz = np.ones(5)
             S.add_tracer("NZ", src, zar, Nz)
+            zmean[src] = np.average(zar, weights=Nz/np.sum(Nz))
         else:
             print("Bad Nz_type in %s. Quitting." % src)
             raise RuntimeError
@@ -153,12 +161,25 @@ def two_point_template(config):
             print(name, " ", end="")
         dt = scfg["sacc_data_type"]
         src1, src2 = scfg["sources"]
+        zmean1 = zmean[src1]
+        zmean2 = zmean[src2]
+        a12 = np.array([1. / (1 + zmean1), 1. / (1 + zmean2)])
+        if kmax is not None:
+            ell_max = (kmax * ccl.comoving_radial_distance(cosmo, a12)
+                       - 0.5).astype(np.int)
+            ell_max = np.min(ell_max)  # we get the minimum ell_max
+        else:
+            ell_max = None
         if "cl" in dt:
             ell_edges = scfg["ell_edges"]
             if isinstance(ell_edges, str):
                 ell_edges = eval(ell_edges)
             else:
                 ell_edges = np.array(ell_edges)
+            ell_edges = np.sort(ell_edges)
+            # Here I choose to cut the last bin to ell_max (we could drop it)
+            if ell_max is not None:
+                ell_edges[-1] = np.min([ell_edges[-1], ell_max])
             scfg["ell_edges"] = ell_edges
             ells = 0.5 * (ell_edges[:-1] + ell_edges[1:])
             for ell in ells:

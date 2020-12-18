@@ -4,7 +4,8 @@ generate:
     # will once be part of TJPCov interface
     fsky : &fsky 0.35
     add_noise: &add_noise False # add a realization of noise?
-      
+    kmax: &kmax 100.0 # kmax in Mpc^-1 for 2pt analyses   
+
   parameters: &parameters
     Omega_k: 0.0
     Omega_b: 0.0492
@@ -45,6 +46,8 @@ generate:
     sacc_file: &sacc_file syndata/srd_v1_3x2.sacc
     fsky: *fsky
     add_noise: *add_noise
+    parameters: *parameters #same as generation
+    kmax: *kmax
     sources: &two_point_sources
       {% for i in range(5) %}
       src{{ i }}:
