@@ -126,7 +126,6 @@ def two_point_template(config):
 
     S = sacc.Sacc()
     verbose = config["verbose"]
-    print('Configuration keys', config.keys()) ######## DEBUGGING!!
     cosmo = firecrown.get_ccl_cosmology(config["parameters"])
     #  I assume that kmax will be passed in the default CCL units, i.e., Mpc^-1
     kmax = config["kmax"] if "kmax" in config.keys() else None
