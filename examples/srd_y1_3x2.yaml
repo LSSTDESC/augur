@@ -53,14 +53,14 @@ generate:
       src{{ i }}:
         kind: WLSource
         sacc_tracer:  src{{ i }}
-        Nz_type: Gaussian
-        Nz_center: {{ 0.3 + 0.2*i }}
-        Nz_width: 0.2
+        Nz_type: ConstantDensGauss
+        Nz_nbins: 5
+        Nz_bin: {{ i }}
         Nz_alpha: 0.78
-        Nz_sigmaz: 0.05
         Nz_z0: 0.13
+        Nz_sigmaz: 0.05
         ellipticity_error: 0.26
-        number_density: 27 # per arcmin2
+        number_density: 10 # per arcmin2
         ia_bias: A0
         systematics:
           - delta_z_src{{ i }}
@@ -245,10 +245,10 @@ analyze:
       step_size: 0.001
     # which parameters to vary in the chains
     parameters:
-      Omega_c: [0.1, 0.22, 0.9]
-      sigma8: [0.4, 0.8, 1.2]
+      Omega_c: [0.1, 0.26, 0.9]
+      sigma8: [0.4, 0.81, 1.2]
       w0: [-1.8, -1.0, -0.2]
-      wa: [-2, 0.0, 0.5]
+      wa: [-4, 0.0, 0.5]
       h: [0.5, 0.6727, 0.8]
       n_s: [0.9, 0.9645, 1.0]
       eta_ia: [-1.0, 0.0, 1.0]

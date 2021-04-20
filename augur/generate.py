@@ -13,6 +13,13 @@ import numpy as np
 import pyccl as ccl
 
 
+def srd_dndz(z, z0, alpha):
+    """
+    Generates the SRD dndz
+    """
+    return z**2*np.exp(-(z/z0)**alpha)
+
+
 def generate(config):
     """Generates data using dictionary based config.
 
@@ -96,7 +103,11 @@ def firecrown_sanitize(config):
                 "Nz_type",
                 "Nz_center",
                 "Nz_width",
-                "Nz_sigma",
+                "Nz_sigmaz",
+                "Nz_z0",
+                "Nz_bin",
+                "Nz_nbins",
+                "Nz_alpha",
                 "ellipticity_error",
                 "number_density",
             ],
@@ -139,17 +150,43 @@ def two_point_template(config):
             print("Missing Nz_type in %s. Quitting." % src)
             raise RuntimeError
         if tcfg["Nz_type"] == "Gaussian":
-            mu, sig = tcfg["Nz_center"], tcfg["Nz_sigma"]
-            zar = np.linspace(max(0, mu - 5 * sig), mu + 5 * sig, 500)
-            Nz = np.exp(-((zar - mu) ** 2) / (2 * sig ** 2))
-            S.add_tracer("NZ", src, zar, Nz)
-            zmean[src] = np.average(zar, weights=Nz/np.sum(Nz))
+            mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
+            alpha, z0 = tcfg["Nz_alpha"], tcfg["Nz_z0"]
+            sig_z = tcfg["Nz_sigmaz"]
+            zall = np.linspace(0, 4, 1500)
+            mask = (zall > mu-wi/2) & (zall < mu+wi/2)
+            dndz_bin = np.zeros_like(zall)
+            dndz_bin[mask] = srd_dndz(zall[mask], z0, alpha)
+            # Convolve the SRD N(z) with a Gaussian with the required smearing
+            Nz = np.array([np.exp(-0.5*(zk-zall)**2/((sig_z*(1+zk))**2))*dndz_bin for zk in zall])
+            Nz = np.sum(Nz, axis=1)
+            S.add_tracer("NZ", src, zall, Nz)
+            zmean[src] = np.average(zall, weights=Nz/np.sum(Nz))
         elif tcfg["Nz_type"] == "TopHat":
             mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
+            alpha, z0 = tcfg["Nz_alpha"], tcfg["Nz_z0"]
             zar = np.linspace(max(0, mu - wi / 2), mu + wi / 2, 5)
-            Nz = np.ones(5)
+            Nz = np.ones(5)*srd_dndz(zar, z0, alpha)
             S.add_tracer("NZ", src, zar, Nz)
             zmean[src] = np.average(zar, weights=Nz/np.sum(Nz))
+        elif tcfg["Nz_type"] == 'ConstantDensGauss':
+            ibin, nbins = tcfg["Nz_bin"], tcfg['Nz_nbins']
+            alpha, z0 = tcfg["Nz_alpha"], tcfg["Nz_z0"]
+            sig_z = tcfg["Nz_sigmaz"]
+            zall = np.linspace(0, 4, 1500)
+            tile_hi = 1.0/nbins*(ibin+1)
+            tile_low = 1.0/nbins*ibin
+            nz_sum = np.cumsum(srd_dndz(zall, z0, alpha))/np.sum(srd_dndz(zall, z0, alpha))
+            zlow = zall[np.argmin(np.fabs(nz_sum-tile_low))]
+            zhi = zall[np.argmin(np.fabs(nz_sum-tile_hi))]
+            mask = (zall > zlow) & (zall < zhi)
+            dndz_bin = np.zeros_like(zall)
+            dndz_bin[mask] = srd_dndz(zall[mask], z0, alpha)
+            # Convolve the SRD N(z) with a Gaussian with the required smearing
+            Nz = np.array([np.exp(-0.5*(zk-zall)**2/((sig_z*(1+zk))**2))*dndz_bin for zk in zall])
+            Nz = np.sum(Nz, axis=1)
+            S.add_tracer("NZ", src, zall, Nz)
+            zmean[src] = np.average(zall, weights=Nz/np.sum(Nz))
         else:
             print("Bad Nz_type in %s. Quitting." % src)
             raise RuntimeError
@@ -178,7 +215,7 @@ def two_point_template(config):
             ell_edges = np.sort(ell_edges)
             # Here I choose to cut the last bin to ell_max (we could drop it)
             if ell_max is not None:
-                ell_edges[-1] = np.min([ell_edges[-1], ell_max])
+                ell_edges = ell_edges[ell_edges <= ell_max]
             scfg["ell_edges"] = ell_edges
             ells = 0.5 * (ell_edges[:-1] + ell_edges[1:])
             for ell in ells:
@@ -287,8 +324,9 @@ def two_point_insert(config, data):
         else:
             ell_edges = np.array(scfg["ell_edges"])
             # note: sum(2l+1,lmin..lmax) = (lmax+1)^2-lmin^2
-            Nmodes = config["fsky"] * ((ell_edges[1:] + 1) ** 2
-                                       - (ell_edges[:-1]) ** 2)
+            # Nmodes = config["fsky"] * ((ell_edges[1:] + 1) ** 2
+            #                           - (ell_edges[:-1]) ** 2)
+            norm = config["fsky"]*(ell_edges[1:]+ell_edges[:-1])
             # noise power
             # now find the two sources and their noise powers
             # the auto powers -- this should work equally well for auto and
@@ -297,8 +335,9 @@ def two_point_insert(config, data):
                 preds[(src, src)][0] + get_noise_power(config, src)
                 for src in scfg["sources"]
             ]
+            max_len = np.min([len(auto1), len(auto2)])
             cross, ndx = preds[tuple(scfg["sources"])]
-            var = (auto1 * auto2 + cross * cross) / Nmodes
+            var = (auto1[:max_len] * auto2[:max_len] + cross * cross) / norm[:max_len]
             covar[ndx] = var
             for n, err in zip(ndx, np.sqrt(var)):
                 sacc.data[n].error = np.sqrt(err)
