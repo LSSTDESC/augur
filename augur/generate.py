@@ -214,7 +214,7 @@ def two_point_template(config):
                 ell_edges = np.array(ell_edges)
             ell_edges = np.sort(ell_edges)
             # Here I choose to cut the last bin to ell_max (we could drop it)
-            if ell_max is not None:
+            if (ell_max is not None) & ("shear_cl_ee" not in dt):
                 ell_edges = ell_edges[ell_edges <= ell_max]
             scfg["ell_edges"] = ell_edges
             ells = 0.5 * (ell_edges[:-1] + ell_edges[1:])
@@ -326,7 +326,9 @@ def two_point_insert(config, data):
             # note: sum(2l+1,lmin..lmax) = (lmax+1)^2-lmin^2
             # Nmodes = config["fsky"] * ((ell_edges[1:] + 1) ** 2
             #                           - (ell_edges[:-1]) ** 2)
-            norm = config["fsky"]*(ell_edges[1:]+ell_edges[:-1])
+            ells = 0.5*(ell_edges[1:]+ell_edges[:-1])
+            delta_ell = np.gradient(ells)
+            norm = config["fsky"]*(2*ells+1)*delta_ell
             # noise power
             # now find the two sources and their noise powers
             # the auto powers -- this should work equally well for auto and
@@ -335,9 +337,14 @@ def two_point_insert(config, data):
                 preds[(src, src)][0] + get_noise_power(config, src)
                 for src in scfg["sources"]
             ]
+            for src in scfg["sources"]:
+                print(src, len(auto1), len(auto2))
+                print(src, preds[tuple(scfg["sources"])])
             max_len = np.min([len(auto1), len(auto2)])
             cross, ndx = preds[tuple(scfg["sources"])]
-            var = (auto1[:max_len] * auto2[:max_len] + cross * cross) / norm[:max_len]
+            max_len = np.min([max_len, len(cross)])
+            var = (auto1[:max_len] * auto2[:max_len] +
+                   cross[:max_len] * cross[:max_len]) / norm[:max_len]
             covar[ndx] = var
             for n, err in zip(ndx, np.sqrt(var)):
                 sacc.data[n].error = np.sqrt(err)
