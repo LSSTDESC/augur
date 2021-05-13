@@ -11,6 +11,7 @@ import sacc
 import copy
 import numpy as np
 import pyccl as ccl
+from scipy.ndimage import gaussian_filter
 
 
 def srd_dndz(z, z0, alpha):
@@ -149,7 +150,7 @@ def two_point_template(config):
         if "Nz_type" not in tcfg:
             print("Missing Nz_type in %s. Quitting." % src)
             raise RuntimeError
-        if tcfg["Nz_type"] == "Gaussian":
+        if tcfg["Nz_type"] == "LensSRD2018":
             mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
             alpha, z0 = tcfg["Nz_alpha"], tcfg["Nz_z0"]
             sig_z = tcfg["Nz_sigmaz"]
@@ -157,19 +158,28 @@ def two_point_template(config):
             mask = (zall > mu-wi/2) & (zall < mu+wi/2)
             dndz_bin = np.zeros_like(zall)
             dndz_bin[mask] = srd_dndz(zall[mask], z0, alpha)
+            dz = zall[1]-zall[0]
             # Convolve the SRD N(z) with a Gaussian with the required smearing
-            Nz = np.array([np.exp(-0.5*(zk-zall)**2/((sig_z*(1+zk))**2))*dndz_bin for zk in zall])
-            Nz = np.sum(Nz, axis=1)
+            Nz = gaussian_filter(dndz_bin, 0.05*(1+mu)/dz)
+            S.add_tracer("NZ", src, zall, Nz)
+            zmean[src] = np.average(zall, weights=Nz/np.sum(Nz))
+        elif tcfg["Nz_type"] == "Gaussian":
+            mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
+            zall = np.linspace(0, 4, 1500)
+            mask = (zall > mu-wi/2) & (zall < mu+wi/2)
+            dndz_bin = np.zeros_like(zall)
+            dndz_bin[mask] = srd_dndz(zall[mask], z0, alpha)
+            Nz = np.exp(-0.5*(zall-mu)**2/wi**2)
             S.add_tracer("NZ", src, zall, Nz)
             zmean[src] = np.average(zall, weights=Nz/np.sum(Nz))
         elif tcfg["Nz_type"] == "TopHat":
             mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
             alpha, z0 = tcfg["Nz_alpha"], tcfg["Nz_z0"]
             zar = np.linspace(max(0, mu - wi / 2), mu + wi / 2, 5)
-            Nz = np.ones(5)*srd_dndz(zar, z0, alpha)
+            Nz = np.ones(5)
             S.add_tracer("NZ", src, zar, Nz)
             zmean[src] = np.average(zar, weights=Nz/np.sum(Nz))
-        elif tcfg["Nz_type"] == 'ConstantDensGauss':
+        elif tcfg["Nz_type"] == 'SourceSRD2018':
             ibin, nbins = tcfg["Nz_bin"], tcfg['Nz_nbins']
             alpha, z0 = tcfg["Nz_alpha"], tcfg["Nz_z0"]
             sig_z = tcfg["Nz_sigmaz"]
@@ -179,16 +189,17 @@ def two_point_template(config):
             nz_sum = np.cumsum(srd_dndz(zall, z0, alpha))/np.sum(srd_dndz(zall, z0, alpha))
             zlow = zall[np.argmin(np.fabs(nz_sum-tile_low))]
             zhi = zall[np.argmin(np.fabs(nz_sum-tile_hi))]
+            zcent = 0.5*(zlow+zhi)
+            dz = zall[1]-zall[0]
             mask = (zall > zlow) & (zall < zhi)
             dndz_bin = np.zeros_like(zall)
             dndz_bin[mask] = srd_dndz(zall[mask], z0, alpha)
             # Convolve the SRD N(z) with a Gaussian with the required smearing
-            Nz = np.array([np.exp(-0.5*(zk-zall)**2/((sig_z*(1+zk))**2))*dndz_bin for zk in zall])
-            Nz = np.sum(Nz, axis=1)
+            Nz = gaussian_filter(dndz_bin, sig_z*(1+zcent)/dz)  # sigma should be in units of step
             S.add_tracer("NZ", src, zall, Nz)
             zmean[src] = np.average(zall, weights=Nz/np.sum(Nz))
         else:
-            print("Bad Nz_type in %s. Quitting." % src)
+            print("Bad Nz_type %s in %s. Quitting." % (tcfg["Nz_type"], src))
             raise RuntimeError
     if verbose:
         print("\nGenerating data slots: ", end="")

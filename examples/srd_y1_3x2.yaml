@@ -15,12 +15,12 @@ generate:
     h: 0.6727
     sigma8: 0.83
     n_s: 0.9645
-    transfer_function: 'eisenstein_hu'
+    # transfer_function: 'eisenstein_hu'  
     # IA model
     eta_ia: 0.0
     eta_ia_highz: 0.0
     beta_ia: 1.0
-    A0: 0.0
+    A0: 5.0
 
     mult_bias: 0.0
 
@@ -54,7 +54,7 @@ generate:
       src{{ i }}:
         kind: WLSource
         sacc_tracer:  src{{ i }}
-        Nz_type: ConstantDensGauss
+        Nz_type: SourceSRD2018
         Nz_nbins: 5
         Nz_bin: {{ i }}
         Nz_alpha: 0.78
@@ -71,7 +71,7 @@ generate:
       lens{{ i }}:
         kind: NumberCountsSource
         sacc_tracer:  lens{{ i }}
-        Nz_type: Gaussian
+        Nz_type: LensSRD2018
         Nz_center: {{ 0.3 + 0.2*i }}
         Nz_width: 0.2
         Nz_sigmaz: 0.03
