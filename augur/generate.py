@@ -167,8 +167,6 @@ def two_point_template(config):
             mu, wi = tcfg["Nz_center"], tcfg["Nz_width"]
             zall = np.linspace(0, 4, 1500)
             mask = (zall > mu-wi/2) & (zall < mu+wi/2)
-            dndz_bin = np.zeros_like(zall)
-            dndz_bin[mask] = srd_dndz(zall[mask], z0, alpha)
             Nz = np.exp(-0.5*(zall-mu)**2/wi**2)
             S.add_tracer("NZ", src, zall, Nz)
             zmean[src] = np.average(zall, weights=Nz/np.sum(Nz))
