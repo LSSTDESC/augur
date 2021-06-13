@@ -15,7 +15,7 @@ generate:
     h: 0.6727
     sigma8: 0.83
     n_s: 0.9645
-    #transfer_function: 'eisenstein_hu'
+    transfer_function: 'eisenstein_hu'
     # IA model
     eta_ia: 0.0
     eta_ia_highz: 0.0
@@ -205,7 +205,7 @@ analyze:
 
   cosmosis:
     sampler: fisher
-    output_dir: output/
+    output_dir: output_y10/
     output: &fisher_fname fisher_y10.txt # not working
     debug: True
     quiet: False
@@ -256,5 +256,5 @@ analyze:
 
 postprocess:
   input: *fisher_fname
-  latex_table: data/srd_y10.tex
-  triangle_plot: data/srd_y10.pdf
+  latex_table: srd_y10.tex
+  triangle_plot: srd_y10.pdf
