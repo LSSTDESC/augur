@@ -38,7 +38,10 @@ def postprocess(config):
     facecolors = pconfig["facecolor"] if "facecolor" in pconfig.keys() else "none"
     CL = pconfig["CL"] if "CL" in pconfig.keys() else 0.68
     f, ax = plt.subplots(npars, npars, figsize=(xsize, ysize))
-    inv_cache = np.linalg.inv(fisher)
+    try:
+        inv_cache = np.linalg.inv(fisher)
+    except np.linalg.LinAlgError:
+        print("Fisher matrix non-invertible -- quitting...")
     for i in range(npars):
         for j in range(i+1, npars):
             i_key = labels[i]
