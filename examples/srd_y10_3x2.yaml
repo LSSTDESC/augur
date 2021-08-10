@@ -205,7 +205,7 @@ analyze:
 
   cosmosis:
     sampler: fisher
-    output_dir: output_y10/
+    output_dir: output_fishery10/
     output: &fisher_fname fisher_y10.txt # not working
     debug: True
     quiet: False
@@ -255,6 +255,7 @@ analyze:
       {% endfor %}
 
 postprocess:
-  input: *fisher_fname
-  latex_table: srd_y10.tex
-  triangle_plot: srd_y10.pdf
+  latex_table: output_fishery10/latex_table.tex
+  triangle_plot: output_fishery10/triangle_plot.pdf
+  pairplots: [(w0, wa), (omega_c, sigma8)]
+  CL: 0.68
