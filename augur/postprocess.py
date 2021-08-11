@@ -97,12 +97,12 @@ def postprocess(config):
             ax.set_ylabel(pair1)
             plt.tight_layout()
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
-    iw = np.where(keys == "w0")
-    iwa = np.where(keys == "wa")
+    iw = np.where(keys == "params--w0")[0][0]
+    iwa = np.where(keys == "params--wa")[0][0]
     sig_w0 = np.sqrt(inv_cache[iw, iw])
     sig_wa = np.sqrt(inv_cache[iwa, iwa])
     FOM, FOM2 = get_FoM_all(fisher, iw, iwa, CL)
-    fisher_table = astropy.table.Table([CL, FOM, FOM2, sig_w0, sig_wa],
+    fisher_table = astropy.table.Table([[CL], [FOM], [FOM2], [sig_w0], [sig_wa]],
                                        names=("CL", "FoM", "FoM (alt.)",
                                               "sigma_w0", "sigma_wa"))
     fisher_table.write(pconfig["latex_table"], format="latex")
