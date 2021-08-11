@@ -97,6 +97,15 @@ def postprocess(config):
             ax.set_ylabel(pair1)
             plt.tight_layout()
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
+    iw = np.where(keys == "w0")
+    iwa = np.where(keys == "wa")
+    sig_w0 = np.sqrt(inv_cache[iw, iw])
+    sig_wa = np.sqrt(inv_cache[iwa, iwa])
+    FOM, FOM2 = get_FoM_all(fisher, iw, iwa, CL)
+    fisher_table = astropy.table.Table([CL, FOM, FOM2, sig_w0, sig_wa],
+                                       names=("CL", "FoM", "FoM (alt.)",
+                                              "sigma_w0", "sigma_wa"))
+    fisher_table.write(pconfig["latex_table"], format="latex")
 
 
 def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidth,
@@ -154,7 +163,7 @@ def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidt
     return sig0, sig1
 
 
-def get_FoM_all(fisher, par1, par2):
+def get_FoM_all(fisher, par1, par2, CL):
     """
     Two alternative ways to get the FoM for a pair of parameters
     (code stolen from https://github.com/CosmoLike/DESC_SRD/blob/master/fisher.py#L274)
@@ -167,7 +176,8 @@ def get_FoM_all(fisher, par1, par2):
         Index of first parameter
     par2 : int
         Index of second parameter
-
+    CL : float
+        Confidence level (between 0 and 1)
     Returns:
     -----
     FOM : float
@@ -175,7 +185,9 @@ def get_FoM_all(fisher, par1, par2):
     FOM2 : float
         Alternative estimate of FoM. Choose wisely.
     """
-    fisher_inv = np.linalg.inv(fisher)
+    assert CL > 0 and CL < 1
+    scale = chi2.ppf(q=CL, df=2)
+    fisher_inv = scale*np.linalg.inv(fisher)
     cov_de = fisher_inv[np.ix_([par1, par2], [par1, par2])]
     FOM = 1./np.sqrt(fisher_inv[par1, par1]*fisher_inv[par2, par2] -
                      fisher_inv[par1, par2]*fisher_inv[par2, par1])

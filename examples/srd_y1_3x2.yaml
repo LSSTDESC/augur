@@ -15,11 +15,12 @@ generate:
     h: 0.6727
     sigma8: 0.83
     n_s: 0.9645
-    #transfer_function: "eisenstein_hu"
-    transfer_function: "boltzmann_camb"
-    extra_parameters: &extra_parameters
-        camb: &camb
-          dark_energy_model: "ppf"
+    transfer_function: "eisenstein_hu"
+    # Changes for CCL > 2.2.0
+    #transfer_function: "boltzmann_camb"
+    #extra_parameters: &extra_parameters
+    #    camb: &camb
+    #      dark_energy_model: "ppf"
     # IA model
     eta_ia: 0.0
     eta_ia_highz: 0.0
