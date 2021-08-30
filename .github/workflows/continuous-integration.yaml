@@ -34,6 +34,7 @@ jobs:
         conda activate base
         conda install -q -c conda-forge --only-deps firecrown
         cd firecrown
+        pip install numdifftools
         pip install --no-deps -e .
         conda install -q flake8
         conda install -q pytest
