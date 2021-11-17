@@ -15,7 +15,12 @@ generate:
     h: 0.6727
     sigma8: 0.83
     n_s: 0.9645
-    #transfer_function: 'eisenstein_hu'
+    transfer_function: 'eisenstein_hu'
+    # Changes for CCL > 2.2.0
+    #transfer_function: "boltzmann_camb"
+    #extra_parameters: &extra_parameters
+    #    camb: &camb
+    #      dark_energy_model: "ppf"
     # IA model
     eta_ia: 0.0
     eta_ia_highz: 0.0
@@ -205,7 +210,7 @@ analyze:
 
   cosmosis:
     sampler: fisher
-    output_dir: output/
+    output_dir: output_fishery10/
     output: &fisher_fname fisher_y10.txt # not working
     debug: True
     quiet: False
@@ -255,6 +260,7 @@ analyze:
       {% endfor %}
 
 postprocess:
-  input: *fisher_fname
-  latex_table: data/srd_y10.tex
-  triangle_plot: data/srd_y10.pdf
+  latex_table: output_fishery10/latex_table.tex
+  triangle_plot: output_fishery10/triangle_plot.pdf
+  pairplots: [(w0, wa), (omega_c, sigma8)]
+  CL: 0.68
