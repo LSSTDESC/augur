@@ -68,9 +68,11 @@ def postprocess(config):
                 ax[j, i].set_ylabel(i_key)
     plt.tight_layout()
     f.savefig(pconfig["triangle_plot"])
-
-    pairplots = pconfig["pairplots"]
-    npairplots = int(len(pairplots)/2)
+    if "pairplots" in pconfig.keys():
+        pairplots = pconfig["pairplots"]
+        npairplots = int(len(pairplots)/2)
+    else:
+        npairplots = 0
     for i in range(npairplots):
         pair0 = pairplots[2*i].split("(")[1]
         pair1 = pairplots[2*i+1].split(")")[0]
@@ -97,6 +99,8 @@ def postprocess(config):
             ax.set_ylabel(pair1)
             plt.tight_layout()
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
+
+    # w0 -- wa plots are always made
     iw = np.where(keys == "params--w0")[0][0]
     iwa = np.where(keys == "params--wa")[0][0]
     sig_w0 = np.sqrt(inv_cache[iw, iw])
