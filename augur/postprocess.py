@@ -18,34 +18,48 @@ def postprocess(config):
     """
     pconfig = config["postprocess"]
     outdir = config["analyze"]["cosmosis"]["output_dir"]
+    fid_params = config["generate"]["parameters"]
+    var_params = config["analyze"]["cosmosis"]["parameters"]
     input = os.path.join(outdir, "chain.txt")
     fisher = np.loadtxt(input)
     npars = fisher.shape[0]
     keys = astropy.table.Table.read(input, format="ascii").keys()
     keys = np.array(keys)
+
     if "labels" not in pconfig.keys():
         labels = keys
     else:
         labels = pconfig["labels"]
     xsize, ysize = pconfig["size"] if "size" in pconfig.keys() else (48, 48)
+
     if "centers" in pconfig.keys():
         centers = pconfig["centers"]
     else:
+        # Setting the centers at the fiducial values of the parameters
         centers = np.zeros(npars)
+        ind = 0
+        for key in fid_params.keys():
+            if key in var_params.keys():
+                centers[ind] = fid_params[key]
+                ind += 1
+
     lw = pconfig["linewidth"] if "linewidth" in pconfig.keys() else 1
     ls = pconfig["linestyle"] if "linestyle" in pconfig.keys() else "-"
     edgecolors = pconfig["linecolor"] if "linecolor" in pconfig.keys() else "k"
     facecolors = pconfig["facecolor"] if "facecolor" in pconfig.keys() else "none"
     CL = pconfig["CL"] if "CL" in pconfig.keys() else 0.68
     f, ax = plt.subplots(npars, npars, figsize=(xsize, ysize))
+
     try:
         inv_cache = np.linalg.inv(fisher)
     except np.linalg.LinAlgError:
         print("Fisher matrix non-invertible -- quitting...")
+
     for i in range(npars):
+        i_key = labels[i]
         for j in range(i+1, npars):
-            i_key = labels[i]
             j_key = labels[j]
+            print(i_key, j_key)
             inv_fisher = np.zeros((2, 2))
             inv_fisher[0, 0] = inv_cache[i, i]
             inv_fisher[0, 1] = inv_cache[i, j]
@@ -63,14 +77,16 @@ def postprocess(config):
             ax[j, i].set_ylim(-sig1+centers[j], sig1+centers[j])
             ax[i, j].set_visible(False)
             if j == npars-1:
-                ax[j, i].set_xlabel(j_key)
+                ax[j, i].set_xlabel(i_key)
             if i == 0:
-                ax[j, i].set_ylabel(i_key)
+                ax[j, i].set_ylabel(j_key)
     plt.tight_layout()
     f.savefig(pconfig["triangle_plot"])
-
-    pairplots = pconfig["pairplots"]
-    npairplots = int(len(pairplots)/2)
+    if "pairplots" in pconfig.keys():
+        pairplots = pconfig["pairplots"]
+        npairplots = int(len(pairplots)/2)
+    else:
+        npairplots = 0
     for i in range(npairplots):
         pair0 = pairplots[2*i].split("(")[1]
         pair1 = pairplots[2*i+1].split(")")[0]
@@ -97,6 +113,8 @@ def postprocess(config):
             ax.set_ylabel(pair1)
             plt.tight_layout()
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
+
+    # w0 -- wa plots are always made
     iw = np.where(keys == "params--w0")[0][0]
     iwa = np.where(keys == "params--wa")[0][0]
     sig_w0 = np.sqrt(inv_cache[iw, iw])
