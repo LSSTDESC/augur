@@ -38,7 +38,7 @@ jobs:
         pip install --no-deps -e .
         conda install -q flake8
         conda install -q pytest
-
+        conda install -q matplotlib
     - name: Environment test
       shell: bash -l {0}
       run: |
