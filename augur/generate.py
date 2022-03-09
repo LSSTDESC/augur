@@ -347,7 +347,8 @@ def two_point_insert(config, data):
                 for src in scfg["sources"]
             ]
             for src in scfg["sources"]:
-                print(src, get_noise_power(config, src))
+                if verbose:
+                    print('Noise level', src, get_noise_power(config, src))
             max_len = np.min([len(auto1), len(auto2)])
             cross, ndx = preds[tuple(scfg["sources"])]
             max_len = np.min([max_len, len(cross)])

@@ -24,9 +24,11 @@ def analyze(config):
 
     ana_config = config["analyze"]
     _config, data = firecrown.parse(firecrown_sanitize(ana_config))
-    firecrown.run_cosmosis(_config, data, pathlib.Path(_config["cosmosis"]["output_dir"]))
-    F_ij, par_names = run_fisher(config)
-    np.savez(config["fisher"]["output"], F_ij, par_names)
+    if config["fisher"]["run_cosmosis"]:
+        firecrown.run_cosmosis(_config, data, pathlib.Path(_config["cosmosis"]["output_dir"]))
+    if config["fisher"]["run_derivatives"]:
+        F_ij, par_names = run_fisher(config)
+        np.savez(config["fisher"]["output"], F_ij=F_ij, keys=par_names)
 
 
 def run_fisher(config):

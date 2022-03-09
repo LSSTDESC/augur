@@ -17,15 +17,20 @@ def postprocess(config):
         The yaml parsed dictional of the input yaml file
     """
     pconfig = config["postprocess"]
-    outdir = config["analyze"]["cosmosis"]["output_dir"]
+    if config["fisher"]["run_cosmosis"]:
+        outdir = config["analyze"]["cosmosis"]["output_dir"]
     fid_params = config["generate"]["parameters"]
     var_params = config["analyze"]["cosmosis"]["parameters"]
-    input = os.path.join(outdir, "chain.txt")
-    fisher = np.loadtxt(input)
+    if config["postprocess"]["analyze_cosmosis"]:
+        input = os.path.join(outdir, "chain.txt")
+        fisher = np.loadtxt(input)
+        keys = astropy.table.Table.read(input, format="ascii").keys()
+        keys = np.array(keys)
+    else:
+        input = np.load(config["fisher"]["output"]+".npz")
+        fisher = input["F_ij"]
+        keys = input["keys"]
     npars = fisher.shape[0]
-    keys = astropy.table.Table.read(input, format="ascii").keys()
-    keys = np.array(keys)
-
     if "labels" not in pconfig.keys():
         labels = keys
     else:
@@ -53,7 +58,8 @@ def postprocess(config):
     try:
         inv_cache = np.linalg.inv(fisher)
     except np.linalg.LinAlgError:
-        print("Fisher matrix non-invertible -- quitting...")
+        print("Fisher matrix non-invertible -- Trying pseudo-inverse...")
+        inv_cache = np.linalg.pinv(fisher)
 
     for i in range(npars):
         i_key = labels[i]
@@ -123,7 +129,7 @@ def postprocess(config):
     fisher_table = astropy.table.Table([[CL], [FOM], [FOM2], [sig_w0], [sig_wa]],
                                        names=("CL", "FoM", "FoM (alt.)",
                                               "sigma_w0", "sigma_wa"))
-    fisher_table.write(pconfig["latex_table"], format="latex")
+    fisher_table.write(pconfig["latex_table"], format="latex", overwrite=pconfig["overwrite"])
 
 
 def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidth,

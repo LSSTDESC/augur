@@ -192,18 +192,18 @@ analyze:
       loc: 5.0
       scale: 3.9
     # These parameters aren't in CCL?
-    #beta_ia:
-    #  kind: norm
-    #  loc: 1.0
-    #  scale: 1.6
-    #eta_ia:
-    #  kind: norm
-    #  loc: 0.0
-    #  scale: 2.3
-    #eta_ia_highz:
-    #  kind: norm
-    #  loc: 0.0
-    #  scale: 0.8
+    beta_ia:
+      kind: norm
+      loc: 1.0
+      scale: 1.6
+    eta_ia:
+      kind: norm
+      loc: 0.0
+      scale: 2.3
+    eta_ia_highz:
+      kind: norm
+      loc: 0.0
+      scale: 0.8
     h:
       kind: norm
       loc: 0.6727
@@ -229,10 +229,10 @@ analyze:
       loc: -0.2
       scale: 0.4
     {% endfor %}
-    #mult_bias:
-    #  kind: uniform
-    #  loc: -0.1
-    #  scale: 0.2
+    mult_bias:
+      kind: uniform
+      loc: -0.1
+      scale: 0.2
 
   two_point:
     module: firecrown.ccl.two_point
@@ -305,10 +305,14 @@ analyze:
 
 fisher:
   step: 0.0002
+  run_cosmosis: True
+  run_derivatives: True
   output: output_fishery1/fisher_y1
 
 postprocess:
+  analyze_cosmosis: False
   latex_table: output_fishery1/latex_table.tex
   triangle_plot: output_fishery1/triangle_plot.pdf
+  overwrite: True
   pairplots: [(w0, wa), (omega_c, sigma8)]
   CL: 0.68
