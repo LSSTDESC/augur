@@ -52,6 +52,7 @@ def run_fisher(config):
     _config, data = firecrown.parse(firecrown_sanitize(ana_config))
     # Getting the reference likelihood evaluator function
     ref_like = data["two_point"]["eval"]
+    ref_priors = data["priors"]["eval"]
     ref_pars = data["parameters"]
     par_names = list(set(list(data["priors"]["data"].keys())) - set(["module"]))
 
@@ -60,7 +61,9 @@ def run_fisher(config):
         for i in range(len(x)):
             pars[par_names[i]] = x[i]
         cosmo = firecrown.get_ccl_cosmology(pars)
-        return -ref_like(cosmo=cosmo, parameters=pars, data=data["two_point"]["data"])[0]
+        ll = -ref_like(cosmo=cosmo, parameters=pars, data=data["two_point"]["data"])[0]
+        lp = -ref_priors(cosmo=cosmo, parameters=pars, data=data["two_point"]["data"])[0]
+        return ll+lp
 
     x0 = [data["parameters"][kk] for kk in par_names]
     F_ij = nd.Hessian(negloglike, step=float(config["fisher"]["step"]))(x0)
