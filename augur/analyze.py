@@ -78,5 +78,7 @@ def run_bias(config, F_ij):
                             step=float(config["fisher"]["step"]))(x0)
     # Multiply times inverse per-ell covariance with ML parameters
     # see eqn 30 in https://arxiv.org/pdf/1306.6870.pdf
+    # Make explicit where the covariances are
+
     print('Debugging derivatives', dCldtheta)
     return dCldtheta
