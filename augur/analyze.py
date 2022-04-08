@@ -29,6 +29,7 @@ def analyze(config):
     if config["fisher"]["run_derivatives"]:
         F_ij, par_names = run_fisher(config)
         np.savez(config["fisher"]["output"], F_ij=F_ij, keys=par_names)
+    _ = run_bias(config, F_ij)
 
 
 def run_fisher(config):
@@ -68,3 +69,57 @@ def run_fisher(config):
     x0 = [data["parameters"][kk] for kk in par_names]
     F_ij = nd.Hessian(negloglike, step=float(config["fisher"]["step"]))(x0)
     return F_ij, par_names
+
+
+def run_bias(config, F_ij):
+    """
+    Call likelihood and compute relevant derivatives to get
+    an estimate of the Fisher bias.
+
+    Parameters:
+    -----------
+    config : dict
+        The yaml parsed dictionary of the input yaml file
+    F_ij : ndarray
+        Fisher matrix computed at the maximum likelihood position
+        through the calculation of the Hessian of the likelihood
+
+    Returns:
+    --------
+    b_j : ndarray
+        Fisher biases (see Biancamaria's work for more details)
+    """
+
+    ana_config = config["analyze"]
+    _config, data = firecrown.parse(firecrown_sanitize(ana_config))
+    # Reference Parameters
+    ref_pars = data["parameters"]
+    par_names = list(set(list(data["priors"]["data"].keys())) - set(["module"]))
+
+    def C_ells_2pt(x):
+        pars = deepcopy(ref_pars)  # To make sure that we start from the same point
+        for i in range(len(x)):
+            pars[par_names[i]] = x[i]
+        # Create cosmology object
+        cosmo = firecrown.get_ccl_cosmology(pars)
+        # Render tracers
+        for _, src in data['two_point']['data']['sources'].items():
+            src.render(cosmo, params=pars,
+                       systematics=data['two_point']['data']['systematics'])
+        # Render the C_ells
+        pred_all = []
+        for name, stat in data['two_point']['data']['statistics'].items():
+            stat.compute(cosmo, pars, data['two_point']['data']['sources'],
+                         systematics=data['two_point']['data']['systematics'])
+            pred_all.append(stat.predicted_statistic_)
+        pred_all = np.array(pred_all)
+        return pred_all
+
+    x0 = [data["parameters"][kk] for kk in par_names]
+    print('Debugging', x0, len(x0))
+    dCldtheta = nd.Gradient(np.vectorize(C_ells_2pt),
+                            step=float(config["fisher"]["step"]))(x0)
+    # Multiply times inverse per-ell covariance with ML parameters
+    # see eqn 30 in https://arxiv.org/pdf/1306.6870.pdf
+    print('Debugging derivatives', dCldtheta)
+    return dCldtheta
