@@ -280,6 +280,9 @@ analyze:
       lens{{ i }}_delta_z: [-0.2, 0.0, 0.2]
       {% endfor %}
 
+  fisher:
+    step: 0.0002
+
 postprocess:
   latex_table: output_fishery1/latex_table.tex
   triangle_plot: output_fishery1/triangle_plot.pdf
