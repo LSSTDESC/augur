@@ -167,10 +167,10 @@ analyze:
       kind: norm
       loc: 0.2665
       scale: 0.2
-    Omega_b:
-      kind: norm
-      loc: 0.0492
-      scale: 0.006
+    #Omega_b:
+      #kind: norm
+      #loc: 0.0492
+      #scale: 0.006
     sigma8:
       kind: norm
       loc: 0.831
@@ -191,6 +191,7 @@ analyze:
       kind: norm
       loc: 5.0
       scale: 3.9
+    # These parameters aren't in CCL?
     beta_ia:
       kind: norm
       loc: 1.0
@@ -203,13 +204,35 @@ analyze:
       kind: norm
       loc: 0.0
       scale: 0.8
-    {% for i in range(5) %}
+    h:
+      kind: norm
+      loc: 0.6727
+      scale: 0.3
+    {% for i, bias in [(0, 1.562362), (1, 1.732963), (2, 1.913252), (3, 2.100644), (4, 2.293210)] %}
     bias_lens{{ i }}:
       kind: norm
-      loc: 1.9
-      scale: 0.9
+      loc: {{ bias }}
+      scale: 0.5
+    {% endfor %}
+    # photoz shifts for the lensing sources
+    {% for i in range(5) %}
+    src{{ i }}_delta_z:
+      kind: uniform
+      loc: -0.2
+      scale: 0.4
     {% endfor %}
 
+    # photoz shifts for the lenses
+    {% for i in range(5) %}
+    lens{{ i }}_delta_z:
+      kind: uniform
+      loc: -0.2
+      scale: 0.4
+    {% endfor %}
+    mult_bias:
+      kind: uniform
+      loc: -0.1
+      scale: 0.2
 
   two_point:
     module: firecrown.ccl.two_point
@@ -280,11 +303,16 @@ analyze:
       lens{{ i }}_delta_z: [-0.2, 0.0, 0.2]
       {% endfor %}
 
-  fisher:
-    step: 0.0002
+fisher:
+  step: 0.0002
+  run_cosmosis: True
+  run_derivatives: True
+  output: output_fishery1/fisher_y1
 
 postprocess:
+  analyze_cosmosis: False
   latex_table: output_fishery1/latex_table.tex
   triangle_plot: output_fishery1/triangle_plot.pdf
+  overwrite: True
   pairplots: [(w0, wa), (omega_c, sigma8)]
   CL: 0.68
