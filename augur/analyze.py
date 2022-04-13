@@ -24,11 +24,17 @@ def analyze(config):
     """
 
     ana_config = config["analyze"]
-    config, data = firecrown.parse(firecrown_sanitize(ana_config))
-    firecrown.run_cosmosis(config, data, pathlib.Path(config["cosmosis"]["output_dir"]))
+    _config, data = firecrown.parse(firecrown_sanitize(ana_config))
+    firecrown.run_cosmosis(_config, data, pathlib.Path(ana_config["cosmosis"]["output_dir"]))
+    F_ij = np.loadtxt(pathlib.Path(ana_config["cosmosis"]["output_dir"]) / 'chain.txt')
+    # evaluate ell_sys and C_ell_sys from the config
+    ell_sys = eval(config["fisher"]["ell_sys"])
+    C_ell_sys = eval(config["fisher"]["C_ell_sys"])
+
+    bias = run_bias(config, F_ij, ell_sys, C_ell_sys)
 
 
-def run_bias(config, F_ij):
+def run_bias(config, F_ij, ell_sys, C_ell_sys):
     """
     Call likelihood and compute relevant derivatives to get
     an estimate of the Fisher bias.
@@ -36,15 +42,19 @@ def run_bias(config, F_ij):
     Parameters:
     -----------
     config : dict
-        The yaml parsed dictionary of the input yaml file
+        The yaml parsed dictionary of the input yaml file,
     F_ij : ndarray
         Fisher matrix computed at the maximum likelihood position
-        through the calculation of the Hessian of the likelihood
+        through the calculation of the Hessian of the likelihood.
+    ell_sys: ndarray
+        Multipoles at which the systematics power spectrum is passed.
+    C_ell_sys: ndarray
+        Power spectrum of the systematics (evaluated at ell_sys).
 
     Returns:
     --------
     b_j : ndarray
-        Fisher biases (see Biancamaria's work for more details)
+        Fisher biases (see Biancamaria's work for more details).
     """
 
     ana_config = config["analyze"]
@@ -52,6 +62,7 @@ def run_bias(config, F_ij):
     # Reference Parameters
     ref_pars = data["parameters"]
     par_names = list(set(list(data["priors"]["data"].keys())) - set(["module"]))
+    inv_cov = data['two_point']['data']['likelihood'].inv_cov
 
     def C_ells_2pt(x):
         pars = deepcopy(ref_pars)  # To make sure that we start from the same point
@@ -65,20 +76,29 @@ def run_bias(config, F_ij):
                        systematics=data['two_point']['data']['systematics'])
         # Render the C_ells
         pred_all = []
+
         for name, stat in data['two_point']['data']['statistics'].items():
             stat.compute(cosmo, pars, data['two_point']['data']['sources'],
                          systematics=data['two_point']['data']['systematics'])
             pred_all.append(stat.predicted_statistic_)
+            ells = stat.ell_or_theta_
         pred_all = np.array(pred_all)
-        return pred_all
+        return pred_all, ells
 
     x0 = [data["parameters"][kk] for kk in par_names]
-    print('Debugging', x0, len(x0))
-    dCldtheta = nd.Gradient(np.vectorize(C_ells_2pt),
-                            step=float(config["fisher"]["step"]))(x0)
-    # Multiply times inverse per-ell covariance with ML parameters
-    # see eqn 30 in https://arxiv.org/pdf/1306.6870.pdf
-    # Make explicit where the covariances are
+    # We need the multipoles at which we have the data-vectors
+    # we are assuming smooth power spectra and top-hat windows
+    _, ell_ref = C_ells_2pt(x0)
+    # We get the power spectrum of the systematics evaluated at the
+    # desired multipoles
+    print(ell_ref, len(ell_ref), len(ell_sys), len(C_ell_sys))
+    C_ell_sys_int = np.interp(ell_ref, ell_sys, C_ell_sys)
 
-    print('Debugging derivatives', dCldtheta)
-    return dCldtheta
+    def aux_bias(x):
+        return np.einsum('i, ij, j', C_ell_sys_int, inv_cov, C_ells_2pt(x)[0])
+
+    dtheta_j = nd.Gradient(aux_bias,
+                           step=float(config["fisher"]["step"]))(x0)
+
+    print('Debugging derivatives', dtheta_j)
+    return dtheta_j
