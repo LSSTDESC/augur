@@ -308,8 +308,8 @@ fisher:
   run_cosmosis: True
   run_derivatives: True
   output: output_fishery1/fisher_y1
-  ell_sys: np.unique(np.geomspace(1, 30000).astype(np.int))
-  C_ell_sys: (np.unique(np.geomspace(1, 30000).astype(np.int)))**(-0.3)
+  output_bias: output_fishery1/bias_y1
+  C_ell_sys_path: examples/Cl_sys.txt
 
 postprocess:
   analyze_cosmosis: False

@@ -25,13 +25,14 @@ def analyze(config):
 
     ana_config = config["analyze"]
     _config, data = firecrown.parse(firecrown_sanitize(ana_config))
-    firecrown.run_cosmosis(_config, data, pathlib.Path(ana_config["cosmosis"]["output_dir"]))
+    # firecrown.run_cosmosis(_config, data, pathlib.Path(ana_config["cosmosis"]["output_dir"]))
     F_ij = np.loadtxt(pathlib.Path(ana_config["cosmosis"]["output_dir"]) / 'chain.txt')
     # evaluate ell_sys and C_ell_sys from the config
-    ell_sys = eval(config["fisher"]["ell_sys"])
-    C_ell_sys = eval(config["fisher"]["C_ell_sys"])
-
+    X = np.loadtxt(config["fisher"]["C_ell_sys_path"])
+    ell_sys = X[:, 0]
+    C_ell_sys = X[:, 1]
     bias = run_bias(config, F_ij, ell_sys, C_ell_sys)
+    np.savetxt(pathlib.Path(config["fisher"]["output_bias"]), bias)
 
 
 def run_bias(config, F_ij, ell_sys, C_ell_sys):
@@ -62,43 +63,65 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys):
     # Reference Parameters
     ref_pars = data["parameters"]
     par_names = list(set(list(data["priors"]["data"].keys())) - set(["module"]))
-    inv_cov = data['two_point']['data']['likelihood'].inv_cov
+    # Get covariance matrix
+    cov = data["two_point"]["data"]["likelihood"].cov
 
-    def C_ells_2pt(x):
+    def C_ell_2pt(x):
         pars = deepcopy(ref_pars)  # To make sure that we start from the same point
         for i in range(len(x)):
             pars[par_names[i]] = x[i]
         # Create cosmology object
         cosmo = firecrown.get_ccl_cosmology(pars)
         # Render tracers
-        for _, src in data['two_point']['data']['sources'].items():
+        for _, src in data["two_point"]["data"]["sources"].items():
             src.render(cosmo, params=pars,
-                       systematics=data['two_point']['data']['systematics'])
+                       systematics=data["two_point"]["data"]["systematics"])
         # Render the C_ells
         pred_all = []
-
-        for name, stat in data['two_point']['data']['statistics'].items():
-            stat.compute(cosmo, pars, data['two_point']['data']['sources'],
-                         systematics=data['two_point']['data']['systematics'])
+        ells_all = []
+        n_ells = []
+        for name, stat in data["two_point"]["data"]["statistics"].items():
+            stat.compute(cosmo, pars, data["two_point"]["data"]["sources"],
+                         systematics=data["two_point"]["data"]["systematics"])
             pred_all.append(stat.predicted_statistic_)
             ells = stat.ell_or_theta_
-        pred_all = np.array(pred_all)
-        return pred_all, ells
+            ells_all.append(ells)
+            n_ells.append(len(ells))
+        pred_all = np.concatenate(pred_all)
+        ells_all = np.concatenate(ells_all)
+        return pred_all, ells_all, n_ells
 
     x0 = [data["parameters"][kk] for kk in par_names]
     # We need the multipoles at which we have the data-vectors
     # we are assuming smooth power spectra and top-hat windows
-    _, ell_ref = C_ells_2pt(x0)
-    # We get the power spectrum of the systematics evaluated at the
-    # desired multipoles
-    print(ell_ref, len(ell_ref), len(ell_sys), len(C_ell_sys))
-    C_ell_sys_int = np.interp(ell_ref, ell_sys, C_ell_sys)
+    C_ell_ref, ells_ref, n_ells = C_ell_2pt(x0)
+    n_combs = len(n_ells)
 
-    def aux_bias(x):
-        return np.einsum('i, ij, j', C_ell_sys_int, inv_cov, C_ells_2pt(x)[0])
+    def aux_derivative(x):
+        """
+        Auxiliary routine to pass to the gradient routine
+        it performs the inversion ell-by-ell of the covariance matrix
+        and the product of the theory times C_ell_sys
+        """
+        C_ell_all, _, _ = C_ell_2pt(x)
+        aux_sum = 0
+        for i in range(n_ells):
+            aux_dv = np.zeros(n_combs)
+            aux_cov = np.zeros((n_combs, n_combs))
+            aux_sys = np.zeros(n_combs)
+            # Get the auxiliary data-vector and covariance
+            for j in range(n_combs):
+                aux_dv[j] = C_ell_all[i+j*n_ells[j]]
+                aux_sys[j] = C_ell_sys[i+j*n_ells[j]]
+                for k in range(n_combs):
+                    aux_cov[j, k] = cov[i+j*n_ells[j], i+k*n_ells[k]]
+            # Now we need the inverse
+            inv_cov = np.linalg.inv(aux_cov)
+            prod = np.einsum('i, ij, j', aux_sys, inv_cov, aux_dv)
+            aux_sum += prod
+        return aux_sum
 
-    dtheta_j = nd.Gradient(aux_bias,
+    dtheta_j = nd.Gradient(aux_derivative,
                            step=float(config["fisher"]["step"]))(x0)
-
     print('Debugging derivatives', dtheta_j)
     return dtheta_j
