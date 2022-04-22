@@ -12,6 +12,7 @@ from .generate import firecrown_sanitize
 from copy import deepcopy
 import numpy as np
 import numdifftools as nd
+from scipy.interpolate import interp1d, interp2d
 
 
 def analyze(config):
@@ -89,39 +90,44 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys):
             n_ells.append(len(ells))
         pred_all = np.concatenate(pred_all)
         ells_all = np.concatenate(ells_all)
-        return pred_all, ells_all, n_ells
+        ell_max = np.max(ells_all)
+        ell_min = np.min(ells_all)
+        pred_out = []
+        cov_out = []
+        ells_out = np.linspace(int(ell_min), int(ell_max),
+                               int(ell_max)-int(ell_min)+1)
+        print(ells_out)
+        # Interpolate to get delta_ell = 1 predictions
+        for i in range(len(n_ells)):
+            if i < 1:
+                min_i = 0
+            else:
+                min_i = n_ells[i-1]
+            max_i = n_ells[i]+min_i
+            sp_cls = interp1d(ells_all[min_i:max_i],
+                              pred_all[min_i:max_i], fill_value="extrapolate")
+            delta_ell_i = np.gradient(ells_all[min_i:max_i])
+            # Power spectrum with delta_ell = 1
+            pred_out.append(sp_cls(ells_out))
+            # Now we need the covariance. Caveat: re-scale by delta_ell!
+            for j in range(len(n_ells)):
+                if j < 1:
+                    min_j = 0
+                else:
+                    min_j = n_ells[j-1]
+                max_j = n_ells[j]+min_j
+                delta_ell_j = np.gradient(ells_all[min_j:max_j])
+                cov_corr = cov[min_i:max_i, min_j:max_j]*delta_ell_i[:, np.newaxis]
+                cov_corr = cov_corr*delta_ell_j[np.newaxis, :]
+                sp_cov = interp2d(ells_all[min_i:max_i], ells_all[min_j:max_j], cov_corr.T)
+                cov_out.append(sp_cov(ells_out, ells_out))
+
+        return pred_out, cov_out, ells_out, n_ells
 
     x0 = [data["parameters"][kk] for kk in par_names]
     # We need the multipoles at which we have the data-vectors
     # we are assuming smooth power spectra and top-hat windows
-    C_ell_ref, ells_ref, n_ells = C_ell_2pt(x0)
+    C_ell_ref, Cov_ref, ells_ref, n_ells = C_ell_2pt(x0)
     n_combs = len(n_ells)
 
-    def aux_derivative(x):
-        """
-        Auxiliary routine to pass to the gradient routine
-        it performs the inversion ell-by-ell of the covariance matrix
-        and the product of the theory times C_ell_sys
-        """
-        C_ell_all, _, _ = C_ell_2pt(x)
-        aux_sum = 0
-        for i in range(n_ells):
-            aux_dv = np.zeros(n_combs)
-            aux_cov = np.zeros((n_combs, n_combs))
-            aux_sys = np.zeros(n_combs)
-            # Get the auxiliary data-vector and covariance
-            for j in range(n_combs):
-                aux_dv[j] = C_ell_all[i+j*n_ells[j]]
-                aux_sys[j] = C_ell_sys[i+j*n_ells[j]]
-                for k in range(n_combs):
-                    aux_cov[j, k] = cov[i+j*n_ells[j], i+k*n_ells[k]]
-            # Now we need the inverse
-            inv_cov = np.linalg.inv(aux_cov)
-            prod = np.einsum('i, ij, j', aux_sys, inv_cov, aux_dv)
-            aux_sum += prod
-        return aux_sum
-
-    dtheta_j = nd.Gradient(aux_derivative,
-                           step=float(config["fisher"]["step"]))(x0)
-    print('Debugging derivatives', dtheta_j)
-    return dtheta_j
+    print(C_ell_ref, Cov_ref, n_combs)
