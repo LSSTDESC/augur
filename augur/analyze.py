@@ -32,11 +32,11 @@ def analyze(config):
     X = np.loadtxt(config["fisher"]["C_ell_sys_path"])
     ell_sys = X[:, 0]
     C_ell_sys = X[:, 1]
-    bias = run_bias(config, F_ij, ell_sys, C_ell_sys)
+    bias = run_bias(config, F_ij, ell_sys, C_ell_sys, step=config["fisher"]["step"])
     np.savetxt(pathlib.Path(config["fisher"]["output_bias"]), bias)
 
 
-def run_bias(config, F_ij, ell_sys, C_ell_sys):
+def run_bias(config, F_ij, ell_sys, C_ell_sys, step=0.0002):
     """
     Call likelihood and compute relevant derivatives to get
     an estimate of the Fisher bias.
@@ -67,7 +67,7 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys):
     # Get covariance matrix
     cov = data["two_point"]["data"]["likelihood"].cov
 
-    def C_ell_2pt(x):
+    def C_ell_2pt(x, return_cov=False):
         pars = deepcopy(ref_pars)  # To make sure that we start from the same point
         for i in range(len(x)):
             pars[par_names[i]] = x[i]
@@ -94,9 +94,9 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys):
         ell_min = np.min(ells_all)
         pred_out = []
         cov_out = []
+        n_mult = int(ell_max)-int(ell_min)+1
         ells_out = np.linspace(int(ell_min), int(ell_max),
-                               int(ell_max)-int(ell_min)+1)
-        print(ells_out)
+                               n_mult)
         # Interpolate to get delta_ell = 1 predictions
         for i in range(len(n_ells)):
             if i < 1:
@@ -110,24 +110,44 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys):
             # Power spectrum with delta_ell = 1
             pred_out.append(sp_cls(ells_out))
             # Now we need the covariance. Caveat: re-scale by delta_ell!
-            for j in range(len(n_ells)):
-                if j < 1:
-                    min_j = 0
-                else:
-                    min_j = n_ells[j-1]
-                max_j = n_ells[j]+min_j
-                delta_ell_j = np.gradient(ells_all[min_j:max_j])
-                cov_corr = cov[min_i:max_i, min_j:max_j]*delta_ell_i[:, np.newaxis]
-                cov_corr = cov_corr*delta_ell_j[np.newaxis, :]
-                sp_cov = interp2d(ells_all[min_i:max_i], ells_all[min_j:max_j], cov_corr.T)
-                cov_out.append(sp_cov(ells_out, ells_out))
-
-        return pred_out, cov_out, ells_out, n_ells
+            if return_cov:
+                for j in range(len(n_ells)):
+                    if j < 1:
+                        min_j = 0
+                    else:
+                        min_j = n_ells[j-1]
+                    max_j = n_ells[j]+min_j
+                    delta_ell_j = np.gradient(ells_all[min_j:max_j])
+                    cov_corr = cov[min_i:max_i, min_j:max_j]*delta_ell_i[:, np.newaxis]
+                    cov_corr = cov_corr*delta_ell_j[np.newaxis, :]
+                    sp_cov = interp2d(ells_all[min_i:max_i], ells_all[min_j:max_j], cov_corr.T)
+                    cov_aux = sp_cov(ells_out, ells_out)
+                    cov_out.append(cov_aux)
+        pred_out = np.array(pred_out).reshape((len(n_ells), n_mult))
+        if return_cov:
+            cov_out = np.array(cov_out).reshape((len(n_ells), len(n_ells), n_mult, n_mult))
+            return pred_out, cov_out, ells_out, n_ells
+        else:
+            return pred_out
 
     x0 = [data["parameters"][kk] for kk in par_names]
     # We need the multipoles at which we have the data-vectors
     # we are assuming smooth power spectra and top-hat windows
-    C_ell_ref, Cov_ref, ells_ref, n_ells = C_ell_2pt(x0)
-    n_combs = len(n_ells)
+    C_ell_ref, Cov_ref, ells_ref, n_ells = C_ell_2pt(x0, return_cov=True)
 
-    print(C_ell_ref, Cov_ref, n_combs)
+    # TODO generalize C_ell_sys ingestion
+    C_ell_sys = C_ell_sys.reshape((C_ell_ref.shape[0], C_ell_ref.shape[1]))
+
+    def aux_der(x):
+        C_ell_out = C_ell_2pt(x)
+        aux_sum = 0
+        for i in range(len(ells_ref)):
+            dv = C_ell_out[:, i]
+            dt = C_ell_sys[:, i] - C_ell_ref[:, i]
+            inv_cov = np.linalg.pinv(Cov_ref[:, :, i, i])
+            aux_sum += np.einsum('i, ij, j', dt, inv_cov, dv)
+        return aux_sum
+
+    B_j = nd.Gradient(aux_der, step=step)(x0)
+    dtheta_j = np.einsum('ij, j', np.linalg.inv(F_ij), B_j)
+    return dtheta_j
