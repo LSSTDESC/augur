@@ -26,7 +26,8 @@ def analyze(config):
 
     ana_config = config["analyze"]
     _config, data = firecrown.parse(firecrown_sanitize(ana_config))
-    # firecrown.run_cosmosis(_config, data, pathlib.Path(ana_config["cosmosis"]["output_dir"]))
+    if config["fisher"]["run_cosmosis"]:
+        firecrown.run_cosmosis(_config, data, pathlib.Path(ana_config["cosmosis"]["output_dir"]))
     F_ij = np.loadtxt(pathlib.Path(ana_config["cosmosis"]["output_dir"]) / 'chain.txt')
     # evaluate ell_sys and C_ell_sys from the config
     X = np.loadtxt(config["fisher"]["C_ell_sys_path"])
