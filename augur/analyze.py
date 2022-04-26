@@ -144,12 +144,13 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys, step=0.0002):
         for i in range(len(ells_ref)):
             dv = C_ell_out[:, i]
             dt = C_ell_sys[:, i] - C_ell_ref[:, i]
-            if (i % 500) == 0:
-                print('i', i, Cov_ref[:, :, i, i].shape)
             inv_cov = np.linalg.inv(Cov_ref[:, :, i, i])
             aux_sum += np.einsum('i, ij, j', dt, inv_cov, dv)
+        print(aux_sum)
         return aux_sum
-
+    # We take the gradient of the sum in ell, as covariance and C_ell_sys are fixed (for now)
     B_j = nd.Gradient(aux_der, step=step)(x0)
-    dtheta_j = np.einsum('ij, j', np.linalg.inv(F_ij), B_j)
-    return dtheta_j
+    print('Bias vector', B_j)
+    dtheta_i = np.einsum('ij, j', np.linalg.inv(F_ij), B_j)
+    print('Bias params', dtheta_i)
+    return dtheta_i
