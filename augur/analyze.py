@@ -102,8 +102,8 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys, step=0.0002):
             if i < 1:
                 min_i = 0
             else:
-                min_i = n_ells[i-1]
-            max_i = n_ells[i]+min_i
+                min_i += n_ells[i-1]
+            max_i = min_i + n_ells[i]
             sp_cls = interp1d(ells_all[min_i:max_i],
                               pred_all[min_i:max_i], fill_value="extrapolate")
             delta_ell_i = np.gradient(ells_all[min_i:max_i])
@@ -115,11 +115,11 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys, step=0.0002):
                     if j < 1:
                         min_j = 0
                     else:
-                        min_j = n_ells[j-1]
-                    max_j = n_ells[j]+min_j
+                        min_j += n_ells[j-1]
+                    max_j = n_ells[j] + min_j
                     delta_ell_j = np.gradient(ells_all[min_j:max_j])
-                    cov_corr = cov[min_i:max_i, min_j:max_j]*delta_ell_i[:, np.newaxis]
-                    cov_corr = cov_corr*delta_ell_j[np.newaxis, :]
+                    cov_corr = cov[min_i:max_i, min_j:max_j]*np.sqrt(delta_ell_i[:, np.newaxis])
+                    cov_corr = cov_corr*np.sqrt(delta_ell_j[np.newaxis, :])
                     sp_cov = interp2d(ells_all[min_i:max_i], ells_all[min_j:max_j], cov_corr.T)
                     cov_aux = sp_cov(ells_out, ells_out)
                     cov_out.append(cov_aux)
@@ -144,7 +144,9 @@ def run_bias(config, F_ij, ell_sys, C_ell_sys, step=0.0002):
         for i in range(len(ells_ref)):
             dv = C_ell_out[:, i]
             dt = C_ell_sys[:, i] - C_ell_ref[:, i]
-            inv_cov = np.linalg.pinv(Cov_ref[:, :, i, i])
+            if (i % 500) == 0:
+                print('i', i, Cov_ref[:, :, i, i].shape)
+            inv_cov = np.linalg.inv(Cov_ref[:, :, i, i])
             aux_sum += np.einsum('i, ij, j', dt, inv_cov, dv)
         return aux_sum
 
