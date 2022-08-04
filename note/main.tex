@@ -12,11 +12,49 @@
 
 \maketitle
 
-\section{Introduction}
-Motivation for a Fisher code.
+\section{Introduction - The Fisher formalism}
+First, raw data are compressed into maps. For instance, in a galaxy survey, it is a map of the three-dimensional galaxy density field. On the other hand, in a lensing survey, it is a map of galaxy ellipticities (see, for instance, Fig. (\ref{mapgalaxy}));
+then, from maps the observed two-point functions can be estimated;
+next a theoretical model is chosen to be analyzed and the corresponding two-point functions and covariance matrix are calculated;
+finally, combining the above ingredients, and possibly multiple probes, the likelihood can be computed. In order to find the best-fit parameters and corresponding fiducial contours, a sampler is used to compute the likelihood for many sets of parameters. We thus sense that finding the maximum of the likelihood must be achieved numerically. However, this is computationally demanding: if the cosmological model under consideration includes say 20 free parameters, then the required number of likelihood evaluations would be $20^{20}$. Therefore, algorithms have been developed to achieve this: the most used is the Markov Chain Monte Carlo (MCMC). It involves an interative procedure that consists in generating the $i + 1$-th sample based on only on the previous ($i$th) sample.
+Otherwise, as we have seen, the Fisher forecast can be used to approximately forecast the error bars.
+
 
 \section{Methods}
+\subsection{Fisher Bias}
+Our goal is to determine the bias in some of the cosmological parameters caused by systematics effects. 
+Systematic errors are not random, but instead they will replicate when an experiment is repeated under the same conditions.
+One possible source of such errors are imperfect theoretical models. In paritcular, imperfect modelling choices 
+can happen, for instance, when we neglect or wrongly model effects that are instead present in the real universe.\\
 
+We now introduce the equation that allows to compute the bias in a certain cosmological parameter $\theta_i$ in the most general way. 
+The bias is expressed in terms of the inverse of the Fisher matrix, $(\boldsymbol{F})^{-1}_{ij}$, the inverse of the covariance matrix, $\boldsymbol{C_A}^{-1}$, and in terms of the difference between the data vector
+corresponding to a fiducial model (assumed to provide a suitable description for the Universe), $\boldsymbol{D}^{\mathrm{true}}$, and the one of the model being analyzed, $\boldsymbol{D}^{\mathrm{model}}$.
+We notice that the Fisher matrix is evaluated at the fiducial values of the cosmological parameters under consideration.
+
+\begin{align}
+  \begin{split}
+  b\left[\hat{\theta}_{i}\right]&=\left(\boldsymbol{F}^{-1}\right)_{i j} \Tilde{\boldsymbol{B}}_{j}\\
+  &=\left(\boldsymbol{F}^{-1}\right)_{i j}\sum_{\ell}\left[\boldsymbol{D}^{\mathrm{true}}-\boldsymbol{D}^{\mathrm{model}}(\boldsymbol{\theta})\right](\boldsymbol{\ell})\boldsymbol{C_A}^{-1}(\boldsymbol{\ell})\left(\dfrac{d\boldsymbol{D}^{\mathrm{model}}}{d\theta_j}(\boldsymbol{\ell})\right).
+  \end{split}
+  \end{align}
+
+\subsection{Model selection}
+One can apply model selection criteria in a forecasting phase in order to study an experiment's ability to carry out model selection tests.
+For instance, if we consider the an experiment aimed at obtaining information on dark energy, we could use model selection techniques to predict whether or not,
+with our experiment, we will be able to distinguish, say, the $w$CDM from the $\Lambda$CDM model.
+The natural question that now arises regards the possible criteria to select models. Although there are quite a few, they are all expressed in terms of the likelihood,
+which is computationally demanding. Thus, we focus on the Bayes factor as it is possible to express it in terms of the Fisher matrix only. We would like to implement
+such expression in Augur as it is computationally inexpensive and can provide interesting information.\\
+The Bayes factor is defined as the ratio of the evidences (marginzalized likelihoods) of the two model under consideration.
+In this way, although a complicated model will lead to a higher likelihood (or at least as high) with respect to simpler-nested model, the evidence will favour
+the simpler model (provided that the fit is nearly as good), thanks to the smaller prior volume. 
+Then, computing the ratio between the evidences of two models will automatically disfavor complex models involving many parameters.\\
+With this in mind, we now present the equation to compute the Bayes factor in a 2-dimensional parameter space (for nested models). It is expressed in terms of the Fisher matrix $F$ and the prior knowledge
+on each parameter (encoded in the ranges $\Delta \theta_{1}$ and $\Delta \theta_{2}$, respectively). 
+\begin{equation}
+  \langle B\rangle=\frac{\Delta \theta_{1} \Delta \theta_{2}}{2 \pi \sqrt{\operatorname{det} F^{-1}}} \mathrm{e}^{-(1 / 2) \sum_{\alpha \beta}\left(\theta_{\alpha}-\theta_{\alpha}^{*}\right) F_{\alpha \beta}\left(\theta_{\beta}-\theta_{\beta}^{*}\right)}
+  \end{equation}
 \section{Validation}
 
 \end{document}
