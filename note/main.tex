@@ -27,6 +27,32 @@ Otherwise, there is the possibility, in a forecasting phase, when data are not a
 foremalism to approximately predict the expcted error bars. This constitutes a computationally inexpensive way
 to predict the uncertainties that the measurements will carry out.
 
+\section{How to obtain errors and contours from Fisher matrices}
+It is possible to obtain the errors from the Fisher matrices by considering that, under certain conditions,
+the Fisher matrix is the inverse of the covariance matrix.
+For instance, in the simple case of a one-parameter space, the $1\sigma$ uncertainty on $\theta$ (square root of the covariance) is $1/\sqrt{F}$, while in a two-parameter space we have 
+\begin{equation}
+[F]^{-1}=[C]=\left[\begin{array}{cc}
+\sigma_{x}^{2} & \sigma_{x y} \\
+\sigma_{x y} & \sigma_{y}^{2}
+\end{array}\right].
+\end{equation}
+
+In particular, we can distinguish two cases.
+On one hand, if we assume to have perfect knowledge of the parameter $\theta_2$, then the error on $\theta_1$ is given by $1/\sqrt{F_{11}}$. 
+On the other hand, if $\theta_2$ can vary freely, then the proper error on $\theta_1$ can be obtained only after
+marginalizing over all possible values of $\theta_2$.
+The resulting error on $\theta_1$ will be then given by $\sqrt{\left(F^{-1}\right)_{11}}$ (according to the above equation). 
+
+
+Moreover, it is possible to obtain fiducial ellipses by considering
+that the ellipse parameters are related to the Fisher matrix elements by the following relations
+\begin{aligned}
+  a^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}+\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  b^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}-\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  \tan 2 \theta &=\frac{2 \sigma_{x y}}{\sigma_{x}^{2}-\sigma_{y}^{2}},
+  \end{aligned}
+where $a$ and $b$ are the axis lengths and $\theta$ the inclination angle.
 
 \section{Methods}
 \subsection{Fisher Bias}
@@ -46,6 +72,13 @@ We notice that the Fisher matrix is evaluated at the fiducial values of the cosm
   &=\left(\boldsymbol{F}^{-1}\right)_{i j}\sum_{\ell}\left[\boldsymbol{D}^{\mathrm{true}}-\boldsymbol{D}^{\mathrm{model}}(\boldsymbol{\theta})\right](\boldsymbol{\ell})\boldsymbol{C_A}^{-1}(\boldsymbol{\ell})\left(\dfrac{d\boldsymbol{D}^{\mathrm{model}}}{d\theta_j}(\boldsymbol{\ell})\right).
   \end{split}
   \end{align}
+  Thus we notice that $\left[F_{11} F_{22}-F_{12} F_{21}\right] / F_{22}=1 /\left(F^{-1}\right)_{11}$. So the $1\sigma$ error is given by $\sqrt{\left(F^{-1}\right)_{11}}$.\\
+From these the ellipse can be obtained as
+\begin{aligned}
+  a^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}+\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  b^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}-\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  \tan 2 \theta &=\frac{2 \sigma_{x y}}{\sigma_{x}^{2}-\sigma_{y}^{2}}
+  \end{aligned}
 
 \subsection{Model selection}
 One can apply model selection criteria in a forecasting phase in order to study an experiment's ability to carry out model selection tests.
