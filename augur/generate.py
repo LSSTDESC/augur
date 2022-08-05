@@ -12,6 +12,10 @@ import copy
 import numpy as np
 import pyccl as ccl
 from scipy.ndimage import gaussian_filter
+import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
+import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
+from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
+from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 
 
 def srd_dndz(z, z0, alpha):
@@ -32,46 +36,27 @@ def generate(config):
 
     verbose = config["verbose"]
     gen_config = config["generate"]
-    gen_config["verbose"] = verbose
-
-    capabilities = [
-        ("two_point", "firecrown.ccl.two_point",
-         two_point_template, two_point_insert)
-    ]
-    process = []
-
-    # we now loop over generate config items and try
-    # to pick out those items that correspond to a firecrown
-    # sections. We find those by requiring that they have a
-    # "module" attribute (e.g.
-    # two_point.module = firecrown.ccl.two_point). But to check
-    # for this robustly, we first check if the thing is really a
-    # dictionary.
-    for dname, ddict in gen_config.items():
-        if isinstance(ddict, dict) and "module" in ddict:
-            for name, moduleid, gen_template, gen_insert in capabilities:
-                if ddict["module"] == moduleid:
-                    if verbose:
-                        print(
-                            "Generating %s template for section %s..." % (name, dname)
-                        )
-                    process.append((dname, name, gen_insert))
-                    gen_config[dname]["verbose"] = verbose
-                    gen_template(gen_config[dname])
-                continue
 
     if verbose:
         print("Stoking the bird for predictions...")
+    # Create CCL cosmology object at the fiducial cosmology
+    cosmo = ccl.Cosmology(**gen_config['fid_cosmo'])
+    sacc_data = sacc.Sacc()
 
-    config, data = firecrown.parse(firecrown_sanitize(gen_config))
-    cosmo = firecrown.get_ccl_cosmology(config["parameters"])
-    firecrown.compute_loglike(cosmo=cosmo, data=data)
-
-    for dname, name, gen_insert in process:
-        if verbose:
-            print("Writing %s data for section %s..." % (name, dname))
-        gen_insert(gen_config[dname], data)
-
+    # Initialize linear alignment systematic
+    lai_systematic = wl.LinearAlignmentSystematic(sacc_tracer="")
+    # Now add the tracers, start with WL:
+    ns_bins = gen_config["sources"]["nbins"] # Add to config?
+    for i in range(ns_bins):
+        mbias = wl.MultiplicativeShearBias(sacc_tracer=f"src{i}")
+        pzshift = wl.PhotoZShift(sacc_tracer=f"src{i}")
+        sources[f"src{i}"] = wl.WeakLensing(sacc_tracer=f"src{i}",
+        systematics=[lai_systematic, mbias, pzshift])
+    nl_bins = gen_config["lenses"]["nbins"]
+    for i in range(nl_bins):
+        pzshift = nc.PhotoZShift(sacc_tracer=f"lens{i}")
+        sources[f"lens{i}"] = nc.NumberCounts(sacc_tracer=f"lens{i}", systematics=[pzshift])
+    
 
 def firecrown_sanitize(config):
     """Sanitizes the input for firecrown, that is removes keys that firecrown
