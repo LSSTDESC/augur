@@ -2,15 +2,14 @@
 \usepackage{lsstdesc_macros}
 \begin{document}
 
-\title{Equations to implement in Augur}
+\title{{\tt Augur}: a forecasting tool for LSST DESC}
 \author{Elisa Chisari, Biancamaria Sersante}
 \date{\today}
 
 \begin{abstract}
-In this document we aim at presenting the equations that we would like to implement in Augur. 
-The first equation allows to estimate cosmological parameter biases in the presence of systematics.
-The second equation has been chosen with the aim of forecasting whether our data will be able to tell different models apart.
-We thus have focused on the less expensive criterion for model selection.
+  This document describes the forecasting formalism underlying the {\tt Augur} code. This is used for determining modelling choices and constraining power of multi-probe combinations of LSST data.
+  Augur has two forecasting modalities: direct likelihood sampling or Fisher forecasting.
+  For the Fisher forecasting scenario, we describe the specific implementation of: expected uncertainties and ellise contours for pairs of parameters; expected biases in presence of unknown systematics; model choice citeria.
 \end{abstract}
 
 \maketitle
