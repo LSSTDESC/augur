@@ -71,7 +71,7 @@ Usage generally follows the firecrown conventions. The input yaml file has three
  
  To run something try:
  ```
- augur examples/srd_y1_3x2.yaml -v
+ augur examples/srd_v1_3x2.yaml -v
  ```
  
  The output will be in
