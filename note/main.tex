@@ -2,22 +2,30 @@
 \usepackage{lsstdesc_macros}
 \begin{document}
 
-\title{Minimal Example}
-\author{A.\ N.\ Author}
+\title{Equations to implement in Augur}
+\author{Elisa Chisari, Biancamaria Sersante}
 \date{\today}
 
 \begin{abstract}
-  Abstraction
+In this document we aim at presenting the equations that we would like to implement in Augur. 
+The first equation allows to estimate cosmological parameter biases in the presence of systematics.
+The second equation has been chosen with the aim of forecasting whether our data will be able to tell different models apart.
+We thus have focused on the less expensive criterion for model selection.
 \end{abstract}
 
 \maketitle
 
 \section{Introduction - The Fisher formalism}
-First, raw data are compressed into maps. For instance, in a galaxy survey, it is a map of the three-dimensional galaxy density field. On the other hand, in a lensing survey, it is a map of galaxy ellipticities (see, for instance, Fig. (\ref{mapgalaxy}));
-then, from maps the observed two-point functions can be estimated;
-next a theoretical model is chosen to be analyzed and the corresponding two-point functions and covariance matrix are calculated;
-finally, combining the above ingredients, and possibly multiple probes, the likelihood can be computed. In order to find the best-fit parameters and corresponding fiducial contours, a sampler is used to compute the likelihood for many sets of parameters. We thus sense that finding the maximum of the likelihood must be achieved numerically. However, this is computationally demanding: if the cosmological model under consideration includes say 20 free parameters, then the required number of likelihood evaluations would be $20^{20}$. Therefore, algorithms have been developed to achieve this: the most used is the Markov Chain Monte Carlo (MCMC). It involves an interative procedure that consists in generating the $i + 1$-th sample based on only on the previous ($i$th) sample.
-Otherwise, as we have seen, the Fisher forecast can be used to approximately forecast the error bars.
+Once raw data have been obtained and compressed into maps, a theoretical model is chosen 
+to be analyzed. In a $3\times 2$-pt analysis the corresponding two-point functions and the covariance matrix are calculated;
+finally, combining the above ingredients, and possibly multiple probes, the likelihood can be computed.
+In order to find the best-fit parameters and corresponding fiducial contours, a sampler is used to compute the likelihood 
+for many sets of parameters. One can sense that finding the maximum of the likelihood must be achieved numerically.
+However, this is computationally demanding: if the cosmological model under consideration includes say 20 free parameters,
+then the required number of likelihood evaluations would be $20^{20}$. Algorithms have been developed to achieve this (e.g., the MCMC).\\
+Otherwise, there is the possibility, in a forecasting phase, when data are not available yet, to employ the Fisher 
+foremalism to approximately predict the expcted error bars. This constitutes a computationally inexpensive way
+to predict the uncertainties that the measurements will carry out.
 
 
 \section{Methods}
@@ -56,5 +64,6 @@ on each parameter (encoded in the ranges $\Delta \theta_{1}$ and $\Delta \theta_
   \langle B\rangle=\frac{\Delta \theta_{1} \Delta \theta_{2}}{2 \pi \sqrt{\operatorname{det} F^{-1}}} \mathrm{e}^{-(1 / 2) \sum_{\alpha \beta}\left(\theta_{\alpha}-\theta_{\alpha}^{*}\right) F_{\alpha \beta}\left(\theta_{\beta}-\theta_{\beta}^{*}\right)}
   \end{equation}
 \section{Validation}
-
+We have written a Python code and prepared some examples of implementation of the above-mentioned equations. This code will allow
+us to benchmark Augur. 
 \end{document}
