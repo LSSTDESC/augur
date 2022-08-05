@@ -1,10 +1,33 @@
+%                                                                                                                                                   
+\RequirePackage{docswitch}
+\setjournal{\flag}
+
+%\documentclass[\docopts]{\docclass}
 \documentclass[modern]{lsstdescnote}
-\usepackage{lsstdesc_macros}
+
+% You could define the document class directly                                                                                                      
+%\documentclass[]{emulateapj}                                                                                                                       
+
+\input{macros}
+
+\usepackage[outdir=./]{epstopdf}
+\usepackage{graphicx,verbatim}
+\usepackage{xspace}
+
+\graphicspath{{./}{./figures/}}
+%\bibliographystyle{apj}
+\newcommand{\todo}[1]{\textcolor{magenta}{To do: #1}}
+\newcommand{\mrm}[1]{\mathrm{#1}}
+
+\newcommand{\augur}{{\tt Augur}\xspace}
+\newcommand{\CC}{C\nolinebreak\hspace{-.05em}\raisebox{.3ex}{\footnotesize +}\nolinebreak\hspace{-.10em}\raisebox{.3ex}{\footnotesize +}}
+
+
 \begin{document}
 
 \title{{\tt Augur}: a forecasting tool for LSST DESC}
-\author{Elisa Chisari, Biancamaria Sersante}
-\date{\today}
+
+\maketitlepre
 
 \begin{abstract}
   This document describes the forecasting formalism underlying the {\tt Augur} code. This is used for determining modelling choices and constraining power of multi-probe combinations of LSST data.
@@ -12,7 +35,12 @@
   For the Fisher forecasting scenario, we describe the specific implementation of: expected uncertainties and ellise contours for pairs of parameters; expected biases in presence of unknown systematics; model choice citeria.
 \end{abstract}
 
-\maketitle
+\maketitlepost
+
+\newpage
+\tableofcontents{}
+\newpage
+
 
 \section{Introduction - The Fisher formalism}
 Once raw data have been obtained and compressed into maps, a theoretical model is chosen 
@@ -65,4 +93,10 @@ on each parameter (encoded in the ranges $\Delta \theta_{1}$ and $\Delta \theta_
 \section{Validation}
 We have written a Python code and prepared some examples of implementation of the above-mentioned equations. This code will allow
 us to benchmark Augur. 
+
+\input{acknowledgments}
+
+\input{contributions}
+
+
 \end{document}
