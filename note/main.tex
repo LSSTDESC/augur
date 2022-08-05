@@ -45,7 +45,7 @@
 \section{Introduction - The Fisher formalism}
 Once raw data have been obtained and compressed into maps, a theoretical model is chosen 
 to be analyzed. In a $3\times 2$-pt analysis the corresponding two-point functions and the covariance matrix are calculated;
-finally, combining the above ingredients, and possibly multiple probes, the likelihood can be computed.
+Finally, combining the above ingredients, and possibly multiple probes, the likelihood can be computed.
 In order to find the best-fit parameters and corresponding fiducial contours, a sampler is used to compute the likelihood 
 for many sets of parameters. One can sense that finding the maximum of the likelihood must be achieved numerically.
 However, this is computationally demanding: if the cosmological model under consideration includes say 20 free parameters,
@@ -54,6 +54,32 @@ Otherwise, there is the possibility, in a forecasting phase, when data are not a
 foremalism to approximately predict the expcted error bars. This constitutes a computationally inexpensive way
 to predict the uncertainties that the measurements will carry out.
 
+\section{How to obtain errors and contours from Fisher matrices}
+It is possible to obtain the errors from the Fisher matrices by considering that, under certain conditions,
+the Fisher matrix is the inverse of the covariance matrix.
+For instance, in the simple case of a one-parameter space, the $1\sigma$ uncertainty on $\theta$ (square root of the covariance) is $1/\sqrt{F}$, while in a two-parameter space we have 
+\begin{equation}
+[F]^{-1}=[C]=\left[\begin{array}{cc}
+\sigma_{x}^{2} & \sigma_{x y} \\
+\sigma_{x y} & \sigma_{y}^{2}
+\end{array}\right].
+\end{equation}
+
+In particular, we can distinguish two cases.
+On one hand, if we assume to have perfect knowledge of the parameter $\theta_2$, then the error on $\theta_1$ is given by $1/\sqrt{F_{11}}$. 
+On the other hand, if $\theta_2$ can vary freely, then the proper error on $\theta_1$ can be obtained only after
+marginalizing over all possible values of $\theta_2$.
+Then the resulting error on $\theta_1$ will be given by $\sqrt{\left(F^{-1}\right)_{11}}$ (according to the above equation). 
+
+
+Moreover, it is possible to obtain fiducial ellipses by considering
+that the ellipse parameters are related to the Fisher matrix elements by the following relations
+\begin{aligned}
+  a^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}+\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  b^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}-\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  \tan 2 \theta &=\frac{2 \sigma_{x y}}{\sigma_{x}^{2}-\sigma_{y}^{2}},
+  \end{aligned}
+where $a$ and $b$ are the axis lengths and $\theta$ the inclination angle.
 
 \section{Methods}
 \subsection{Fisher Bias}
@@ -73,16 +99,23 @@ We notice that the Fisher matrix is evaluated at the fiducial values of the cosm
   &=\left(\boldsymbol{F}^{-1}\right)_{i j}\sum_{\ell}\left[\boldsymbol{D}^{\mathrm{true}}-\boldsymbol{D}^{\mathrm{model}}(\boldsymbol{\theta})\right](\boldsymbol{\ell})\boldsymbol{C_A}^{-1}(\boldsymbol{\ell})\left(\dfrac{d\boldsymbol{D}^{\mathrm{model}}}{d\theta_j}(\boldsymbol{\ell})\right).
   \end{split}
   \end{align}
+  Thus we notice that $\left[F_{11} F_{22}-F_{12} F_{21}\right] / F_{22}=1 /\left(F^{-1}\right)_{11}$. So the $1\sigma$ error is given by $\sqrt{\left(F^{-1}\right)_{11}}$.\\
+From these the ellipse can be obtained as
+\begin{aligned}
+  a^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}+\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  b^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}-\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  \tan 2 \theta &=\frac{2 \sigma_{x y}}{\sigma_{x}^{2}-\sigma_{y}^{2}}
+  \end{aligned}
 
 \subsection{Model selection}
 One can apply model selection criteria in a forecasting phase in order to study an experiment's ability to carry out model selection tests.
-For instance, if we consider the an experiment aimed at obtaining information on dark energy, we could use model selection techniques to predict whether or not,
+For instance, if we consider an experiment aimed at obtaining information on dark energy, we could use model selection techniques to predict whether or not,
 with our experiment, we will be able to distinguish, say, the $w$CDM from the $\Lambda$CDM model.
 The natural question that now arises regards the possible criteria to select models. Although there are quite a few, they are all expressed in terms of the likelihood,
 which is computationally demanding. Thus, we focus on the Bayes factor as it is possible to express it in terms of the Fisher matrix only. We would like to implement
 such expression in Augur as it is computationally inexpensive and can provide interesting information.\\
-The Bayes factor is defined as the ratio of the evidences (marginzalized likelihoods) of the two model under consideration.
-In this way, although a complicated model will lead to a higher likelihood (or at least as high) with respect to simpler-nested model, the evidence will favour
+The Bayes factor is defined as the ratio of the evidences (marginzalized likelihoods) of the two models under consideration.
+In this way, although a complicated model will lead to a higher likelihood (or at least as high) with respect to a simpler/nested model, the evidence will favour
 the simpler model (provided that the fit is nearly as good), thanks to the smaller prior volume. 
 Then, computing the ratio between the evidences of two models will automatically disfavor complex models involving many parameters.\\
 With this in mind, we now present the equation to compute the Bayes factor in a 2-dimensional parameter space (for nested models). It is expressed in terms of the Fisher matrix $F$ and the prior knowledge
