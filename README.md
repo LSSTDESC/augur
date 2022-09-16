@@ -45,13 +45,18 @@ Install a repo version of firecrown:
 ```
 git clone git@github.com:LSSTDESC/firecrown.git
 cd firecrown
-pip install --no-deps -e .
 ```
 
+The current version of `augur` relies on firecrown v0.5 or lower so in the same directory you can do:
+
+```
+git checkout tags/v0.5
+pip install . -e
+```
 
 Now run a `pytest` to see if things work.
 
-Next repeat the same with `augur` but checkout the `dev` branch:
+Next repeat the same with `augur`:
 
 ```
 git clone git@github.com:LSSTDESC/augur.git
