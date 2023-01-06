@@ -192,7 +192,7 @@ class WLSource(object):
     Weak lensing source tracer
     """
     def __init__(self, sacc_tracer, ellipticity_error, number_density,
-                 zdist):
+                 zdist, mult_bias=0, ia_bias=0, **ia_kwargs):
         """
         Parameters:
         -----------
@@ -205,3 +205,19 @@ class WLSource(object):
         zdist : ZDist
             Redshift distribution
         """
+        self.sacc_tracer = sacc_tracer
+        self.ellipticity_error = ellipticity_error
+        self.number_density = number_density
+        self.zdist = zdist
+        self.mult_bias = mult_bias
+        self.ia_bias = ia_bias
+        self.ia_kwargs = ia_kwargs
+
+    def to_dict(self):
+        """
+        Write WLSource object to a dictionary that can be added
+        to a sacc file.
+        """
+        dict_out = self.__dict__
+        dict_out['kind'] = 'WLSource'
+        return dict_out
