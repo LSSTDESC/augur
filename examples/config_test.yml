@@ -1,0 +1,60 @@
+cosmo:
+    Omega_c : 0.27
+    Omega_b : 0.044
+    h : 0.67
+    n_s : 0.96
+    sigma8 : 0.8
+  
+sources:  # Sources
+    nbins : 5
+    ndens : 18  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
+    ellipticity_error : 0.26
+    Nz_type : 'SourceSRD2018'  # For now, this is the assumed N(z) for sources -- check SRD 2018
+    Nz_kwargs :  # keyword arguments for SourceSRD2018 class -- can allow easy generalizations for the future
+        Nz_alpha : 0.78
+        Nz_z0 : 0.13
+        Nz_sigmaz : 0.05
+    mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
+    delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
+    ia_class: 'wl.LinearAlignmentSystematic'
+    ia_bias : 0  # ia-bias
+    ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
+
+lenses :  # Lenses
+    nbins : 5
+    ndens : 18  # in arcmin^-2, same convention as for sources
+    Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
+    delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
+    Nz_kwargs :  # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
+        Nz_width : 0.2  # Photo-z bin-width
+        Nz_center : np.arange(1, 6)*0.2 + 0.1  # Photo-z bin centers (it can be a list of values or some np array)
+        Nz_sigmaz : 0.05  # Sigma of photo-z Gaussian smearing
+        Nz_alpha : 0.94  # N(z) alpha parameter
+        Nz_z0 : 0.26  # N(z) z-pivot
+    bias_type : 'inverse_growth'  # Inverse growth bias or custom
+    bias_kwargs : 
+        b0 : 1.0
+    # Another option is to use the `custom` bias type, but it requires a value per bin
+    # bias_type : 'custom'
+    # bias_kwargs :
+    #    b : [1., 1.1, 1.2, 1.3, 1.4]  # This is just an example
+    
+statistics:
+    galaxy_density_cl :  # The statistics are supposed to be SACC statistics
+        tracer_combs : [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]  # These need to be lists for now
+        ell_edges : np.geomspace(20, 15000, 21)[:15]  # bandpower edges
+        kmax : 0.5  # scale cut (in Mpc^-1)
+    galaxy_shear_cl_ee : 
+        tracer_combs :  [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], 
+                  [1, 1], [1, 2], [1, 3], [1, 4],
+                  [2, 2], [2, 3], [2, 4],
+                  [3, 3], [3, 4],
+                  [4, 4]]
+        ell_edges : np.geomspace(20, 15000, 21)[:15]
+        kmax : None
+    galaxy_shearDensity_cl_e : 
+        tracer_combs : [[0, 2], [0, 3], [0, 4], [1, 3], [1, 4], [2, 4], [3, 4]]
+        ell_edges : np.geomspace(20, 15000, 21)[:15]
+        kmax : 0.5
+
+fiducial_sacc_path: /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
