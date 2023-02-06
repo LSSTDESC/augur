@@ -15,6 +15,8 @@ import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
 from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 
+implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
+
 
 def _get_tracers(statistic, comb):
     """
@@ -125,11 +127,17 @@ def generate_sacc_and_stats(config):
         for i in range(nbins):
             sacc_tracer = f'{src_root}{i}'
             if isinstance(src_cfg['Nz_type'], list):
-                dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins, Nz_ibin=i,
-                                                                **src_cfg['Nz_kwargs'])
+                if eval(src_cfg['Nz_type'][i]) in implemented_nzs:
+                    dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins, Nz_ibin=i,
+                                                                    **src_cfg['Nz_kwargs'])
+                else:
+                    raise NotImplementedError('The selected N(z) is yet not implemented')
             else:
-                dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins, Nz_ibin=i,
-                                                             **src_cfg['Nz_kwargs'])
+                if eval(src_cfg['Nz_type']) in implemented_nzs:
+                    dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins, Nz_ibin=i,
+                                                                 **src_cfg['Nz_kwargs'])
+                else:
+                    raise NotImplementedError('The selected N(z) is yet not implemented')
             S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
             # Set up the WeakLensing objects for firecrown
             mbias = wl.MultiplicativeShearBias(sacc_tracer=sacc_tracer)
@@ -167,13 +175,19 @@ def generate_sacc_and_stats(config):
         for i in range(nbins):
             sacc_tracer = f'{lns_root}{i}'
             if isinstance(lns_cfg['Nz_type'], list):
-                dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z, Nz_center=Nz_centers[i],
-                                                                Nz_nbins=nbins,
-                                                                **lns_cfg['Nz_kwargs'])
+                if eval(lns_cfg['Nz_type'][i]) in implemented_nzs:
+                    dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z, Nz_center=Nz_centers[i],
+                                                                    Nz_nbins=nbins,
+                                                                    **lns_cfg['Nz_kwargs'])
+                else:
+                    raise NotImplementedError('The selected N(z) is yet not implemented')
             else:
-                dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z, Nz_center=Nz_centers[i],
-                                                             Nz_nbins=nbins,
-                                                             **lns_cfg['Nz_kwargs'])
+                if eval(lns_cfg['Nz_type']) in implemented_nzs:
+                    dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z, Nz_center=Nz_centers[i],
+                                                                 Nz_nbins=nbins,
+                                                                 **lns_cfg['Nz_kwargs'])
+                else:
+                    raise NotImplementedError('The selected N(z) is yet not implemented')
             S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
             # Set up the NumberCounts objects for firecrown
             # Start by retrieving the bias
