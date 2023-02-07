@@ -10,6 +10,7 @@ import numpy as np
 import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
+from augur.utils.cov_utils import get_gaus_cov
 import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
 import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
@@ -265,14 +266,22 @@ def generate(config, return_outputs=False, write_sacc=True):
     lk.read(S)
     # Run the likelihood (to get the theory)
     lk.compute_loglike(cosmo)
-    # Empty the placeholder Sacc's covariance
+    # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
     S.covariance = None
+    S.data = []
     # Fill out the data-vector with the theory predictions for the fiducial
     # cosmology/parameters
     for st in lk.statistics:
-        print(st.sacc_data_type, st.ell_or_theta_, st.predicted_statistic_)
         S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
                      st.ell_or_theta_, st.predicted_statistic_)
+    if config['cov_options']['cov_type'] == 'gaus_internal':
+        fsky = config['cov_options']['fsky']
+        cov = get_gaus_cov(S, lk, cosmo, fsky)
+        S.add_covariance(cov)
+    else:
+        raise Warning('''Currently only internal Gaussian covariance has been implemented,
+                         cov_type is not understood. Using identity matrix as covariance.''')
+    # lk.read(S)  # Update likelihood with new covariance
     if write_sacc:
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)

@@ -1,5 +1,5 @@
 import numpy as np
-
+import pyccl as ccl
 
 def get_noise_power(config, src):
     """ Returns noise power for tracer
@@ -36,48 +36,54 @@ def get_noise_power(config, src):
         raise NotImplementedError
     return noise_power
 
-
-def gauss_cov(config, sacc_data, preds, add_noise=False):
+def get_gaus_cov(S, lk, cosmo, fsky):
     """
+    Basic implementation of Gaussian covariance using the mode-counting formula
+    and fsky approximation.
+    
     Parameters:
     -----------
-    config : dict
-        Input configuration
-    sacc_data: Sacc
-        Input sacc data
+    S : Sacc object. Sacc object containing where the matrix will be stored
+    lk : firecrown likelihood object containing the statistics for which we want to compute
+        the covariance matrix.
+    cosmo : ccl.Cosmology object. Fiducial cosmology in which to evaluate the covariance matrix.
+    fsky : float. Fraction of the sky observed.
+
+    Returns:
+    --------
+    S : Sacc object with the covariance updated
     """
-    covar = np.zeros(len(sacc_data.data))
-    for name, scfg in config["statistics"].items():
-        # now add errors -- this is a quick hack
-        if "xi" in scfg["sacc_data_type"]:
-            print("Sorry, cannot yet do errors for correlation function")
-            raise NotImplementedError
-        else:
-            ell_edges = np.array(scfg["ell_edges"])
-            # note: sum(2l+1,lmin..lmax) = (lmax+1)^2-lmin^2
-            # Nmodes = config["fsky"] * ((ell_edges[1:] + 1) ** 2
-            #                           - (ell_edges[:-1]) ** 2)
-            ells = 0.5*(ell_edges[1:]+ell_edges[:-1])
-            delta_ell = np.gradient(ells)
-            norm = config["fsky"]*(2*ells+1)*delta_ell
-            # noise power
-            # now find the two sources and their noise powers
-            # the auto powers -- this should work equally well for auto and
-            # cross
-            auto1, auto2 = [
-                preds[(src, src)][0] + get_noise_power(config, src)
-                for src in scfg["sources"]
-            ]
-            for src in scfg["sources"]:
-                print(src, get_noise_power(config, src))
-            max_len = np.min([len(auto1), len(auto2)])
-            cross, ndx = preds[tuple(scfg["sources"])]
-            max_len = np.min([max_len, len(cross)])
-            var = (auto1[:max_len] * auto2[:max_len] +
-                   cross[:max_len] * cross[:max_len]) / norm[:max_len]
-            covar[ndx] = var
-            for n, err in zip(ndx, np.sqrt(var)):
-                sacc_data.data[n].error = np.sqrt(err)
-                if add_noise:
-                    sacc_data.data[n].value += np.random.normal(0, err)
-    return covar, sacc_data
+    # Initialize big matrix
+    cov_all = np.zeros((len(S.data), len(S.data)))
+    # Loop over statistic in the likelihood (assuming 3x2pt so far)
+    for i, myst1 in enumerate(lk.statistics):
+        tr1 = myst1.source0.tracer  # Pulling out the tracers
+        tr2 = myst1.source1.tracer
+        ell12 = myst1._ell_or_theta
+        # Loop over upper-triangle and fill lower-triangle by symmetry
+        for j in range(i, len(lk.statistics)):
+            myst2 = lk.statistics[j]
+            tr3 = myst2.source0.tracer
+            tr4 = myst2.source1.tracer
+            ell34 = myst2._ell_or_theta
+            # Assuming that everything has the same ell-edges and we are just changing the length
+            # TODO update this for a more general case
+            if len(ell34) < len(ell12):
+                ells_here = ell34.astype(np.int16)
+            else:
+                ells_here = ell12.astype(np.int16)
+            # Get the necessary Cls 
+            cls13 = ccl.angular_cl(cosmo, tr1, tr3, ells_here)
+            cls24 = ccl.angular_cl(cosmo, tr2, tr4, ells_here)
+            cls14 = ccl.angular_cl(cosmo, tr1, tr4, ells_here)
+            cls23 = ccl.angular_cl(cosmo, tr2, tr3, ells_here)
+            # Normalization factor
+            norm = np.gradient(ells_here)*(2*ells_here+1)*fsky
+            cov_here = cls13*cls24 + cls14*cls23
+            cov_here /= norm
+            # The following lines only work if the ell-edges are constant across the probes, and we just vary the length
+            n_ells = min(len(ell12), len(ell34))
+            # Use the sacc indices to write the matrix in the correct order
+            cov_all[myst1.sacc_inds[:n_ells], myst2.sacc_inds[:n_ells]] = cov_here[:n_ells]
+            cov_all[myst2.sacc_inds[:n_ells], myst1.sacc_inds[:n_ells]] = cov_here[:n_ells]
+    return cov_all

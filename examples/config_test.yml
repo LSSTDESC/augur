@@ -57,4 +57,7 @@ statistics:
         ell_edges : np.geomspace(20, 15000, 21)[:15]
         kmax : 0.5
 
-fiducial_sacc_path: /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
+fiducial_sacc_path : /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
+cov_options:
+    cov_type : 'gaus_internal'
+    fsky : 0.3
