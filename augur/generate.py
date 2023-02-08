@@ -276,7 +276,7 @@ def generate(config, return_outputs=False, write_sacc=True):
                      st.ell_or_theta_, st.predicted_statistic_)
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
-        cov = get_gaus_cov(S, lk, cosmo, fsky)
+        cov = get_gaus_cov(S, lk, cosmo, fsky, config)
         S.add_covariance(cov)
     else:
         raise Warning('''Currently only internal Gaussian covariance has been implemented,

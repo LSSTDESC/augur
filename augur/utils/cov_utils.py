@@ -1,7 +1,7 @@
 import numpy as np
 import pyccl as ccl
 
-def get_noise_power(config, S, tr):
+def get_noise_power(config, S, tracer_name):
     """ Returns noise power for tracer
 
     Parameters:
@@ -12,7 +12,7 @@ def get_noise_power(config, S, tr):
     S : Sacc
         Sacc file containing all tracers
 
-    tr : str
+    tracer_name : str
         Tracer ID
 
     Returns:
@@ -26,20 +26,33 @@ def get_noise_power(config, S, tr):
     The input number_densities are #/arcmin.
     The output units are in steradian.
     """
-
-    d = config["sources"]
-    nbar = d["ndens"] * (180 * 60 / np.pi) ** 2  # per steradian
-    kind = d["kind"]
-    if kind == "WLSource":
-        noise_power = d["ellipticity_error"] ** 2 / nbar
-    elif kind == "NumberCountsSource":
+    nz_all = dict()
+    nz_all['src'] = []
+    nz_all['lens'] = []
+    for tr in S.tracers:
+        trobj = S.get_tracer(tracer_name)
+        nz_all[tr[:-1]].append(trobj.nz)  # This assumes 10 or less bins
+    nz_all['src'] = np.array(nz_all['src'])
+    nz_all['lens'] = np.array(nz_all['lens'])
+    norm = dict()
+    norm['src'] = np.sum(nz_all['src'], axis=1)/np.sum(nz_all['src'])
+    norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
+    if 'src' in tracer_name: 
+        ndens = config['sources']['ndens'] 
+    elif 'lens' in tracer_name:
+        ndens = config['lenses']['ndens']
+    nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
+    nbar *= norm['src'][int(tracer_name[-1])]
+    if 'src' in tracer_name:
+        noise_power = config['sources']['ellipticity_error'] ** 2 / nbar
+    elif 'lens' in tracer_name:
         noise_power = 1 / nbar
     else:
-        print("Cannot do error for source of kind %s." % (kind))
+        print("Cannot do error for source of kind %s." % (tracer_name[:-1]))
         raise NotImplementedError
     return noise_power
 
-def get_gaus_cov(S, lk, cosmo, fsky):
+def get_gaus_cov(S, lk, cosmo, fsky, config):
     """
     Basic implementation of Gaussian covariance using the mode-counting formula
     and fsky approximation.
@@ -55,6 +68,8 @@ def get_gaus_cov(S, lk, cosmo, fsky):
         Fiducial cosmology in which to evaluate the covariance matrix.
     fsky : float 
         Fraction of the sky observed.
+    config : dict
+        Configuration dictionary
 
     Returns:
     --------
@@ -89,6 +104,8 @@ def get_gaus_cov(S, lk, cosmo, fsky):
             norm = np.gradient(ells_here)*(2*ells_here+1)*fsky
             cov_here = cls13*cls24 + cls14*cls23
             cov_here /= norm
+            if (i == j) & (myst1.source0.sacc_tracer == myst1.source1.sacc_tracer):
+               cov_here += get_noise_power(config, S, myst1.source0.sacc_tracer)
             # The following lines only work if the ell-edges are constant across the probes, and we just vary the length
             n_ells = min(len(ell12), len(ell34))
             # Use the sacc indices to write the matrix in the correct order
