@@ -1,7 +1,7 @@
 import numpy as np
 import pyccl as ccl
 
-def get_noise_power(config, src):
+def get_noise_power(config, S, tr):
     """ Returns noise power for tracer
 
     Parameters:
@@ -9,7 +9,10 @@ def get_noise_power(config, src):
     config : dict
         The dictinary containt the relevant two_point section of the config
 
-    src : str
+    S : Sacc
+        Sacc file containing all tracers
+
+    tr : str
         Tracer ID
 
     Returns:
@@ -24,8 +27,8 @@ def get_noise_power(config, src):
     The output units are in steradian.
     """
 
-    d = config["sources"][src]
-    nbar = d["number_density"] * (180 * 60 / np.pi) ** 2  # per steradian
+    d = config["sources"]
+    nbar = d["ndens"] * (180 * 60 / np.pi) ** 2  # per steradian
     kind = d["kind"]
     if kind == "WLSource":
         noise_power = d["ellipticity_error"] ** 2 / nbar
@@ -43,15 +46,20 @@ def get_gaus_cov(S, lk, cosmo, fsky):
     
     Parameters:
     -----------
-    S : Sacc object. Sacc object containing where the matrix will be stored
-    lk : firecrown likelihood object containing the statistics for which we want to compute
+    S : Sacc
+        Sacc object containing where the matrix will be stored
+    lk : firecrown.likelihood 
+        Likelihood object containing the statistics for which we want to compute
         the covariance matrix.
-    cosmo : ccl.Cosmology object. Fiducial cosmology in which to evaluate the covariance matrix.
-    fsky : float. Fraction of the sky observed.
+    cosmo : ccl.Cosmology object
+        Fiducial cosmology in which to evaluate the covariance matrix.
+    fsky : float 
+        Fraction of the sky observed.
 
     Returns:
     --------
-    S : Sacc object with the covariance updated
+    S : Sacc
+        Sacc object with the covariance updated
     """
     # Initialize big matrix
     cov_all = np.zeros((len(S.data), len(S.data)))

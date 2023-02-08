@@ -95,7 +95,7 @@ def generate_sacc_and_stats(config):
     src_cfg = config['sources']
     sources = {}
     dndz = {}
-    z = np.linspace(0, 4)  # z to probe the dndz distribution
+    z = np.linspace(0, 4, 400)  # z to probe the dndz distribution
 
     # Set up intrinsic alignment systematics
     if 'ia_class' in src_cfg.keys():
@@ -281,9 +281,12 @@ def generate(config, return_outputs=False, write_sacc=True):
     else:
         raise Warning('''Currently only internal Gaussian covariance has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
-    # lk.read(S)  # Update likelihood with new covariance
     if write_sacc:
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
+    # Update covariance and inverse -- TODO need to update cholesky!!
+    # lk.read(S)  # This would update everything but Cholesky is failing
+    lk.cov = S.covariance.covmat
+    lk.inv_cov = np.linalg.inv(lk.cov)
     if return_outputs:
         return lk, S
