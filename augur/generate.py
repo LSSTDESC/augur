@@ -15,6 +15,7 @@ import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
 import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
 from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
+from firecrown.modeling_tools import ModelingTools
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
 
@@ -264,8 +265,20 @@ def generate(config, return_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
+    # The newest version of firecrown requires a modeling tool rather than a cosmology
+    pt_calculator = ccl.nl_pt.PTCalculator(
+        with_NC=False,
+        with_IA=True,
+        with_dd=True,
+        log10k_min=-4,  # Leaving defaults for now
+        log10k_max=2,
+        nk_per_decade=20,
+    )
+    cosmo.compute_nonlin_power()
+    tools = ModelingTools(pt_calculator=pt_calculator)
+    tools.prepare(cosmo)
     # Run the likelihood (to get the theory)
-    lk.compute_loglike(cosmo)
+    lk.compute_loglike(tools)
     # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
     S.covariance = None
     S.data = []

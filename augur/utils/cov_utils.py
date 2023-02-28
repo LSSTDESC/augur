@@ -80,14 +80,14 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     cov_all = np.zeros((len(S.data), len(S.data)))
     # Loop over statistic in the likelihood (assuming 3x2pt so far)
     for i, myst1 in enumerate(lk.statistics):
-        tr1 = myst1.source0.tracer  # Pulling out the tracers
-        tr2 = myst1.source1.tracer
+        tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
+        tr2 = myst1.source1.tracers[0].ccl_tracer
         ell12 = myst1._ell_or_theta
         # Loop over upper-triangle and fill lower-triangle by symmetry
         for j in range(i, len(lk.statistics)):
             myst2 = lk.statistics[j]
-            tr3 = myst2.source0.tracer
-            tr4 = myst2.source1.tracer
+            tr3 = myst2.source0.tracers[0].ccl_tracer
+            tr4 = myst2.source1.tracers[0].ccl_tracer
             ell34 = myst2._ell_or_theta
             # Assuming that everything has the same ell-edges and we are just changing the length
             # TODO update this for a more general case
@@ -109,6 +109,6 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             # The following lines only work if the ell-edges are constant across the probes, and we just vary the length
             n_ells = min(len(ell12), len(ell34))
             # Use the sacc indices to write the matrix in the correct order
-            cov_all[myst1.sacc_inds[:n_ells], myst2.sacc_inds[:n_ells]] = cov_here[:n_ells]
-            cov_all[myst2.sacc_inds[:n_ells], myst1.sacc_inds[:n_ells]] = cov_here[:n_ells]
+            cov_all[myst1.sacc_indices[:n_ells], myst2.sacc_indices[:n_ells]] = cov_here[:n_ells]
+            cov_all[myst2.sacc_indices[:n_ells], myst1.sacc_indices[:n_ells]] = cov_here[:n_ells]
     return cov_all
