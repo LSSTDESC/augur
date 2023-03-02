@@ -298,8 +298,6 @@ def generate(config, return_outputs=False, write_sacc=True):
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
-    # lk.read(S)  # This would update everything but Cholesky is failing
-    lk.cov = S.covariance.covmat
-    lk.inv_cov = np.linalg.inv(lk.cov)
+    lk.read(S)
     if return_outputs:
         return lk, S

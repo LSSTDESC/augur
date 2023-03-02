@@ -1,6 +1,7 @@
 import numpy as np
 import pyccl as ccl
 
+
 def get_noise_power(config, S, tracer_name):
     """ Returns noise power for tracer
 
@@ -37,8 +38,9 @@ def get_noise_power(config, S, tracer_name):
     norm = dict()
     norm['src'] = np.sum(nz_all['src'], axis=1)/np.sum(nz_all['src'])
     norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
-    if 'src' in tracer_name: 
-        ndens = config['sources']['ndens'] 
+
+    if 'src' in tracer_name:
+        ndens = config['sources']['ndens']
     elif 'lens' in tracer_name:
         ndens = config['lenses']['ndens']
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
@@ -52,21 +54,22 @@ def get_noise_power(config, S, tracer_name):
         raise NotImplementedError
     return noise_power
 
+
 def get_gaus_cov(S, lk, cosmo, fsky, config):
     """
     Basic implementation of Gaussian covariance using the mode-counting formula
     and fsky approximation.
-    
+
     Parameters:
     -----------
     S : Sacc
         Sacc object containing where the matrix will be stored
-    lk : firecrown.likelihood 
+    lk : firecrown.likelihood
         Likelihood object containing the statistics for which we want to compute
         the covariance matrix.
     cosmo : ccl.Cosmology object
         Fiducial cosmology in which to evaluate the covariance matrix.
-    fsky : float 
+    fsky : float
         Fraction of the sky observed.
     config : dict
         Configuration dictionary
@@ -95,7 +98,7 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
                 ells_here = ell34.astype(np.int16)
             else:
                 ells_here = ell12.astype(np.int16)
-            # Get the necessary Cls 
+            # Get the necessary Cls
             cls13 = ccl.angular_cl(cosmo, tr1, tr3, ells_here)
             cls24 = ccl.angular_cl(cosmo, tr2, tr4, ells_here)
             cls14 = ccl.angular_cl(cosmo, tr1, tr4, ells_here)
@@ -105,8 +108,9 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             cov_here = cls13*cls24 + cls14*cls23
             cov_here /= norm
             if (i == j) & (myst1.source0.sacc_tracer == myst1.source1.sacc_tracer):
-               cov_here += get_noise_power(config, S, myst1.source0.sacc_tracer)
-            # The following lines only work if the ell-edges are constant across the probes, and we just vary the length
+                cov_here += get_noise_power(config, S, myst1.source0.sacc_tracer)
+            # The following lines only work if the ell-edges are constant across the probes
+            # and we just vary the length
             n_ells = min(len(ell12), len(ell34))
             # Use the sacc indices to write the matrix in the correct order
             cov_all[myst1.sacc_indices[:n_ells], myst2.sacc_indices[:n_ells]] = cov_here[:n_ells]
