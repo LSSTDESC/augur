@@ -16,6 +16,8 @@ import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
 from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 from firecrown.modeling_tools import ModelingTools
+from firecrown.parameters import ParamsMap
+from augur.utils.config_io import parse_config
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
 
@@ -37,21 +39,6 @@ def _get_tracers(statistic, comb):
     else:
         return NotImplementedError('Only C_ls available')
     return tr1, tr2
-
-
-def _parse_config(config):
-    """
-    Parse configuration file
-    """
-    if isinstance(config, str):
-        import yaml
-        with open(config) as f:
-            config = yaml.safe_load(f)
-    elif isinstance(config, dict):
-        pass
-    else:
-        raise ValueError('config must be a dictionary or path to a config file')
-    return config
 
 
 def generate_sacc_and_stats(config):
@@ -79,7 +66,7 @@ def generate_sacc_and_stats(config):
          List of TwoPoint statistics that will enter the likelihood
     """
 
-    config = _parse_config(config)
+    config = parse_config(config)
     cosmo_cfg = config['cosmo']
     # Set up ccl.Cosmology object
     cosmo = ccl.Cosmology(Omega_b=cosmo_cfg['Omega_b'],
@@ -96,8 +83,9 @@ def generate_sacc_and_stats(config):
     src_cfg = config['sources']
     sources = {}
     dndz = {}
-    z = np.linspace(0, 4, 400)  # z to probe the dndz distribution
-
+    z = np.linspace(0.004004004004004004, 
+                    4.004004004004004004, 1000)  # z to probe the dndz distribution
+    sys_params = {}
     # Set up intrinsic alignment systematics
     if 'ia_class' in src_cfg.keys():
         ia_sys = eval(src_cfg['ia_class'])(sacc_tracer="")
@@ -151,6 +139,8 @@ def generate_sacc_and_stats(config):
                 sys_list.append(ia_sys)
             sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer,
                                                   systematics=sys_list)
+            sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
+            sys_params[f'{sacc_tracer}_mult_bias'] = mult_bias[i]
 
     # Read lenses from config file
     if 'lenses' in config.keys():
@@ -208,6 +198,8 @@ def generate_sacc_and_stats(config):
             sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, systematics=[pzshift],
                                                    derived_scale=True)
             sources[sacc_tracer].bias = bias
+            sys_params[f'{sacc_tracer}_bias'] = bias
+            sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
 
     # Read data vector combinations
     if 'statistics' not in config.keys():
@@ -218,7 +210,7 @@ def generate_sacc_and_stats(config):
         tracer_combs = stat_cfg[key]['tracer_combs']
         kmax = stat_cfg[key]['kmax']
         ell_edges = eval(stat_cfg[key]['ell_edges'])
-        ells = 0.5*(ell_edges[:-1] + ell_edges[1:])
+        ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
         for comb in tracer_combs:
             tr1, tr2 = _get_tracers(key, comb)
             if (kmax is not None) and (kmax != 'None'):
@@ -227,6 +219,8 @@ def generate_sacc_and_stats(config):
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
                 ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
                 ells_here = ells[ells < ell_max]
+            else:
+                ells_here = ells
             for ell in ells_here:
                 S.add_data_point(key, (tr1, tr2), 0.0, ell=ell, error=1e30)
             # Now create TwoPoint objects for firecrown
@@ -234,7 +228,8 @@ def generate_sacc_and_stats(config):
                                  sacc_data_type=key)
             stats.append(_aux_stat)
     S.add_covariance(np.ones_like(S.data))
-    return S, cosmo, stats
+    sys_params = ParamsMap(sys_params)
+    return S, cosmo, stats, sys_params
 
 
 def generate(config, return_outputs=False, write_sacc=True):
@@ -254,13 +249,16 @@ def generate(config, return_outputs=False, write_sacc=True):
 
     Returns:
     --------
+    lk : firecrown.likelihood
+         Likelihood object containing as data vector the prediction at the fiducial parameters.
     S : sacc.Sacc
-         Placeholder sacc file
-    cosmo : ccl.cosmology
+         Placeholder sacc file with fiducial data vector and covariance.
+    tools : firecrown.ModelingTools
+         Modeling tools object used to generate fiducial data vector.
     """
-    config = _parse_config(config)
+    config = parse_config(config)
     # Generate placeholders
-    S, cosmo, stats = generate_sacc_and_stats(config)
+    S, cosmo, stats, sys_params = generate_sacc_and_stats(config)
     # Generate likelihood object
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
@@ -276,6 +274,7 @@ def generate(config, return_outputs=False, write_sacc=True):
     )
     cosmo.compute_nonlin_power()
     tools = ModelingTools(pt_calculator=pt_calculator)
+    lk.update(sys_params)
     tools.prepare(cosmo)
     # Run the likelihood (to get the theory)
     lk.compute_loglike(tools)
@@ -300,4 +299,4 @@ def generate(config, return_outputs=False, write_sacc=True):
     # Update covariance and inverse -- TODO need to update cholesky!!
     lk.read(S)
     if return_outputs:
-        return lk, S
+        return lk, S, tools

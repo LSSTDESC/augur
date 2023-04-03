@@ -6,11 +6,26 @@ At the moment it is a thin-wrapper to cosmosis.
 
 """
 
-import firecrown
-import pathlib
+import numpy as np
+import numdifftools
 
 
-def analyze(config):
+def analyze(likelihood, tools, config):
+    """
+    Run numerical derivatives of a likelihood to obtain a Fisher matrix estimate.
+
+    Parameters:
+    -----------
+    likelihood: firecrown.likelihood
+        Input likelihood object that will be used to compute the derivatives.
+    tools: firecrown.modeling_tools.ModelingTools
+        Modeling tools needed to reevaluate the likelihood.
+    
+    Returns:
+    --------
+    fisher: np.ndarray
+       Output Fisher matrix
+    """
     return 0
 # def analyze(config):
 #     """ Analyzes the data, i.e. a thin wrapper to firecrown

@@ -108,7 +108,7 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             cov_here = cls13*cls24 + cls14*cls23
             cov_here /= norm
             if (i == j) & (myst1.source0.sacc_tracer == myst1.source1.sacc_tracer):
-                cov_here += get_noise_power(config, S, myst1.source0.sacc_tracer)
+                cov_here += get_noise_power(config, S, myst1.source0.sacc_tracer)**2
             # The following lines only work if the ell-edges are constant across the probes
             # and we just vary the length
             n_ells = min(len(ell12), len(ell34))

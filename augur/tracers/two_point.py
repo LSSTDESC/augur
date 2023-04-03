@@ -134,11 +134,11 @@ class SourceSRD2018(ZDist):
         nz_sum /= np.sum(srd_dndz(self.z, Nz_z0, Nz_alpha))
         zlow = self.z[np.argmin(np.fabs(nz_sum - tile_low))]
         zhi = self.z[np.argmin(np.fabs(nz_sum - tile_hi))]
-        mask = (self.z > zlow) & (self.z < zhi)
+        mask = (self.z >= zlow) & (self.z <= zhi)
         dndz_bin = np.zeros_like(self.z)
         dndz_bin[mask] = srd_dndz(self.z[mask], Nz_z0, Nz_alpha)
         if use_filter:
-            zcent = 0.5 * (zlow + zhi)
+            zcent = 0.2 * Nz_ibin + 0.25  # Start at z=0.2 -- Caution!! this is hacky
             dz = self.z[1] - self.z[0]
             self.Nz = gaussian_filter(dndz_bin, Nz_sigmaz*(1+zcent)/dz)
         else:
