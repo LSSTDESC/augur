@@ -72,7 +72,7 @@ def generate_sacc_and_stats(config):
     cosmo = ccl.Cosmology(Omega_b=cosmo_cfg['Omega_b'],
                           Omega_c=cosmo_cfg['Omega_c'],
                           n_s=cosmo_cfg['n_s'], sigma8=cosmo_cfg['sigma8'],
-                          h=cosmo_cfg['h'])
+                          h=cosmo_cfg['h'], transfer_function=cosmo_cfg['transfer_function'])
 
     # First we generate the placeholder SACC file with the correct N(z) and ell-binning
     # TODO add real-space
@@ -92,8 +92,8 @@ def generate_sacc_and_stats(config):
     else:
         ia_sys = None
     # TODO -- fix this in subsequent releases
-    if isinstance(ia_sys, wl.LinearAlignmentSystematic):
-        ia_sys = None  # the LinearAlignmentSystematic class seems to be a bit buggy
+    # if isinstance(ia_sys, wl.LinearAlignmentSystematic):
+    #    ia_sys = None  # the LinearAlignmentSystematic class seems to be a bit buggy
     if 'sources' in config.keys():
         nbins = src_cfg['nbins']  # Number of bins for shear sources
         src_root = 'src'  # Root of sacc tracer name
@@ -137,6 +137,9 @@ def generate_sacc_and_stats(config):
             sys_list = [mbias, pzshift]
             if ia_sys is not None:
                 sys_list.append(ia_sys)
+                sys_params['ia_bias'] = src_cfg['ia_bias']
+                sys_params['alphaz'] = src_cfg['alphaz']
+                sys_params['z_piv'] = src_cfg['z_piv']
             sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer,
                                                   systematics=sys_list)
             sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
@@ -297,6 +300,6 @@ def generate(config, return_outputs=False, write_sacc=True):
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
-    lk.read(S)
+    # lk.read(S)
     if return_outputs:
         return lk, S, tools

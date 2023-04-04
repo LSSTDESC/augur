@@ -4,6 +4,7 @@ cosmo:
     h : 0.6727
     n_s : 0.9645
     sigma8 : 0.83
+    transfer_function : 'eisenstein_hu'
   
 sources:  # Sources
     nbins : 5
@@ -17,7 +18,9 @@ sources:  # Sources
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 0  # ia-bias
+    ia_bias : 0.  # ia-bias
+    alphaz : 0.
+    z_piv : 1.0
     ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
 
 lenses :  # Lenses
@@ -55,7 +58,7 @@ statistics:
     galaxy_shearDensity_cl_e : 
         tracer_combs : [[0, 2], [0, 3], [0, 4], [1, 3], [1, 4], [2, 4], [3, 4]]
         ell_edges : np.geomspace(20, 15000, 20, endpoint=False)[:16]
-        kmax : None
+        kmax : 0.201
 
 fiducial_sacc_path : /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
 cov_options:
