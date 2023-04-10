@@ -1,5 +1,6 @@
 import numpy as np
 import pyccl as ccl
+from numpy.linalg import LinAlgError
 
 
 def get_noise_power(config, S, tracer_name):
@@ -63,7 +64,7 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     Parameters:
     -----------
     S : Sacc
-        Sacc object containing where the matrix will be stored
+        Sacc object containing the data-vector for which we want the covariance
     lk : firecrown.likelihood
         Likelihood object containing the statistics for which we want to compute
         the covariance matrix.
@@ -76,8 +77,8 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
 
     Returns:
     --------
-    S : Sacc
-        Sacc object with the covariance updated
+    cov_all : np.ndarray
+        Numpy array containing the covariance matrix.
     """
     # Initialize big matrix
     cov_all = np.zeros((len(S.data), len(S.data)))
@@ -116,3 +117,81 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             cov_all[myst1.sacc_indices[:n_ells], myst2.sacc_indices[:n_ells]] = cov_here[:n_ells]
             cov_all[myst2.sacc_indices[:n_ells], myst1.sacc_indices[:n_ells]] = cov_here[:n_ells]
     return cov_all
+
+
+def get_SRD_cov(config, S, return_inv=True):
+    """
+    Read covariance file from SRD v1:
+    https://github.com/LSSTDESC/Requirements/tree/master/forecasting/WL-LSS-CL/cov
+
+    Parameters:
+    -----------
+    config : dict
+        The dictinary containt the relevant two_point section of the config.
+    S : sacc.Sacc
+        Sacc object containing the data vector for which to compute the covariance.
+    return_inv : bool
+        If `True` it returns the inverse covariance rather than the covariance matrix.
+    Returns:
+    --------
+    cov_all : np.ndarray
+        Numpy array containing the covariance matrix (or its inverse if `return_inv == True`).
+    """
+    if 'SRD_inv_cov_path' not in config.keys():
+        raise ValueError('SRD_inv_cov_path is needed to use SRD covariance.')
+    inv_cov_in = np.loadtxt(config['SRD_inv_cov_path'])
+    nx = int(np.sqrt(inv_cov_in.shape[0]))
+    # This might be inefficient but helps to visualize the object
+    inv_cov = np.zeros((nx, nx))
+    inv_cov[inv_cov_in[:, 0].astype(np.int16), inv_cov_in[:, 1].astype(np.int16)] = inv_cov_in[:, 2]
+    # Data combinations for Y1 as per SRD v1
+    data_combs_y1 = [('src0', 'src0'), ('src0', 'src1'), ('src0', 'src2'), ('src0', 'src3'),
+                     ('src0', 'src4'), ('src1', 'src1'), ('src1', 'src2'), ('src1', 'src3'),
+                     ('src1', 'src4'), ('src2', 'src2'), ('src2', 'src3'), ('src2', 'src4'),
+                     ('src3', 'src3'), ('src3', 'src4'), ('src4', 'src4'),
+                     ('lens0', 'src2'), ('lens0', 'src3'), ('lens0', 'src4'),
+                     ('lens1', 'src3'), ('lens1', 'src4'), ('lens2', 'src4'),
+                     ('lens3', 'src4'), ('lens0', 'lens0'), ('lens1', 'lens1'),
+                     ('lens2', 'lens2'), ('lens3', 'lens3'), ('lens4', 'lens4')]
+    # Data combinations for Y10 as per SRD v1
+    data_combs_y10 = [('src0', 'src0'), ('src0', 'src1'), ('src0', 'src2'), ('src0', 'src3'),
+                      ('src0', 'src4'), ('src1', 'src1'), ('src1', 'src2'), ('src1', 'src3'),
+                      ('src1', 'src4'), ('src2', 'src2'), ('src2', 'src3'), ('src2', 'src4'),
+                      ('src3', 'src3'), ('src3', 'src4'), ('src4', 'src4'),
+                      ('lens0', 'src1'), ('lens0', 'src2'), ('lens0', 'src3'), ('lens0', 'src4'),
+                      ('lens1', 'src1'), ('lens1', 'src2'), ('lens1', 'src3'), ('lens1', 'src4'),
+                      ('lens2', 'src2'), ('lens2', 'src3'), ('lens2', 'src4'),
+                      ('lens3', 'src2'), ('lens3', 'src3'), ('lens3', 'src4'),
+                      ('lens4', 'src2'), ('lens4', 'src4'),
+                      ('lens5', 'src3'), ('lens5', 'src4'),
+                      ('lens6', 'src3'), ('lens6', 'src4'),
+                      ('lens7', 'src3'), ('lens7', 'src4'),
+                      ('lens8', 'src4'),
+                      ('lens9', 'src4'),
+                      ('lens0', 'lens0'), ('lens1', 'lens1'), ('lens2', 'lens2'),
+                      ('lens3', 'lens3'), ('lens4', 'lens4'), ('lens5', 'lens5'),
+                      ('lens6', 'lens6'), ('lens7', 'lens7'), ('lens8', 'lens8'),
+                      ('lens9', 'lens9')]
+
+    if 'Y10' in config['SRD_inv_cov_path']:
+        data_combs = data_combs_y10
+    else:
+        data_combs = data_combs_y1
+
+    inv_cov_sacc_all = np.zeros((len(S.mean), len(S.mean)))
+    for i, comb1 in enumerate(data_combs):
+        dtype_here1 = S.get_data_types(tracers=comb1)[0]
+        inds1 = S.indices(data_type=dtype_here1, tracers=comb1)
+        for j, comb2 in enumerate(data_combs):
+            dtype_here2 = S.get_data_types(tracers=comb2)[0]
+            inds2 = S.indices(data_type=dtype_here2, tracers=comb2)
+            inds_all = np.meshgrid(inds1, inds2)
+            inv_cov_sacc_all[inds_all[0].T, inds_all[1].T] = inv_cov[20*i:20*i+len(inds1),
+                                                                     20*j:20*j+len(inds2)]
+    if return_inv:
+        return inv_cov_sacc_all
+    else:
+        try:
+            return np.linalg.inv(inv_cov_sacc_all)
+        except LinAlgError:
+            return np.linalg.pinv(inv_cov_sacc_all)

@@ -40,7 +40,7 @@ lenses :  # Lenses
     # Another option is to use the `custom` bias type, but it requires a value per bin
     # bias_type : 'custom'
     # bias_kwargs :
-    #    b : [1., 1.1, 1.2, 1.3, 1.4]  # This is just an example
+    #    b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD
     
 statistics:
     galaxy_density_cl :  # The statistics are supposed to be SACC statistics
@@ -62,8 +62,11 @@ statistics:
 
 fiducial_sacc_path : /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
 cov_options:
-    cov_type : 'gaus_internal'
-    fsky : 0.3
+    # cov_type : 'gaus_internal'
+    # fsky : 0.3
+    cov_type : 'SRD'
+    SRD_inv_cov_path : '/Users/jsanchez/Software/Requirements/forecasting/WL-LSS-CL/cov/Y1_3x2pt_inv'
+    return_inv : False
 fisher:
     parameters:
         Omega_c: [0.1, 0.26, 0.9]

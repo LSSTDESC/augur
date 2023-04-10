@@ -10,7 +10,7 @@ import numpy as np
 import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
-from augur.utils.cov_utils import get_gaus_cov
+from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov
 import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
 import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
@@ -83,6 +83,7 @@ def generate_sacc_and_stats(config):
     src_cfg = config['sources']
     sources = {}
     dndz = {}
+    # These are to match the N(z)s from the fits file in the firecrown repo
     z = np.linspace(0.004004004004004004, 
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
     sys_params = {}
@@ -235,7 +236,7 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params
 
 
-def generate(config, return_outputs=False, write_sacc=True):
+def generate(config, return_all_outputs=False, write_sacc=True, force_read=True):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -244,11 +245,16 @@ def generate(config, return_outputs=False, write_sacc=True):
 
     config : dict or path
         Dictionary containing the analysis configuration or path to configuration file.
-    return_outputs : bool
+    return_all_outputs : bool
         If `True` it returns the likelihood object (so it can be used later) and the modified
-        Sacc object.
+        Sacc object, as well as the modeling tools object used. If `False` it only returns the
+        likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
+    force_read : bool
+        If `True` it repopulates the likelihood data vector with the contents of the Sacc file
+        generated here. Note: For high-condition covariances where the Cholesky decomposition
+        fails, setting force_read to `True` may result in a `LinAlgError`.
 
     Returns:
     --------
@@ -293,13 +299,23 @@ def generate(config, return_outputs=False, write_sacc=True):
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
         S.add_covariance(cov)
+    elif config['cov_options']['cov_type'] == 'SRD':
+        cov = get_SRD_cov(config['cov_options'], S,
+                          return_inv=config['cov_options']['return_inv'])
+        if config['cov_options']['return_inv']:
+            S.add_covariance(np.linalg.inv(cov))
+        else:
+            S.add_covariance(cov)
     else:
-        raise Warning('''Currently only internal Gaussian covariance has been implemented,
+        raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
     if write_sacc:
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
-    # lk.read(S)
-    if return_outputs:
+    if force_read:
+        lk.read(S)
+    if return_all_outputs:
         return lk, S, tools
+    else:
+        return lk
