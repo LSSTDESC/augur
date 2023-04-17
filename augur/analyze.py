@@ -6,9 +6,6 @@ At the moment it is a thin-wrapper to cosmosis.
 
 """
 
-import numpy as np
-import numdifftools
-
 
 def analyze(likelihood, tools, config):
     """
