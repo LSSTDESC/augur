@@ -32,14 +32,13 @@ def get_noise_power(config, S, tracer_name):
     nz_all['src'] = []
     nz_all['lens'] = []
     for tr in S.tracers:
-        trobj = S.get_tracer(tracer_name)
+        trobj = S.get_tracer(tr)
         nz_all[tr[:-1]].append(trobj.nz)  # This assumes 10 or less bins
     nz_all['src'] = np.array(nz_all['src'])
     nz_all['lens'] = np.array(nz_all['lens'])
     norm = dict()
     norm['src'] = np.sum(nz_all['src'], axis=1)/np.sum(nz_all['src'])
     norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
-
     if 'src' in tracer_name:
         ndens = config['sources']['ndens']
     elif 'lens' in tracer_name:
