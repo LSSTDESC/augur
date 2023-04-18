@@ -62,11 +62,20 @@ statistics:
 
 fiducial_sacc_path : /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
 cov_options:
+    # Several options implemented -- Gaussian internal
     # cov_type : 'gaus_internal'
     # fsky : 0.3
+    # ------
+    # Or you can also get it from a file
     cov_type : 'SRD'
     SRD_inv_cov_path : '/Users/jsanchez/Software/Requirements/forecasting/WL-LSS-CL/cov/Y1_3x2pt_inv'
     return_inv : False
+    # Or using TJPCov
+    # cov_type : 'tjpcov'
+    # IA : None
+    # fsky: 0.3
+
+
 fisher:
     parameters:
         Omega_c: [0.1, 0.26, 0.9]

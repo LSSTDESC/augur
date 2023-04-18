@@ -311,6 +311,29 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
             S.add_covariance(np.linalg.inv(cov))
         else:
             S.add_covariance(cov)
+    elif config['cov_options']['cov_type'] == 'tjpcov':
+        tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
+        tjpcov_config['tjpcov'] = dict()
+        tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
+        ccl_tracers = dict()
+        bias_all = dict()
+        for i, myst1 in enumerate(lk.statistics):
+            trname1 = myst1.source0.sacc_tracer
+            trname2 = myst1.source1.sacc_tracer
+            tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
+            tr2 = myst1.source1.tracers[0].ccl_tracer
+            ccl_tracers[trname1] = tr1
+            ccl_tracers[trname2] = tr2
+            if 'lens' in trname1:
+                bias_all[trname1] = myst1.source0.bias
+            if 'lens' in trname2:
+                bias_all[trname2] = myst1.source1.bias
+        for key in bias_all.keys():
+            tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
+        tjpcov_config['tjpcov']['sacc_file'] = S
+        tjpcov_config['tjpcov']['IA'] = config['cov_options']['IA']
+        tjpcov_config['GaussianFsky'] = {}
+        tjpcov_config['GaussianFsky']['fsky'] = config['cov_options']['fsky']
     else:
         raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')

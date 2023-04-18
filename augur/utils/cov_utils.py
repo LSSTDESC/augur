@@ -1,6 +1,7 @@
 import numpy as np
 import pyccl as ccl
 from numpy.linalg import LinAlgError
+from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 
 
 def get_noise_power(config, S, tracer_name):
@@ -194,3 +195,33 @@ def get_SRD_cov(config, S, return_inv=True):
             return np.linalg.inv(inv_cov_sacc_all)
         except LinAlgError:
             return np.linalg.pinv(inv_cov_sacc_all)
+
+
+class TJPCovGaus(FourierGaussianFsky):
+    """
+    Class to patch FourierGaussianFsky to work with Augur
+    """
+    def __init__(self, config):
+        super().__init__(config)
+        self.tracer_Noise = self.tracer_Noise_coupled
+
+    def get_binning_info(self):
+        ell_eff = self.get_ell_eff()
+        if 'ell_edges' in self.config['tjpcov']['binning_info'].keys():
+            ell_edges = self.config['tjpcov']['binning_info']['ell_edges']
+        ell_min = np.min(ell_edges)
+        ell_max = np.max(ell_edges)
+        nbpw = ell_max - ell_min
+        ell = np.linspace(ell_min, ell_max, nbpw+1).astype(np.int32)
+        return ell, ell_eff, ell_edges
+
+    def get_tracer_info(self, return_noise_coupled=False):
+        _ = super().get_tracer_info(return_noise_coupled=True)
+        self.tracer_Noise = self.tracer_Noise_coupled
+        if return_noise_coupled:
+            return (
+                self.ccl_tracers,
+                self.tracer_Noise,
+                self.tracer_Noise_coupled)
+        else:
+            return self.ccl_tracers, self.tracer_Noise
