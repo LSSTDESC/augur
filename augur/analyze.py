@@ -17,7 +17,7 @@ def analyze(likelihood, tools, config):
         Input likelihood object that will be used to compute the derivatives.
     tools: firecrown.modeling_tools.ModelingTools
         Modeling tools needed to reevaluate the likelihood.
-    
+
     Returns:
     --------
     fisher: np.ndarray

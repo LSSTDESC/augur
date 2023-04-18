@@ -10,7 +10,7 @@ import numpy as np
 import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
-from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov
+from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
 import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
@@ -84,7 +84,7 @@ def generate_sacc_and_stats(config):
     sources = {}
     dndz = {}
     # These are to match the N(z)s from the fits file in the firecrown repo
-    z = np.linspace(0.004004004004004004, 
+    z = np.linspace(0.004004004004004004,
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
     sys_params = {}
     # Set up intrinsic alignment systematics
@@ -204,6 +204,11 @@ def generate_sacc_and_stats(config):
             sources[sacc_tracer].bias = bias
             sys_params[f'{sacc_tracer}_bias'] = bias
             sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
+
+    # Add coupled shot noise to metadata
+    for tr in S.tracers:
+        tracer_here = S.tracers[tr]
+        tracer_here.metadata['n_ell_coupled'] = get_noise_power(config, S, tr)
 
     # Read data vector combinations
     if 'statistics' not in config.keys():
