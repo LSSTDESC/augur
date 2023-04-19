@@ -67,13 +67,15 @@ cov_options:
     # fsky : 0.3
     # ------
     # Or you can also get it from a file
-    cov_type : 'SRD'
-    SRD_inv_cov_path : '/Users/jsanchez/Software/Requirements/forecasting/WL-LSS-CL/cov/Y1_3x2pt_inv'
-    return_inv : False
+    # cov_type : 'SRD'
+    # SRD_inv_cov_path : '/Users/jsanchez/Software/Requirements/forecasting/WL-LSS-CL/cov/Y1_3x2pt_inv'
+    # return_inv : False
     # Or using TJPCov
-    # cov_type : 'tjpcov'
-    # IA : None
-    # fsky: 0.3
+    cov_type : 'tjpcov'
+    #IA : None
+    fsky: 0.3
+    binning_info : 
+        ell_edges : (np.geomspace(20, 15000, 20, endpoint=False)[:16]).astype(np.int32)
 
 
 fisher:

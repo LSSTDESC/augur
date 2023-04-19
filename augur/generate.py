@@ -11,6 +11,7 @@ import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
+from augur.utils.cov_utils import TJPCovGaus
 import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
 import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
@@ -311,6 +312,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
             S.add_covariance(np.linalg.inv(cov))
         else:
             S.add_covariance(cov)
+    # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
         tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
         tjpcov_config['tjpcov'] = dict()
@@ -331,9 +333,24 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         for key in bias_all.keys():
             tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
         tjpcov_config['tjpcov']['sacc_file'] = S
-        tjpcov_config['tjpcov']['IA'] = config['cov_options']['IA']
+        tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
         tjpcov_config['GaussianFsky'] = {}
         tjpcov_config['GaussianFsky']['fsky'] = config['cov_options']['fsky']
+        tjpcov_config['tjpcov']['binning_info'] = dict()
+        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
+            eval(config['cov_options']['binning_info']['ell_edges'])
+        cov_calc = TJPCovGaus(tjpcov_config)
+        ndata = len(S.mean)
+        cov_all = np.zeros((ndata, ndata))
+        for i, trcombs1 in enumerate(S.get_tracer_combinations()):
+            ii = S.indices(tracers=trcombs1)
+            for trcombs2 in S.get_tracer_combinations()[i:]:
+                jj = S.indices(tracers=trcombs2)
+                ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
+                cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
+                cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
+                cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
+        S.add_covariance(cov_all)
     else:
         raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
