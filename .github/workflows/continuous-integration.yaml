@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: [3.8, 3.9, 3.10]
 
     steps:
     - uses: conda-incubator/setup-miniconda@v2
@@ -38,7 +38,7 @@ jobs:
         conda install -q flake8
         conda install -q pytest
         conda install -q matplotlib
-        conda install -q numdifftools
+        conda install -q numdifftools -c conda-forge
         cd ..
         git clone https://github.com/LSSTDESC/TJPCov.git
         cd TJPCov
