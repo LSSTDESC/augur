@@ -4,6 +4,7 @@ cosmo:
     h : 0.6727
     n_s : 0.9645
     sigma8 : 0.83
+    transfer_function : 'eisenstein_hu'
 
 sources:  # Sources
     nbins : 5
