@@ -206,11 +206,6 @@ def generate_sacc_and_stats(config):
             sys_params[f'{sacc_tracer}_bias'] = bias
             sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
 
-    # Add coupled shot noise to metadata
-    for tr in S.tracers:
-        tracer_here = S.tracers[tr]
-        tracer_here.metadata['n_ell_coupled'] = get_noise_power(config, S, tr)
-
     # Read data vector combinations
     if 'statistics' not in config.keys():
         raise ValueError('statistics key is required in config file')
@@ -339,6 +334,11 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         tjpcov_config['tjpcov']['binning_info'] = dict()
         tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
             eval(config['cov_options']['binning_info']['ell_edges'])
+        for tr in S.tracers:
+            _, ndens = get_noise_power(config, S, tr, return_ndens=True)
+            tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
+            if 'src' in tr:
+                tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
         cov_calc = TJPCovGaus(tjpcov_config)
         ndata = len(S.mean)
         cov_all = np.zeros((ndata, ndata))

@@ -4,7 +4,7 @@ from numpy.linalg import LinAlgError
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 
 
-def get_noise_power(config, S, tracer_name):
+def get_noise_power(config, S, tracer_name, return_ndens=False):
     """ Returns noise power for tracer
 
     Parameters:
@@ -18,6 +18,9 @@ def get_noise_power(config, S, tracer_name):
     tracer_name : str
         Tracer ID
 
+    return_ndens : bool
+        If `True` return the number density (in arcmin^-2)
+
     Returns:
     -------
     noise : float
@@ -26,8 +29,8 @@ def get_noise_power(config, S, tracer_name):
 
     Note:
     -----
-    The input number_densities are #/arcmin.
-    The output units are in steradian.
+    The input number_densities are #/arcmin. The output noise has no units.
+    The output number density is in arcmin^-2.
     """
     nz_all = dict()
     nz_all['src'] = []
@@ -44,8 +47,8 @@ def get_noise_power(config, S, tracer_name):
         ndens = config['sources']['ndens']
     elif 'lens' in tracer_name:
         ndens = config['lenses']['ndens']
+    ndens *= norm['src'][int(tracer_name[-1])]
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
-    nbar *= norm['src'][int(tracer_name[-1])]
     if 'src' in tracer_name:
         noise_power = config['sources']['ellipticity_error'] ** 2 / nbar
     elif 'lens' in tracer_name:
@@ -53,7 +56,10 @@ def get_noise_power(config, S, tracer_name):
     else:
         print("Cannot do error for source of kind %s." % (tracer_name[:-1]))
         raise NotImplementedError
-    return noise_power
+    if return_ndens:
+        return noise_power, ndens
+    else:
+        return noise_power
 
 
 def get_gaus_cov(S, lk, cosmo, fsky, config):
@@ -214,14 +220,3 @@ class TJPCovGaus(FourierGaussianFsky):
         nbpw = ell_max - ell_min
         ell = np.linspace(ell_min, ell_max, nbpw+1).astype(np.int32)
         return ell, ell_eff, ell_edges
-
-    def get_tracer_info(self, return_noise_coupled=False):
-        _ = super().get_tracer_info(return_noise_coupled=True)
-        self.tracer_Noise = self.tracer_Noise_coupled
-        if return_noise_coupled:
-            return (
-                self.ccl_tracers,
-                self.tracer_Noise,
-                self.tracer_Noise_coupled)
-        else:
-            return self.ccl_tracers, self.tracer_Noise
