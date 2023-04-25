@@ -5,7 +5,7 @@ cosmo:
     n_s : 0.9645
     sigma8 : 0.83
     transfer_function : 'eisenstein_hu'
-  
+
 sources:  # Sources
     nbins : 5
     ndens : 10  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
@@ -18,7 +18,7 @@ sources:  # Sources
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 0.  # ia-bias
+    ia_bias : 5.  # ia-bias 
     alphaz : 0.
     z_piv : 1.0
     ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
@@ -34,13 +34,13 @@ lenses :  # Lenses
         Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
         Nz_alpha : 0.94  # N(z) alpha parameter
         Nz_z0 : 0.26  # N(z) z-pivot
-    bias_type : 'inverse_growth'  # Inverse growth bias or custom
-    bias_kwargs : 
-        b0 : 1.33  # Reverse engineeering the bias values from the SRD
+    #bias_type : 'inverse_growth'  # Inverse growth bias or custom
+    #bias_kwargs : 
+    #    b0 : 1.33  # Reverse engineeering the bias values from the SRD
     # Another option is to use the `custom` bias type, but it requires a value per bin
-    # bias_type : 'custom'
-    # bias_kwargs :
-    #    b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD
+    bias_type : 'custom'
+    bias_kwargs :
+        b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD
     
 statistics:
     galaxy_density_cl :  # The statistics are supposed to be SACC statistics
@@ -60,7 +60,7 @@ statistics:
         ell_edges : np.geomspace(20, 15000, 20, endpoint=False)[:16]
         kmax : 0.201
 
-fiducial_sacc_path : /Users/jsanchez/Software/augur/output_fishery1/test_sacc.sacc
+fiducial_sacc_path : test_sacc.sacc
 cov_options:
     # Several options implemented -- Gaussian internal
     # cov_type : 'gaus_internal'
@@ -76,7 +76,6 @@ cov_options:
     fsky: 0.3
     binning_info : 
         ell_edges : (np.geomspace(20, 15000, 20, endpoint=False)[:16]).astype(np.int32)
-
 
 fisher:
     parameters:
