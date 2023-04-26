@@ -69,11 +69,14 @@ def generate_sacc_and_stats(config):
 
     config = parse_config(config)
     cosmo_cfg = config['cosmo']
+    transfer_function = cosmo_cfg.get('transfer_function', 'boltzmann_camb')
+    extra_parameters = cosmo_cfg.get('extra_parameters', dict())
     # Set up ccl.Cosmology object
     cosmo = ccl.Cosmology(Omega_b=cosmo_cfg['Omega_b'],
                           Omega_c=cosmo_cfg['Omega_c'],
                           n_s=cosmo_cfg['n_s'], sigma8=cosmo_cfg['sigma8'],
-                          h=cosmo_cfg['h'], transfer_function=cosmo_cfg['transfer_function'])
+                          h=cosmo_cfg['h'], transfer_function=transfer_function,
+                          extra_parameters=extra_parameters)
 
     # First we generate the placeholder SACC file with the correct N(z) and ell-binning
     # TODO add real-space
@@ -211,6 +214,7 @@ def generate_sacc_and_stats(config):
         raise ValueError('statistics key is required in config file')
     stat_cfg = config['statistics']
     stats = []
+    ignore_sc = config['general'].get('ignore_scale_cuts', False)
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
         kmax = stat_cfg[key]['kmax']
@@ -218,7 +222,7 @@ def generate_sacc_and_stats(config):
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
         for comb in tracer_combs:
             tr1, tr2 = _get_tracers(key, comb)
-            if (kmax is not None) and (kmax != 'None'):
+            if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
                 zmean1 = dndz[tr1].zav
                 zmean2 = dndz[tr2].zav
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
@@ -340,16 +344,19 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
             if 'src' in tr:
                 tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
         cov_calc = TJPCovGaus(tjpcov_config)
-        ndata = len(S.mean)
-        cov_all = np.zeros((ndata, ndata))
-        for i, trcombs1 in enumerate(S.get_tracer_combinations()):
-            ii = S.indices(tracers=trcombs1)
-            for trcombs2 in S.get_tracer_combinations()[i:]:
-                jj = S.indices(tracers=trcombs2)
-                ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
-                cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
-                cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
-                cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
+        if config['general']['ignore_scale_cuts']:
+            cov_all = cov_calc.get_covariance()
+        else:
+            ndata = len(S.mean)
+            cov_all = np.zeros((ndata, ndata))
+            for i, trcombs1 in enumerate(S.get_tracer_combinations()):
+                ii = S.indices(tracers=trcombs1)
+                for trcombs2 in S.get_tracer_combinations()[i:]:
+                    jj = S.indices(tracers=trcombs2)
+                    ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
+                    cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
+                    cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
+                    cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
         S.add_covariance(cov_all)
     else:
         raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
