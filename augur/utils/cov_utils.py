@@ -1,6 +1,5 @@
 import numpy as np
 import pyccl as ccl
-from numpy.linalg import LinAlgError
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 
 
@@ -125,7 +124,7 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     return cov_all
 
 
-def get_SRD_cov(config, S, return_inv=True):
+def get_SRD_cov(config, S):
     """
     Read covariance file from SRD v1:
     https://github.com/LSSTDESC/Requirements/tree/master/forecasting/WL-LSS-CL/cov
@@ -133,23 +132,20 @@ def get_SRD_cov(config, S, return_inv=True):
     Parameters:
     -----------
     config : dict
-        The dictinary containt the relevant two_point section of the config.
+        Dictionary containing the relevant two_point section of the config.
     S : sacc.Sacc
         Sacc object containing the data vector for which to compute the covariance.
-    return_inv : bool
-        If `True` it returns the inverse covariance rather than the covariance matrix.
+
     Returns:
     --------
     cov_all : np.ndarray
-        Numpy array containing the covariance matrix (or its inverse if `return_inv == True`).
+        Numpy array containing the SRD covariance matrix with the relevant shape as established
+        by the input sacc file S.
     """
-    if 'SRD_inv_cov_path' not in config.keys():
-        raise ValueError('SRD_inv_cov_path is needed to use SRD covariance.')
-    inv_cov_in = np.loadtxt(config['SRD_inv_cov_path'])
-    nx = int(np.sqrt(inv_cov_in.shape[0]))
-    # This might be inefficient but helps to visualize the object
-    inv_cov = np.zeros((nx, nx))
-    inv_cov[inv_cov_in[:, 0].astype(np.int16), inv_cov_in[:, 1].astype(np.int16)] = inv_cov_in[:, 2]
+    if 'SRD_cov_path' not in config.keys():
+        raise ValueError('SRD_cov_path is needed to use SRD covariance.')
+    cov_in = np.load(config['SRD_cov_path'])
+    ncls = 20
     # Data combinations for Y1 as per SRD v1
     data_combs_y1 = [('src0', 'src0'), ('src0', 'src1'), ('src0', 'src2'), ('src0', 'src3'),
                      ('src0', 'src4'), ('src1', 'src1'), ('src1', 'src2'), ('src1', 'src3'),
@@ -179,12 +175,12 @@ def get_SRD_cov(config, S, return_inv=True):
                       ('lens6', 'lens6'), ('lens7', 'lens7'), ('lens8', 'lens8'),
                       ('lens9', 'lens9')]
 
-    if 'Y10' in config['SRD_inv_cov_path']:
+    if 'Y10' in config['SRD_cov_path']:
         data_combs = data_combs_y10
     else:
         data_combs = data_combs_y1
 
-    inv_cov_sacc_all = np.zeros((len(S.mean), len(S.mean)))
+    cov_sacc_all = np.zeros((len(S.mean), len(S.mean)))
     for i, comb1 in enumerate(data_combs):
         dtype_here1 = S.get_data_types(tracers=comb1)[0]
         inds1 = S.indices(data_type=dtype_here1, tracers=comb1)
@@ -192,15 +188,9 @@ def get_SRD_cov(config, S, return_inv=True):
             dtype_here2 = S.get_data_types(tracers=comb2)[0]
             inds2 = S.indices(data_type=dtype_here2, tracers=comb2)
             inds_all = np.meshgrid(inds1, inds2)
-            inv_cov_sacc_all[inds_all[0].T, inds_all[1].T] = inv_cov[20*i:20*i+len(inds1),
-                                                                     20*j:20*j+len(inds2)]
-    if return_inv:
-        return inv_cov_sacc_all
-    else:
-        try:
-            return np.linalg.inv(inv_cov_sacc_all)
-        except LinAlgError:
-            return np.linalg.pinv(inv_cov_sacc_all)
+            cov_sacc_all[inds_all[0].T, inds_all[1].T] = cov_in[ncls*i:ncls*i+len(inds1),
+                                                                ncls*j:ncls*j+len(inds2)]
+    return cov_sacc_all
 
 
 class TJPCovGaus(FourierGaussianFsky):

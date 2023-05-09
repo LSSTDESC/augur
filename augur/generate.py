@@ -305,12 +305,8 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
         S.add_covariance(cov)
     elif config['cov_options']['cov_type'] == 'SRD':
-        cov = get_SRD_cov(config['cov_options'], S,
-                          return_inv=config['cov_options']['return_inv'])
-        if config['cov_options']['return_inv']:
-            S.add_covariance(np.linalg.inv(cov))
-        else:
-            S.add_covariance(cov)
+        cov = get_SRD_cov(config['cov_options'], S)
+        S.add_covariance(cov)
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
         tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
