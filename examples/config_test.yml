@@ -1,11 +1,11 @@
 general:
     ignore_scale_cuts : True # If True ignore any values of kmax
 cosmo:
-    Omega_c : 0.266399999999999999997
-    Omega_b : 0.0492
+    Omega_c : 0.2664315
+    Omega_b : 0.0491685
     h : 0.6727
     n_s : 0.9645
-    sigma8 : 0.83
+    sigma8 : 0.831
     extra_parameters :
         camb :
             dark_energy_model : 'ppf'
@@ -24,7 +24,7 @@ sources:  # Sources
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 5.  # ia-bias 
+    ia_bias : 0.  # ia-bias 
     alphaz : 0.
     z_piv : 1.0
     ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
@@ -47,7 +47,7 @@ lenses :  # Lenses
     bias_type : 'custom'
     bias_kwargs :
         b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD
-    
+
 statistics:
     galaxy_density_cl :  # The statistics are supposed to be SACC statistics
         tracer_combs : [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]  # These need to be lists for now
