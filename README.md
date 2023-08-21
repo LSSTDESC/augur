@@ -58,7 +58,7 @@ The user can create configuration files to fit their specific purposes following
 
 ```
 from augur.generate import generate
-lk = generate('./examples/config_test.yml', return_all_outputs=True, force_read=False)
+lk = generate('./examples/config_test.yml', return_all_outputs=False, force_read=False)
 ```
 
 This likelihood object can then be used by `cosmosis`, `cobaya` or `NumCosmo`. For more details follow the examples in the [`firecrown`](https://github.com/LSSTDESC/firecrown) repository.
