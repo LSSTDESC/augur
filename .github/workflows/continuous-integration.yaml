@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: [3.8, 3.9]
 
     steps:
     - uses: conda-incubator/setup-miniconda@v2
@@ -38,15 +38,17 @@ jobs:
         conda install -q flake8
         conda install -q pytest
         conda install -q matplotlib
+        conda install -q numdifftools -c conda-forge
+        cd ..
+        git clone https://github.com/LSSTDESC/TJPCov.git
+        cd TJPCov
+        pip install --no-deps -e .
     - name: Environment test
       shell: bash -l {0}
       run: |
         conda info
         conda activate base
         which python
-        python -c "import numpy; print (numpy.__path__)"
-        python -c "import pyccl; print (pyccl.__path__)"
-        python -c "import firecrown.ccl; print (firecrown.__path__)"
         
     - name: flake8
       shell: bash -l {0}
