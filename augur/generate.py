@@ -265,6 +265,7 @@ def get_noise_power(config, src):
     The input number_densities are #/arcmin.
     The output units are in steradian.
     """
+<<<<<<< Updated upstream
 
     d = config["sources"][src]
     nbar = d["number_density"] * (180 * 60 / np.pi) ** 2  # per steradian
@@ -273,6 +274,103 @@ def get_noise_power(config, src):
         noise_power = d["ellipticity_error"] ** 2 / nbar
     elif kind == "NumberCountsSource":
         noise_power = 1 / nbar
+=======
+    config = parse_config(config)
+    # Generate placeholders
+    S, cosmo, stats, sys_params = generate_sacc_and_stats(config)
+    # Generate likelihood object
+    lk = ConstGaussian(statistics=stats)
+    # Pass the correct binning/tracers
+    lk.read(S)
+    # The newest version of firecrown requires a modeling tool rather than a cosmology
+    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
+        with_NC=False,
+        with_IA=True,
+        log10k_min=-4,  # Leaving defaults for now
+        log10k_max=2,
+        nk_per_decade=20,
+        cosmo=cosmo
+    )
+    cosmo.compute_nonlin_power()
+    tools = ModelingTools(pt_calculator=pt_calculator)
+    lk.update(sys_params)
+    tools.prepare(cosmo)
+    # Run the likelihood (to get the theory)
+    lk.compute_loglike(tools)
+    # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
+    S.covariance = None
+    S.data = []
+    # Fill out the data-vector with the theory predictions for the fiducial
+    # cosmology/parameters
+    for st in lk.statistics:
+        S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
+                     st.ell_or_theta_, st.predicted_statistic_)
+    if config['cov_options']['cov_type'] == 'gaus_internal':
+        fsky = config['cov_options']['fsky']
+        cov = get_gaus_cov(S, lk, cosmo, fsky, config)
+        S.add_covariance(cov)
+    elif config['cov_options']['cov_type'] == 'SRD':
+        cov = get_SRD_cov(config['cov_options'], S)
+        S.add_covariance(cov)
+    # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
+    elif config['cov_options']['cov_type'] == 'tjpcov':
+        tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
+        tjpcov_config['tjpcov'] = dict()
+        tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
+        ccl_tracers = dict()
+        bias_all = dict()
+        for i, myst1 in enumerate(lk.statistics):
+            trname1 = myst1.source0.sacc_tracer
+            trname2 = myst1.source1.sacc_tracer
+            tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
+            tr2 = myst1.source1.tracers[0].ccl_tracer
+            ccl_tracers[trname1] = tr1
+            ccl_tracers[trname2] = tr2
+            if 'lens' in trname1:
+                bias_all[trname1] = myst1.source0.bias
+            if 'lens' in trname2:
+                bias_all[trname2] = myst1.source1.bias
+        for key in bias_all.keys():
+            tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
+        tjpcov_config['tjpcov']['sacc_file'] = S
+        tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
+        tjpcov_config['GaussianFsky'] = {}
+        tjpcov_config['GaussianFsky']['fsky'] = config['cov_options']['fsky']
+        tjpcov_config['tjpcov']['binning_info'] = dict()
+        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
+            eval(config['cov_options']['binning_info']['ell_edges'])
+        for tr in S.tracers:
+            _, ndens = get_noise_power(config, S, tr, return_ndens=True)
+            tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
+            if 'src' in tr:
+                tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
+        cov_calc = TJPCovGaus(tjpcov_config)
+        if config['general']['ignore_scale_cuts']:
+            cov_all = cov_calc.get_covariance()
+        else:
+            ndata = len(S.mean)
+            cov_all = np.zeros((ndata, ndata))
+            for i, trcombs1 in enumerate(S.get_tracer_combinations()):
+                ii = S.indices(tracers=trcombs1)
+                for trcombs2 in S.get_tracer_combinations()[i:]:
+                    jj = S.indices(tracers=trcombs2)
+                    ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
+                    cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
+                    cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
+                    cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
+        S.add_covariance(cov_all)
+    else:
+        raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
+                         cov_type is not understood. Using identity matrix as covariance.''')
+    if write_sacc:
+        print(config['fiducial_sacc_path'])
+        S.save_fits(config['fiducial_sacc_path'], overwrite=True)
+    # Update covariance and inverse -- TODO need to update cholesky!!
+    if force_read:
+        lk.read(S)
+    if return_all_outputs:
+        return lk, S, tools
+>>>>>>> Stashed changes
     else:
         print("Cannot do error for source of kind %s." % (kind))
         raise NotImplementedError
