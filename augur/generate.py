@@ -272,16 +272,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
     The input number_densities are #/arcmin.
     The output units are in steradian.
     """
-<<<<<<< Updated upstream
 
-    d = config["sources"][src]
-    nbar = d["number_density"] * (180 * 60 / np.pi) ** 2  # per steradian
-    kind = d["kind"]
-    if kind == "WLSource":
-        noise_power = d["ellipticity_error"] ** 2 / nbar
-    elif kind == "NumberCountsSource":
-        noise_power = 1 / nbar
-=======
     config = parse_config(config)
     # Generate placeholders
     S, cosmo, stats, sys_params = generate_sacc_and_stats(config)
@@ -377,17 +368,3 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         lk.read(S)
     if return_all_outputs:
         return lk, S, tools
->>>>>>> Stashed changes
-    else:
-        raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
-                         cov_type is not understood. Using identity matrix as covariance.''')
-    if write_sacc:
-        print(config['fiducial_sacc_path'])
-        S.save_fits(config['fiducial_sacc_path'], overwrite=True)
-    # Update covariance and inverse -- TODO need to update cholesky!!
-    if force_read:
-        lk.read(S)
-    if return_all_outputs:
-        return lk, S, tools
-    else:
-        return lk
