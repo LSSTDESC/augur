@@ -301,6 +301,9 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
     # Fill out the data-vector with the theory predictions for the fiducial
     # cosmology/parameters
     for st in lk.statistics:
+        # Hack to be able to reuse the statistics
+        st = st.statistic
+        st.ready = False
         S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
                      st.ell_or_theta_, st.predicted_statistic_)
     if config['cov_options']['cov_type'] == 'gaus_internal':
@@ -365,6 +368,8 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
     if force_read:
+        # Hacky way to overwrite...
         lk.read(S)
+        lk.measured_data_vector = lk.get_data_vector()
     if return_all_outputs:
         return lk, S, tools
