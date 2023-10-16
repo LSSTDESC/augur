@@ -349,18 +349,18 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         # cov_calc = TJPCovGaus(tjpcov_config)
         # if config['general']['ignore_scale_cuts']:
         #     cov_all = cov_calc.get_covariance()
-        else:
-            ndata = len(S.mean)
-            cov_all = np.zeros((ndata, ndata))
-            for i, trcombs1 in enumerate(S.get_tracer_combinations()):
-                ii = S.indices(tracers=trcombs1)
-                for trcombs2 in S.get_tracer_combinations()[i:]:
-                    jj = S.indices(tracers=trcombs2)
-                    ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
-                    cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
-                    cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
-                    cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
-        S.add_covariance(cov_all)
+        # else:
+        #     ndata = len(S.mean)
+        #     cov_all = np.zeros((ndata, ndata))
+        #     for i, trcombs1 in enumerate(S.get_tracer_combinations()):
+        #         ii = S.indices(tracers=trcombs1)
+        #         for trcombs2 in S.get_tracer_combinations()[i:]:
+        #             jj = S.indices(tracers=trcombs2)
+        #             ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
+        #             cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
+        #             cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
+        #             cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
+        # S.add_covariance(cov_all)
     else:
         raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
