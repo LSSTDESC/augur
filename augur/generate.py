@@ -11,7 +11,7 @@ import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
-from augur.utils.cov_utils import TJPCovGaus
+# from augur.utils.cov_utils import TJPCovGaus
 import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
 import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
 from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
@@ -315,39 +315,40 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         S.add_covariance(cov)
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
-        tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
-        tjpcov_config['tjpcov'] = dict()
-        tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
-        ccl_tracers = dict()
-        bias_all = dict()
-        for i, myst1 in enumerate(lk.statistics):
-            trname1 = myst1.source0.sacc_tracer
-            trname2 = myst1.source1.sacc_tracer
-            tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
-            tr2 = myst1.source1.tracers[0].ccl_tracer
-            ccl_tracers[trname1] = tr1
-            ccl_tracers[trname2] = tr2
-            if 'lens' in trname1:
-                bias_all[trname1] = myst1.source0.bias
-            if 'lens' in trname2:
-                bias_all[trname2] = myst1.source1.bias
-        for key in bias_all.keys():
-            tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
-        tjpcov_config['tjpcov']['sacc_file'] = S
-        tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
-        tjpcov_config['GaussianFsky'] = {}
-        tjpcov_config['GaussianFsky']['fsky'] = config['cov_options']['fsky']
-        tjpcov_config['tjpcov']['binning_info'] = dict()
-        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
-            eval(config['cov_options']['binning_info']['ell_edges'])
-        for tr in S.tracers:
-            _, ndens = get_noise_power(config, S, tr, return_ndens=True)
-            tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
-            if 'src' in tr:
-                tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
-        cov_calc = TJPCovGaus(tjpcov_config)
-        if config['general']['ignore_scale_cuts']:
-            cov_all = cov_calc.get_covariance()
+        raise NotImplementedError('TJPCov not supported currently.')
+        # tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
+        # tjpcov_config['tjpcov'] = dict()
+        # tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
+        # ccl_tracers = dict()
+        # bias_all = dict()
+        # for i, myst1 in enumerate(lk.statistics):
+        #     trname1 = myst1.source0.sacc_tracer
+        #     trname2 = myst1.source1.sacc_tracer
+        #     tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
+        #     tr2 = myst1.source1.tracers[0].ccl_tracer
+        #     ccl_tracers[trname1] = tr1
+        #     ccl_tracers[trname2] = tr2
+        #     if 'lens' in trname1:
+        #         bias_all[trname1] = myst1.source0.bias
+        #     if 'lens' in trname2:
+        #         bias_all[trname2] = myst1.source1.bias
+        # for key in bias_all.keys():
+        #     tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
+        # tjpcov_config['tjpcov']['sacc_file'] = S
+        # tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
+        # tjpcov_config['GaussianFsky'] = {}
+        # tjpcov_config['GaussianFsky']['fsky'] = config['cov_options']['fsky']
+        # tjpcov_config['tjpcov']['binning_info'] = dict()
+        # tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
+        #     eval(config['cov_options']['binning_info']['ell_edges'])
+        # for tr in S.tracers:
+        #     _, ndens = get_noise_power(config, S, tr, return_ndens=True)
+        #     tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
+        #     if 'src' in tr:
+        #         tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
+        # cov_calc = TJPCovGaus(tjpcov_config)
+        # if config['general']['ignore_scale_cuts']:
+        #     cov_all = cov_calc.get_covariance()
         else:
             ndata = len(S.mean)
             cov_all = np.zeros((ndata, ndata))
