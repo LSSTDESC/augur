@@ -321,16 +321,16 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         ccl_tracers = dict()
         bias_all = dict()
         for i, myst1 in enumerate(lk.statistics):
-            trname1 = myst1.source0.sacc_tracer
-            trname2 = myst1.source1.sacc_tracer
-            tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
-            tr2 = myst1.source1.tracers[0].ccl_tracer
+            trname1 = myst1.statistic.source0.sacc_tracer
+            trname2 = myst1.statistic.source1.sacc_tracer
+            tr1 = myst1.statistic.source0.tracers[0].ccl_tracer  # Pulling out the tracers
+            tr2 = myst1.statistic.source1.tracers[0].ccl_tracer
             ccl_tracers[trname1] = tr1
             ccl_tracers[trname2] = tr2
             if 'lens' in trname1:
-                bias_all[trname1] = myst1.source0.bias
+                bias_all[trname1] = myst1.statistic.source0.bias
             if 'lens' in trname2:
-                bias_all[trname2] = myst1.source1.bias
+                bias_all[trname2] = myst1.statistic.source1.bias
         for key in bias_all.keys():
             tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
         tjpcov_config['tjpcov']['sacc_file'] = S
