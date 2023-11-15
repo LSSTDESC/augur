@@ -21,5 +21,5 @@ setup(
     scripts=scripts,
     install_requires=[
         'pyccl', 'click', 'numpy', 'firecrown',
-        'scipy', 'pandas', 'pyyaml', 'jinja2'],
+        'scipy', 'pandas', 'pyyaml', 'jinja2', 'numdifftools'],
 )
