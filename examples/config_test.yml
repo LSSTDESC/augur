@@ -95,3 +95,6 @@ fisher:
         # mult_bias: [-0.1 0.0 0.1]
     step: 1e-2
     output: 'fisher.dat'
+    fisher_bias:
+        parameters:
+            Omega_c: 0.27

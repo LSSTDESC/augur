@@ -85,7 +85,7 @@ class Analyze(object):
         # Cast to numpy array (this will be done later anyway)
         self.x = np.array(self.x)
         
-    def f(self, x):
+    def f(self, x, labels, pars_fid, sys_fid):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
         Labels are the name of the parameters x (with the same length and order)
@@ -95,15 +95,19 @@ class Analyze(object):
 
         x : float, list or np.ndarray
             Point at which to compute the theory vector
-
+        labels : list
+            Names of parameters to vary
+        pars_fid : dict
+            Dictionary containing the fiducial ccl cosmological parameters
+        sys_fid: dict
+            Dictionary containing the fiducial `systematic` (required) parameters
+            for the likelihood
         Returns:
         --------
         f_out : np.ndarray
                 Theory vector computed at x.
         """
-        labels = self.var_pars
-        pars_fid = self.pars_fid
-        sys_fid = self.req_params
+        
         if len(labels) != len(x):
             raise ValueError('The labels should have the same length as the parameters!')
         else:
@@ -151,13 +155,14 @@ class Analyze(object):
     def get_derivatives(self, force=False):
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
-            self.derivatives = five_pt_stencil(self.f, self.x, h=float(self.config['step']))
+            self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid, self.req_params),
+                                               self.x, h=float(self.config['step']))
             return self.derivatives
         else:
             return self.derivatives
     
     def get_fisher_matrix(self):
-        # Compute Fisher matrix
+        # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
             self.get_derivatives()
         if self.Fij is None:
@@ -165,3 +170,10 @@ class Analyze(object):
             return self.Fij
         else:
             return self.Fij
+
+    def compute_fisher_bias(self):
+        # Compute Fisher bias following the generalized Amara formalism
+        # More details in Bianca's thesis and the note here: 
+        # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
+        import os
+        
