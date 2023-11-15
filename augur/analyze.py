@@ -119,13 +119,13 @@ class Analyze(object):
                         _sys_pars.update({labels[i]: x[i]})
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!') 
-                tools.reset()
-                lk.reset()
+                self.tools.reset()
+                self.lk.reset()
                 cosmo = ccl.Cosmology(**_pars)
-                lk.update(ParamsMap(_sys_pars))
-                tools.update(ParamsMap(_sys_pars))
-                tools.prepare(cosmo)
-                f_out = lk.compute_theory_vector(tools)
+                self.lk.update(ParamsMap(_sys_pars))
+                self.tools.update(ParamsMap(_sys_pars))
+                self.tools.prepare(cosmo)
+                f_out = self.lk.compute_theory_vector(self.tools)
             elif x.ndim == 2:
                 f_out = []
                 for i in range(len(labels)):
@@ -139,13 +139,13 @@ class Analyze(object):
                             _sys_pars.update({labels[j]: xi[j]})
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
-                    tools.reset()
-                    lk.reset()
-                    lk.update(ParamsMap(_sys_pars))
-                    tools.update(ParamsMap(_sys_pars))
+                    self.tools.reset()
+                    self.lk.reset()
+                    self.lk.update(ParamsMap(_sys_pars))
+                    self.tools.update(ParamsMap(_sys_pars))
                     cosmo = ccl.Cosmology(**_pars)
-                    tools.prepare(cosmo)
-                    f_out.append(lk.compute_theory_vector(tools))
+                    self.tools.prepare(cosmo)
+                    f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
         
     def get_derivatives(self, force=False):

@@ -85,7 +85,7 @@ cov_options:
 
 fisher:
     #var_pars: ['Omega_c', 'sigma8', 'w0', 'wa', 'h', 'n_s']
-    parameters:
+    parameters:  # TODO: For now priors are ignored
         Omega_c: [0.1, 0.26, 0.9]
         sigma8: [0.4, 0.81, 1.2]
         w0: [-1.8, -1.0, -0.2]
