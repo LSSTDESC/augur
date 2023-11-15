@@ -54,6 +54,7 @@ class Analyze(object):
         self.var_pars = None
         self.derivatives = None
         self.Fij = None
+        self.bi = None
         # Load the parameters to vary
         # We will allow 2 options -- one where we pass something
         # a la cosmosis with parameters and minimum, central, and max
@@ -175,5 +176,40 @@ class Analyze(object):
         # Compute Fisher bias following the generalized Amara formalism
         # More details in Bianca's thesis and the note here: 
         # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
+
+        # Allowing to provide externally calculated "systematics"
+        # They should have the same ells as the original data-vector
+        # and the same length
         import os
+        _calculate_biased_cls = True
+        if 'cl_sys' in self.config['fisher_bias']:
+            _sys_path = self.config['fisher_bias']['cl_sys']
+            if (len(_sys_path)<1) or (os.path.exists(_sys_path)==False):
+                _calculate_biased_cls = True
+            else:
+                import astropy.table
+                if ('.dat' in _sys_path) or ('.txt' in _sys_path):
+                    _format = 'ascii'
+                elif ('.fits' in _sys_path):
+                    _format = 'fits'
+                else:
+                    _format = None
+                biased_cls = astropy.table.Table.read(_sys_path, format=_format)
+                if len(biased_cls) != len(self.lk.get_data_vector()):
+                    raise ValueError('The length of the provided Cls should be equal \
+                                    to the length of the data-vector')
+                _calculate_biased_cls = False
+        
+        if _calculate_biased_cls:
+            raise NotImplementedError('To compute the biased Cls use external software \
+                                       for the moment.')
+        else:
+            if self.derivatives is None:
+                self.get_derivatives()
+            Bj = np.einsum('l, lm, jm', biased_cls['cl_sys'], lk.inv_cov, self.derivatives)
+            if self.Fij is None:
+                self.get_fisher_matrix()
+            bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
+            self.bi = bi
+
         
