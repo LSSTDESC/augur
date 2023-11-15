@@ -292,6 +292,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
     cosmo.compute_nonlin_power()
     tools = ModelingTools(pt_calculator=pt_calculator)
     lk.update(sys_params)
+    tools.update(sys_params)
     tools.prepare(cosmo)
     # Run the likelihood (to get the theory)
     lk.compute_loglike(tools)
@@ -372,4 +373,4 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         lk.read(S)
         lk.measured_data_vector = lk.get_data_vector()
     if return_all_outputs:
-        return lk, S, tools
+        return lk, S, tools, sys_params
