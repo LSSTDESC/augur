@@ -84,16 +84,19 @@ cov_options:
     #   ell_edges : np.geomspace(20, 15000, 21, endpoint=True).astype(np.int32)
 
 fisher:
-    #var_pars: ['Omega_c', 'sigma8', 'w0', 'wa', 'h', 'n_s']
-    parameters:  # TODO: For now priors are ignored
-        Omega_c: [0.1, 0.26, 0.9]
-        sigma8: [0.4, 0.81, 1.2]
-        w0: [-1.8, -1.0, -0.2]
-        wa: [-4, 0.0, 0.5]
-        h: [0.5, 0.6727, 0.8]
-        n_s: [0.9, 0.9645, 1.0]
-        #mult_bias: [-0.1 0.0 0.1]
-    step: 0.05
+    var_pars: ['Omega_c', 'sigma8', 'w0', 'wa', 'h', 'n_s', 'lens0_bias', 'lens1_bias', 
+               'lens2_bias', 'lens3_bias', 'lens4_bias', 'lens0_delta_z', 'lens1_delta_z',
+                'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z', 'src0_delta_z', 'src1_delta_z',
+                'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
+    # parameters:  # TODO: For now priors are ignored
+    #     Omega_c: [0.1, 0.26, 0.9]
+    #     sigma8: [0.4, 0.81, 1.2]
+    #     w0: [-1.8, -1.0, -0.2]
+    #     wa: [-4, 0.0, 0.5]
+    #     h: [0.5, 0.6727, 0.8]
+    #     n_s: [0.9, 0.9645, 1.0]
+    #     #mult_bias: [-0.1 0.0 0.1]
+    step: 1e-3
     output: 'fisher.dat'
     fisher_bias:
         cl_sys: ''  # Path to file containing modified data vector with the systematic shift to probe

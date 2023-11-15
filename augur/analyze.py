@@ -74,12 +74,12 @@ class Analyze(object):
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
         elif 'var_pars' in self.config.keys():
-            var_pars = self.config['var_pars']
-            for var in var_pars:
+            self.var_pars = self.config['var_pars']
+            for var in self.var_pars:
                 if var in self.pars_fid.keys():
-                    x.append(self.pars_fid[var])
+                    self.x.append(self.pars_fid[var])
                 elif var in self.req_params.keys():
-                    x.append(self.req_params[var])
+                    self.x.append(self.req_params[var])
                 else:
                     raise ValueError(f'The requested parameter {var} is not \
                                     in the list of parameters in the likelihood.')
