@@ -232,9 +232,9 @@ class Analyze(object):
 
         if self.derivatives is None:
             self.get_derivatives()
-            Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+        Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
 
         if self.Fij is None:
             self.get_fisher_matrix()
-            bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
-            self.bi = bi
+        bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
+        self.bi = bi
