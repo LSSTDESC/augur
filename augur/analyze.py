@@ -32,16 +32,16 @@ class Analyze(object):
         """
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
-            likelihood, S, tools, req_params= generate(config, return_all_outputs=True)
+            likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
         else:
             if (tools is None) or (req_params is None):
                 raise ValueError('If a likelihood is passed tools and req_params are required! \
                                 Please, remove the likelihood or add tools and req_params.')
-        
-        self.lk = likelihood  # Just to save some typing 
+
+        self.lk = likelihood  # Just to save some typing
         self.tools = tools
         self.req_params = req_params
-        
+
         _config = parse_config(config)  # Load full config
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
@@ -85,7 +85,7 @@ class Analyze(object):
                                     in the list of parameters in the likelihood.')
         # Cast to numpy array (this will be done later anyway)
         self.x = np.array(self.x)
-        
+
     def f(self, x, labels, pars_fid, sys_fid):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
@@ -108,7 +108,7 @@ class Analyze(object):
         f_out : np.ndarray
                 Theory vector computed at x.
         """
-        
+
         if len(labels) != len(x):
             raise ValueError('The labels should have the same length as the parameters!')
         else:
@@ -123,7 +123,7 @@ class Analyze(object):
                     elif labels[i] in sys_fid.keys():
                         _sys_pars.update({labels[i]: x[i]})
                     else:
-                        raise ValueError(f'Parameter name {labels[i]} not recognized!') 
+                        raise ValueError(f'Parameter name {labels[i]} not recognized!')
                 self.tools.reset()
                 self.lk.reset()
                 cosmo = ccl.Cosmology(**_pars)
@@ -152,16 +152,17 @@ class Analyze(object):
                     self.tools.prepare(cosmo)
                     f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
-        
+
     def get_derivatives(self, force=False):
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
-            self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid, self.req_params),
+            self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
+                                                                self.req_params),
                                                self.x, h=float(self.config['step']))
             return self.derivatives
         else:
             return self.derivatives
-    
+
     def get_fisher_matrix(self):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
@@ -174,7 +175,7 @@ class Analyze(object):
 
     def compute_fisher_bias(self):
         # Compute Fisher bias following the generalized Amara formalism
-        # More details in Bianca's thesis and the note here: 
+        # More details in Bianca's thesis and the note here:
         # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
 
         # Allowing to provide externally calculated "systematics"
@@ -184,7 +185,7 @@ class Analyze(object):
         _calculate_biased_cls = True
         if 'cl_sys' in self.config['fisher_bias']:
             _sys_path = self.config['fisher_bias']['cl_sys']
-            if (len(_sys_path)<1) or (os.path.exists(_sys_path)==False):
+            if (len(_sys_path) < 1) or (os.path.exists(_sys_path) is False):
                 _calculate_biased_cls = True
             else:
                 import astropy.table
@@ -199,17 +200,15 @@ class Analyze(object):
                     raise ValueError('The length of the provided Cls should be equal \
                                     to the length of the data-vector')
                 _calculate_biased_cls = False
-        
+
         if _calculate_biased_cls:
             raise NotImplementedError('To compute the biased Cls use external software \
                                        for the moment.')
         else:
             if self.derivatives is None:
                 self.get_derivatives()
-            Bj = np.einsum('l, lm, jm', biased_cls['cl_sys'], lk.inv_cov, self.derivatives)
+            Bj = np.einsum('l, lm, jm', biased_cls['cl_sys'], self.lk.inv_cov, self.derivatives)
             if self.Fij is None:
                 self.get_fisher_matrix()
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
-
-        
