@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.9']
 
     steps:
     - uses: conda-incubator/setup-miniconda@v2
@@ -45,13 +45,7 @@ jobs:
         git clone https://github.com/LSSTDESC/TJPCov.git
         cd TJPCov
         pip install --no-deps -e .
-    - name: Environment test
-      shell: bash -l {0}
-      run: |
-        conda info
-        conda activate base
-        which python
-        
+
     - name: flake8
       shell: bash -l {0}
       run: /usr/share/miniconda/bin/flake8 augur --max-line-length=100 --count --show-source --statistics

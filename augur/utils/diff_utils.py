@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def five_pt_stencil(f, x0, h=1e-4):
     """
     Five-point stencil differentiation based on https://arxiv.org/pdf/2101.00298.pdf
