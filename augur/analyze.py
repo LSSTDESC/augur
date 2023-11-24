@@ -211,8 +211,8 @@ class Analyze(object):
             _x_here = []
             _labels_here = []
             if 'bias_params' in self.config['fisher_bias'].keys():
-                _pars_here = self.var_pars().copy()
-                _sys_here = self.req_params().copy()
+                _pars_here = self.var_pars.copy()
+                _sys_here = self.req_params.copy()
                 for key, value in self.config['fisher_bias']['bias_params'].items():
                     if key in _pars_here.keys():
                         _pars_here[key] = value
