@@ -55,6 +55,7 @@ class Analyze(object):
         self.derivatives = None
         self.Fij = None
         self.bi = None
+        self.biased_cls = None
         # Load the parameters to vary
         # We will allow 2 options -- one where we pass something
         # a la cosmosis with parameters and minimum, central, and max
@@ -183,8 +184,11 @@ class Analyze(object):
         # and the same length
         import os
         _calculate_biased_cls = True
-        if 'cl_sys' in self.config['fisher_bias']:
-            _sys_path = self.config['fisher_bias']['cl_sys']
+        _cls_fid = self.lk.measured_data_vector  # Get the fiducial data vector
+
+        # Try to read the biased data vector
+        if 'biased_dv' in self.config['fisher_bias']:
+            _sys_path = self.config['fisher_bias']['biased_dv']
             if (len(_sys_path) < 1) or (os.path.exists(_sys_path) is False):
                 _calculate_biased_cls = True
             else:
@@ -200,15 +204,37 @@ class Analyze(object):
                     raise ValueError('The length of the provided Cls should be equal \
                                     to the length of the data-vector')
                 _calculate_biased_cls = False
+                self.biased_cls = biased_cls['dv_sys'] - _cls_fid
 
+        # If there's no biased data vector, calculate it
         if _calculate_biased_cls:
-            raise NotImplementedError('To compute the biased Cls use external software \
-                                       for the moment.')
-        else:
-            if self.derivatives is None:
-                self.get_derivatives()
-            Bj = np.einsum('l, lm, jm', biased_cls['cl_sys'], self.lk.inv_cov, self.derivatives)
-            if self.Fij is None:
-                self.get_fisher_matrix()
+            _x_here = []
+            _labels_here = []
+            if 'bias_params' in self.config['fisher_bias'].keys():
+                _pars_here = self.var_pars().copy()
+                _sys_here = self.req_params().copy()
+                for key, value in self.config['fisher_bias']['bias_params'].items():
+                    if key in _pars_here.keys():
+                        _pars_here[key] = value
+                        _x_here.append(value)
+                        _labels_here.append(key)
+                    elif key in _sys_here.keys():
+                        _sys_here[key] = value
+                        _x_here.append(value)
+                        _labels_here.append(key)
+                    else:
+                        raise ValueError(f'The requested parameter `{key}` is not recognized. \
+                                         Please make sure that it is part of your model.')
+            else:
+                raise ValueError('bias_params is required if no biased_dv file is passed')
+
+            self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here) - _cls_fid
+
+        if self.derivatives is None:
+            self.get_derivatives()
+            Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+
+        if self.Fij is None:
+            self.get_fisher_matrix()
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
