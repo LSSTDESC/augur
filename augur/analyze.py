@@ -154,20 +154,34 @@ class Analyze(object):
                     f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False):
+    def get_derivatives(self, force=False, method='5pt_stencil'):
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
-            self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
+            if '5pt_stencil' in method:
+                self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                                 self.req_params),
-                                               self.x, h=float(self.config['step']))
+                                                   self.x, h=float(self.config['step']))
+            elif 'numdifftools' in method:
+                import numdifftools as nd
+                if 'numdifftools_kwargs' in self.config.keys():
+                    ndkwargs = self.config['numdifftools_kwargs']
+                else:
+                    ndkwargs = {}
+                self.derivatives = nd.Gradient(lambda y: self.f(y, self.var_pars, self.pars_fid,
+                                                                self.req_params),
+                                                   step=float(self.config['step']),
+                                                   **ndkwargs)(self.x).T
+            else:
+                raise ValueError(f'Selected method: `{method}` is not available. \
+                                 Please select 5pt_stencil or numdifftools.')
             return self.derivatives
         else:
             return self.derivatives
 
-    def get_fisher_matrix(self):
+    def get_fisher_matrix(self, method='5pt_stencil'):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
-            self.get_derivatives()
+            self.get_derivatives(method=method)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
             return self.Fij
