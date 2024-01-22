@@ -49,6 +49,42 @@ pip install --no-deps -e .
 
 You are now ready to try a simple forecast as outlined in the next section.
 
+
+-----------
+## Installation using Conda
+
+Because Augur depends upon Firecrown, and Firecrown requires installation using Conda, we use Conda to install Augur.
+
+    # clone the Augur repository
+    git clone git@github.com:LSSTDESC/augur.git
+
+    # conda env update, when run as suggested, is able to create a new environment, as
+    # well as updating an existing environment.
+    conda env update -f augur/environment.yml
+    conda activate forecasting
+
+    # The following line loads the firecrown module from the environment, and queries
+    # it to find the installation location.
+    FIRECROWN_DIR=$(python -c "import firecrown; print('/'.join(firecrown.__spec__.submodule_search_locations[0].split('/')[0:-1]))")
+
+    # We define some environment variables that will be defined whenever you activate
+    # the conda environment.
+    conda env config vars set AUGUR_DIR=${PWD}/augur CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
+    # The command above does not immediately define the environment variables.
+    # They are made available on every fresh activation of the environment.
+    # So we have to deactivate and then reactivate...
+    conda deactivate
+    conda activate forecasting
+    # Now we can finish building the CosmoSIS Standard Library.
+    source ${CONDA_PREFIX}/bin/cosmosis-configure
+    # We want to put the CSL into the same directory as conda environment upon which it depends
+    cd ${CONDA_PREFIX}
+    cosmosis-build-standard-library
+    # Now change directory into the Augur repository
+    cd ${AUGUR_DIR}
+    # And finally make an editable (developer) installation of firecrown into the conda environment
+    python -m pip install --no-deps --editable ${PWD}
+
 ## Usage
 
 `augur` has changed from its initial version and currently only contains a
