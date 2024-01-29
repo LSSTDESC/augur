@@ -18,6 +18,7 @@ from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
 from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
+from augur.utils.config_io import parse_config
 
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
