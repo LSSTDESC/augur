@@ -18,7 +18,7 @@ from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
 from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
-from augur.utils.config_io import parse_config
+
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
 
@@ -292,7 +292,6 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
     cosmo.compute_nonlin_power()
     tools = ModelingTools(pt_calculator=pt_calculator)
     lk.update(sys_params)
-    tools.update(sys_params)
     tools.prepare(cosmo)
     # Run the likelihood (to get the theory)
     lk.compute_loglike(tools)

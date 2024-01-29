@@ -129,7 +129,6 @@ class Analyze(object):
                 self.lk.reset()
                 cosmo = ccl.Cosmology(**_pars)
                 self.lk.update(ParamsMap(_sys_pars))
-                self.tools.update(ParamsMap(_sys_pars))
                 self.tools.prepare(cosmo)
                 f_out = self.lk.compute_theory_vector(self.tools)
             elif x.ndim == 2:
@@ -148,7 +147,6 @@ class Analyze(object):
                     self.tools.reset()
                     self.lk.reset()
                     self.lk.update(ParamsMap(_sys_pars))
-                    self.tools.update(ParamsMap(_sys_pars))
                     cosmo = ccl.Cosmology(**_pars)
                     self.tools.prepare(cosmo)
                     f_out.append(self.lk.compute_theory_vector(self.tools))
