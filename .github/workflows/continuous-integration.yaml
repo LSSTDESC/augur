@@ -22,27 +22,13 @@ jobs:
       with:
         path: augur
         
-    - name: Checkout firecrown
-      uses: actions/checkout@v2
-      with:
-        repository: LSSTDESC/firecrown
-        ref: refs/tags/v1.6.0
-        path: firecrown
-
     - name: Install dependencies
       shell: bash -l {0}
       run: |
-        conda activate base
-        conda install -q -c conda-forge --only-deps firecrown
-        cd firecrown
-        pip install --no-deps -e .
-        conda install -q flake8
-        conda install -q pytest
-        conda install -q matplotlib
-        cd ..
-        git clone https://github.com/LSSTDESC/TJPCov.git
-        cd TJPCov
-        pip install --no-deps -e .
+        cd augur
+        conda env update -f augur/environment.yml
+        conda activate forecasting
+        python -m pip install --no-deps --editable .
 
     - name: flake8
       shell: bash -l {0}
