@@ -157,7 +157,7 @@ class Analyze(object):
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
-                                                                self.req_params),
+                                                   self.req_params),
                                                    self.x, h=float(self.config['step']))
             elif 'numdifftools' in method:
                 import numdifftools as nd
@@ -166,9 +166,9 @@ class Analyze(object):
                 else:
                     ndkwargs = {}
                 self.derivatives = nd.Gradient(lambda y: self.f(y, self.var_pars, self.pars_fid,
-                                                                self.req_params),
-                                                   step=float(self.config['step']),
-                                                   **ndkwargs)(self.x).T
+                                               self.req_params),
+                                               step=float(self.config['step']),
+                                               **ndkwargs)(self.x).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
