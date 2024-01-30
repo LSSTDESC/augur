@@ -27,6 +27,7 @@ jobs:
       run: |
         conda env update -f augur/environment.yml
         conda activate forecasting
+        cd augur
         python -m pip install --no-deps --editable .
 
     - name: flake8
