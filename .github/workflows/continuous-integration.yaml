@@ -41,4 +41,4 @@ jobs:
       run: |
         conda activate forecasting
         cd augur
-        /usr/share/miniconda/bin/pytest
+        pytest .
