@@ -32,11 +32,11 @@ jobs:
 
     - name: flake8
       shell: bash -l {0}
-      run: /usr/share/miniconda/bin/flake8 augur --max-line-length=100 --count --show-source --statistics
+      run: flake8 --max-line-length=100 --count --show-source --statistics
 
     - name: pytest
       shell: bash -l {0}
       run: |
-        conda activate base
+        conda activate forecasting
         cd augur
         /usr/share/miniconda/bin/pytest
