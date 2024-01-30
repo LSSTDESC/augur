@@ -32,7 +32,9 @@ jobs:
 
     - name: flake8
       shell: bash -l {0}
-      run: flake8 --max-line-length=100 --count --show-source --statistics
+      run: |
+        conda activate forecasting
+        flake8 augur --max-line-length=100 --count --show-source --statistics
 
     - name: pytest
       shell: bash -l {0}
