@@ -20,6 +20,7 @@ from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
+
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
 
 
@@ -372,4 +373,4 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         lk.read(S)
         lk.measured_data_vector = lk.get_data_vector()
     if return_all_outputs:
-        return lk, S, tools
+        return lk, S, tools, sys_params

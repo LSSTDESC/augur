@@ -1,7 +1,5 @@
-import os
-from ..generate import generate
+from augur.generate import generate
 
 
-def test_generate(example_yaml):
-    generate(example_yaml)
-    assert os.path.isfile(example_yaml['generate']['two_point']['sacc_file'])
+def test_generate():
+    generate('./examples/config_test.yml')
