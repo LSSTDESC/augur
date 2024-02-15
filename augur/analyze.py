@@ -128,7 +128,9 @@ class Analyze(object):
                 self.tools.reset()
                 self.lk.reset()
                 cosmo = ccl.Cosmology(**_pars)
-                self.lk.update(ParamsMap(_sys_pars))
+                pmap = ParamsMap(_sys_pars)
+                self.lk.update(pmap)
+                self.tools.update(pmap)
                 self.tools.prepare(cosmo)
                 f_out = self.lk.compute_theory_vector(self.tools)
             elif x.ndim == 2:
@@ -146,8 +148,10 @@ class Analyze(object):
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     self.tools.reset()
                     self.lk.reset()
-                    self.lk.update(ParamsMap(_sys_pars))
+                    pmap = ParamsMap(_sys_pars)
+                    self.lk.update(pmap)
                     cosmo = ccl.Cosmology(**_pars)
+                    self.tools.update(pmap)
                     self.tools.prepare(cosmo)
                     f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
@@ -196,7 +200,7 @@ class Analyze(object):
         # and the same length
         import os
         _calculate_biased_cls = True
-        _cls_fid = self.lk.measured_data_vector  # Get the fiducial data vector
+        _cls_fid = self.lk.get_data_vector()  # Get the fiducial data vector
 
         # Try to read the biased data vector
         if 'biased_dv' in self.config['fisher_bias']:

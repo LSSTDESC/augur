@@ -252,7 +252,7 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params
 
 
-def generate(config, return_all_outputs=False, write_sacc=True, force_read=True):
+def generate(config, return_all_outputs=False, write_sacc=True):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -267,10 +267,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
-    force_read : bool
-        If `True` it repopulates the likelihood data vector with the contents of the Sacc file
-        generated here. Note: For high-condition covariances where the Cholesky decomposition
-        fails, setting force_read to `True` may result in a `LinAlgError`.
+    
 
     Returns:
     -------
@@ -307,6 +304,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
     cosmo.compute_nonlin_power()
     tools = ModelingTools(pt_calculator=pt_calculator)
     lk.update(sys_params)
+    tools.update(sys_params)
     tools.prepare(cosmo)
     # Run the likelihood (to get the theory)
     lk.compute_loglike(tools)
@@ -320,7 +318,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         st = st.statistic
         st.ready = False
         S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
-                     st.ell_or_theta_, st.predicted_statistic_)
+                     st.ell_or_theta_, st.get_theory_vector())
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
@@ -382,9 +380,7 @@ def generate(config, return_all_outputs=False, write_sacc=True, force_read=True)
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
-    if force_read:
-        # Hacky way to overwrite...
-        lk.read(S)
-        lk.measured_data_vector = lk.get_data_vector()
+    lk = ConstGaussian(statistics=stats)
+    lk.read(S)
     if return_all_outputs:
         return lk, S, tools, sys_params

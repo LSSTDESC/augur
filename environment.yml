@@ -10,4 +10,4 @@ dependencies:
   - flake8
   - pip:
     - tjpcov
-  - qp
+  - qp-prob
