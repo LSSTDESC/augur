@@ -232,17 +232,15 @@ def generate_sacc_and_stats(config):
             else:
                 ells_here = ells
             # Trying to add bandpower windows
-            #ells_aux = np.arange(0, np.max(ells_here)+1)
-            #wgt = np.zeros((len(ells_aux), len(ells_here)))
-            #for i in range(len(ells_here)):
-            #    in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
-            #    wgt[in_win, i] = 1.0 
-            #win = sacc.BandpowerWindow(ells_aux, wgt)
+            ells_aux = np.arange(0, np.max(ells_here)+1)
+            wgt = np.zeros((len(ells_aux), len(ells_here)))
+            for i in range(len(ells_here)):
+                in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
+                wgt[in_win, i] = 1.0 
+            win = sacc.BandpowerWindow(ells_aux, wgt)
             S.add_ell_cl(key, tr1, tr2,
-                         ells_here, np.zeros(len(ells_here))) #, window=win)
-            # # For some reason add_ell_cl does not update the sacc file properly on the fly...
-            # for i, ell in enumerate(ells_here):
-            #     S.add_data_point(key, (tr1, tr2), 0.0, ell=ell, error=1e30, window=win[i])
+                         ells_here, np.zeros(len(ells_here)), window=win)
+            
             # Now create TwoPoint objects for firecrown
             _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
                                  sacc_data_type=key)
@@ -318,7 +316,8 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         st = st.statistic
         st.ready = False
         S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
-                     st.ell_or_theta_, st.get_theory_vector())
+                     st.ell_or_theta_, st.get_theory_vector(),
+                     window=st.theory_window_function)
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
