@@ -209,7 +209,7 @@ def generate_sacc_and_stats(config):
             sources[sacc_tracer].bias = bias
             sys_params[f'{sacc_tracer}_bias'] = bias
             sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
-    
+
     # Read data vector combinations
     if 'statistics' not in config.keys():
         raise ValueError('statistics key is required in config file')
@@ -236,11 +236,11 @@ def generate_sacc_and_stats(config):
             wgt = np.zeros((len(ells_aux), len(ells_here)))
             for i in range(len(ells_here)):
                 in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
-                wgt[in_win, i] = 1.0 
+                wgt[in_win, i] = 1.0
             win = sacc.BandpowerWindow(ells_aux, wgt)
             S.add_ell_cl(key, tr1, tr2,
                          ells_here, np.zeros(len(ells_here)), window=win)
-            
+
             # Now create TwoPoint objects for firecrown
             _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
                                  sacc_data_type=key)
@@ -265,20 +265,19 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
-    
 
     Returns:
     -------
     lk : firecrown.likelihood.ConstGaussian
         Likelihood object, only returned if `return_all_outputs` is True.
     S : sacc.Sacc
-        Sacc object with fake data vector and covariance. It is only returned if `return_all_outputs` 
-        is True.
+        Sacc object with fake data vector and covariance. It is only returned if
+        `return_all_outputs` is True.
     tools : firecrown.modeling.ModelingTools
         Modeling tools, only returned if `return_all_outputs` is True.
     sys_params : dict
-        Dictionary containing the modeling systematic parameters. It is only returned if `return_all_outputs`
-        is True.
+        Dictionary containing the modeling systematic parameters. It is only returned if
+        `return_all_outputs` is True.
 
     """
 
