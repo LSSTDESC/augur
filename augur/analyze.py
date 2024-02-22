@@ -41,6 +41,7 @@ class Analyze(object):
         self.lk = likelihood  # Just to save some typing
         self.tools = tools
         self.req_params = req_params
+        self.data_fid = self.lk.get_data_vector()
 
         _config = parse_config(config)  # Load full config
         # Get the fiducial cosmological parameters
@@ -190,7 +191,7 @@ class Analyze(object):
         else:
             return self.Fij
 
-    def compute_fisher_bias(self):
+    def get_fisher_bias(self):
         # Compute Fisher bias following the generalized Amara formalism
         # More details in Bianca's thesis and the note here:
         # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
@@ -199,8 +200,14 @@ class Analyze(object):
         # They should have the same ells as the original data-vector
         # and the same length
         import os
+
+        if self.derivatives is None:
+            self.get_derivatives()
+        
+        if self.Fij is None:
+            self.get_fisher_matrix()
+
         _calculate_biased_cls = True
-        _cls_fid = self.lk.get_data_vector()  # Get the fiducial data vector
 
         # Try to read the biased data vector
         if 'biased_dv' in self.config['fisher_bias']:
@@ -220,7 +227,7 @@ class Analyze(object):
                     raise ValueError('The length of the provided Cls should be equal \
                                     to the length of the data-vector')
                 _calculate_biased_cls = False
-                self.biased_cls = biased_cls['dv_sys'] - _cls_fid
+                self.biased_cls = biased_cls['dv_sys'] - self.data_fid
 
         # If there's no biased data vector, calculate it
         if _calculate_biased_cls:
@@ -244,13 +251,8 @@ class Analyze(object):
             else:
                 raise ValueError('bias_params is required if no biased_dv file is passed')
 
-            self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here) - _cls_fid
+            self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here) - self.data_fid
 
-        if self.derivatives is None:
-            self.get_derivatives()
         Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
-
-        if self.Fij is None:
-            self.get_fisher_matrix()
         bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
         self.bi = bi
