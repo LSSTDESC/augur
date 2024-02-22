@@ -203,7 +203,7 @@ class Analyze(object):
 
         if self.derivatives is None:
             self.get_derivatives()
-        
+
         if self.Fij is None:
             self.get_fisher_matrix()
 
