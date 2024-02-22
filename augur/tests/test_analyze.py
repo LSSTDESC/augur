@@ -5,4 +5,4 @@ def test_analyze():
     fish = Analyze('./examples/config_test.yml')
     fish.get_derivatives()
     fish.get_fisher_matrix()
-    fish.compute_fisher_bias()
+    fish.get_fisher_bias()
