@@ -36,12 +36,6 @@ git clone git@github.com:LSSTDESC/firecrown.git
 cd firecrown
 ```
 
-The current version of `augur` relies on firecrown v0.5 or lower so in the same directory you can do:
-
-```
-git checkout tags/v0.5
-pip install . -e
-```
 
 Now run a `pytest` to see if things work.
 
@@ -100,10 +94,19 @@ The user can create configuration files to fit their specific purposes following
 
 ```
 from augur.generate import generate
-lk = generate('./examples/config_test.yml', return_all_outputs=False, force_read=False)
+lk = generate('./examples/config_test.yml', return_all_outputs=False)
 ```
 
 This likelihood object can then be used by `cosmosis`, `cobaya` or `NumCosmo`. For more details follow the examples in the [`firecrown`](https://github.com/LSSTDESC/firecrown) repository.
+
+Additionally, we can compute the Fisher matrix and Fisher biases via numerical derivatives using the following commands:
+
+```
+from augur.analyze import Analyze
+ao = Analyze('./examples/config_test.yml')
+ao.get_fisher_bias()  # This command computes the derivates+Fisher matrices+fisher bias
+print(ao.Fij, ao.bi)  # These are the values of the Fisher matrix, Fij, and Fisher biases bi
+```
 
 ## Example run for SRD v1
 We also include example configuration files for `cosmosis` and `cobaya` to reproduce the results from the [LSST DESC Science Requirements Document](https://arxiv.org/pdf/1809.01669.pdf).
