@@ -2,7 +2,7 @@ name: forecasting
 channels:
   - conda-forge
 dependencies:
-  - firecrown>=1.8
+  - firecrown>=1.7.4
   - flake8
   - healpy
   - jinja2
