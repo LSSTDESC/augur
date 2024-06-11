@@ -12,10 +12,18 @@ import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
-import firecrown.likelihood.weak_lensing as wl
-import firecrown.likelihood.number_counts as nc
-from firecrown.likelihood.two_point import TwoPoint
-from firecrown.likelihood.gaussian import ConstGaussian
+from packaging.version import Version
+import firecrown
+if Version(firecrown.__version__) >= Version('1.8'):
+    import firecrown.likelihood.weak_lensing as wl
+    import firecrown.likelihood.number_counts as nc
+    from firecrown.likelihood.two_point import TwoPoint
+    from firecrown.likelihood.gaussian import ConstGaussian
+elif Version(firecrown.__version__) >= Version('1.7.4'):
+    import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
+    import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
+    from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
+    from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
