@@ -12,10 +12,18 @@ import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
-import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
-import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
-from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
-from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
+from packaging.version import Version
+import firecrown
+if Version(firecrown.__version__) >= Version('1.8'):
+    import firecrown.likelihood.weak_lensing as wl
+    import firecrown.likelihood.number_counts as nc
+    from firecrown.likelihood.two_point import TwoPoint
+    from firecrown.likelihood.gaussian import ConstGaussian
+elif Version(firecrown.__version__) >= Version('1.7.4'):
+    import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
+    import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
+    from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
+    from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
@@ -305,6 +313,14 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     tools.prepare(cosmo)
     # Run the likelihood (to get the theory)
     lk.compute_loglike(tools)
+    # Get all bandpower windows before erasing the placeholder sacc
+    win_dict = {}
+    for st in lk.statistics:
+        st = st.statistic
+        tr1 = st.source0.sacc_tracer
+        tr2 = st.source1.sacc_tracer
+        idx = S.indices(tracers=(tr1, tr2))
+        win_dict[(tr1, tr2)] = S.get_bandpower_windows(idx)
     # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
     S.covariance = None
     S.data = []
@@ -313,10 +329,12 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     for st in lk.statistics:
         # Hack to be able to reuse the statistics
         st = st.statistic
+        tr1 = st.source0.sacc_tracer
+        tr2 = st.source1.sacc_tracer
         st.ready = False
-        S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
-                     st.ell_or_theta_, st.get_theory_vector(),
-                     window=st.theory_window_function)
+        S.add_ell_cl(st.sacc_data_type, tr1, tr2,
+                     st.ells, st.get_theory_vector(),  # Only valid for harmonic space
+                     window=win_dict[(tr1, tr2)])
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
