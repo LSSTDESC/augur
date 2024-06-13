@@ -207,52 +207,58 @@ class Analyze(object):
         if self.Fij is None:
             self.get_fisher_matrix()
 
-        _calculate_biased_cls = True
+        if self.bi is not None:
+            return self.bi
 
-        # Try to read the biased data vector
-        if 'biased_dv' in self.config['fisher_bias']:
-            _sys_path = self.config['fisher_bias']['biased_dv']
-            if (len(_sys_path) < 1) or (os.path.exists(_sys_path) is False):
-                _calculate_biased_cls = True
-            else:
-                import astropy.table
-                if ('.dat' in _sys_path) or ('.txt' in _sys_path):
-                    _format = 'ascii'
-                elif ('.fits' in _sys_path):
-                    _format = 'fits'
+        else:
+            _calculate_biased_cls = True
+
+            # Try to read the biased data vector
+            if 'biased_dv' in self.config['fisher_bias']:
+                _sys_path = self.config['fisher_bias']['biased_dv']
+                if (len(_sys_path) < 1) or (os.path.exists(_sys_path) is False):
+                    _calculate_biased_cls = True
                 else:
-                    _format = None
-                biased_cls = astropy.table.Table.read(_sys_path, format=_format)
-                if len(biased_cls) != len(self.lk.get_data_vector()):
-                    raise ValueError('The length of the provided Cls should be equal \
-                                    to the length of the data-vector')
-                _calculate_biased_cls = False
-                self.biased_cls = biased_cls['dv_sys'] - self.data_fid
-
-        # If there's no biased data vector, calculate it
-        if _calculate_biased_cls:
-            _x_here = []
-            _labels_here = []
-            if 'bias_params' in self.config['fisher_bias'].keys():
-                _pars_here = self.pars_fid.copy()
-                _sys_here = self.req_params.copy()
-                for key, value in self.config['fisher_bias']['bias_params'].items():
-                    if key in _pars_here.keys():
-                        _pars_here[key] = value
-                        _x_here.append(value)
-                        _labels_here.append(key)
-                    elif key in _sys_here.keys():
-                        _sys_here[key] = value
-                        _x_here.append(value)
-                        _labels_here.append(key)
+                    import astropy.table
+                    if ('.dat' in _sys_path) or ('.txt' in _sys_path):
+                        _format = 'ascii'
+                    elif ('.fits' in _sys_path):
+                        _format = 'fits'
                     else:
-                        raise ValueError(f'The requested parameter `{key}` is not recognized. \
-                                         Please make sure that it is part of your model.')
-            else:
-                raise ValueError('bias_params is required if no biased_dv file is passed')
+                        _format = None
+                    biased_cls = astropy.table.Table.read(_sys_path, format=_format)
+                    if len(biased_cls) != len(self.lk.get_data_vector()):
+                        raise ValueError('The length of the provided Cls should be equal \
+                                        to the length of the data-vector')
+                    _calculate_biased_cls = False
+                    self.biased_cls = biased_cls['dv_sys'] - self.data_fid
 
-            self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here) - self.data_fid
+            # If there's no biased data vector, calculate it
+            if _calculate_biased_cls:
+                _x_here = []
+                _labels_here = []
+                if 'bias_params' in self.config['fisher_bias'].keys():
+                    _pars_here = self.pars_fid.copy()
+                    _sys_here = self.req_params.copy()
+                    for key, value in self.config['fisher_bias']['bias_params'].items():
+                        if key in _pars_here.keys():
+                            _pars_here[key] = value
+                            _x_here.append(value)
+                            _labels_here.append(key)
+                        elif key in _sys_here.keys():
+                            _sys_here[key] = value
+                            _x_here.append(value)
+                            _labels_here.append(key)
+                        else:
+                            raise ValueError(f'The requested parameter `{key}` is not recognized. \
+                                            Please make sure that it is part of your model.')
+                else:
+                    raise ValueError('bias_params is required if no biased_dv file is passed')
 
-        Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
-        bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
-        self.bi = bi
+                self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here) \
+                    - self.data_fid
+
+            Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
+            self.bi = bi
+            return self.bi

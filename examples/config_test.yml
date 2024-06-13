@@ -70,18 +70,18 @@ statistics:
 fiducial_sacc_path : test_sacc.sacc
 cov_options:
     # Several options implemented -- Gaussian internal
-    # cov_type : 'gaus_internal'
-    # fsky : 0.3
+    #cov_type : 'gaus_internal'
+    #fsky : 0.3
     # ------
     # Or you can also get it from a file
-    cov_type : 'SRD'
-    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
+    #cov_type : 'SRD'
+    #SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
     # Or using TJPCov
-    #cov_type : 'tjpcov'
-    # IA : 0.0
-    # fsky: 0.3
-    # binning_info : 
-    #   ell_edges : np.geomspace(20, 15000, 21, endpoint=True).astype(np.int32)
+    cov_type : 'tjpcov'
+    IA : 0.0
+    fsky: 0.3
+    binning_info : 
+        ell_edges : np.geomspace(20, 15000, 21, endpoint=True).astype(np.int32)
 
 fisher:
     var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias', 
