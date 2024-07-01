@@ -20,11 +20,19 @@ or actually inside the augur directory running
 
 This step-by-step installaion shows you how to get a working environment with `firecrown` and `augur` that you can hack away efficiently.
 
+### Create a new conda environment
 Start by creating a new anaconda environment:
 
-```
-conda create --name forecasting
+```bash
+conda env create --name forecasting --file=environment.yml
 conda activate forecasting
+```
+### Or updaing an existing environment
+If you already have an existing environment, you can update it with the following command:
+
+```bash
+conda activate my_env
+conda env update --name my_env --file=environment.yml --prune
 ```
 
 Next install firecrown and augur.
