@@ -4,6 +4,7 @@ channels:
 dependencies:
   - firecrown>=1.7.5
   - flake8
+  - scipy<=1.14
   - healpy
   - jinja2
   - numdifftools
