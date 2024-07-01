@@ -79,9 +79,11 @@ Because Augur depends upon Firecrown, and Firecrown requires installation using 
 # clone the Augur repository
 git clone git@github.com:LSSTDESC/augur.git
 
+cd augur
+
 # conda env update, when run as suggested, is able to create a new environment, as
 # well as updating an existing environment.
-conda env update -f augur/environment.yml
+conda env update -f environment.yml
 conda activate forecasting
 
 # The following line loads the firecrown module from the environment, and queries
@@ -90,7 +92,7 @@ FIRECROWN_DIR=$(python -c "import firecrown; print('/'.join(firecrown.__spec__.s
 
 # We define some environment variables that will be defined whenever you activate
 # the conda environment.
-conda env config vars set AUGUR_DIR=${PWD}/augur CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
+conda env config vars set AUGUR_DIR=${PWD} CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
 # The command above does not immediately define the environment variables.
 # They are made available on every fresh activation of the environment.
 # So we have to deactivate and then reactivate...
