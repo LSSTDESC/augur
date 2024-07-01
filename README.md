@@ -34,6 +34,7 @@ If you already have an existing environment, you can update it with the followin
 conda activate my_env
 conda env update --name my_env --file=environment.yml --prune
 ```
+and activate your environment with `conda activate [my_env/forecasting]`.
 
 Next install firecrown and augur.
 
@@ -42,8 +43,8 @@ Install a repo version of firecrown:
 ```
 git clone git@github.com:LSSTDESC/firecrown.git
 cd firecrown
+pythong -m pip install .
 ```
-
 
 Now run a `pytest` to see if things work.
 
