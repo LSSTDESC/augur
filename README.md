@@ -25,6 +25,8 @@ First clone and enter the `augur` repository:
 ```bash
 git clone git@github.com:LSSTDESC/augur.git
 cd augur
+# set the variable AUGUR_DIR to the current directory
+AUGUR_DIR=${PWD}
 ```
 
 ### Create a new conda environment
@@ -43,6 +45,16 @@ conda env update --name my_env --file=environment.yml --prune
 ```
 and activate your environment with `conda activate [my_env/forecasting]`.
 
+### Cosmosis setup
+Now we need to build the cosmosis standard library:
+```bash
+source ${CONDA_PREFIX}/bin/cosmosis-configure
+cd ${CONDA_PREFIX}
+cosmosis-build-standard-library
+# go back to the augur directory
+cd ${AUGUR_DIR}
+```
+
 ### Configure paths necessary for Augur
 We need to let augur know about the location of Firecrown, to do that, run the following command:
 ```bash
@@ -56,14 +68,6 @@ we now need to reload our environment to make the changes effective:
 ```bash
 conda deactivate
 conda activate forecasting
-```
-
-### Cosmosis setup
-Now we need to build the cosmosis standard library:
-```bash
-source ${CONDA_PREFIX}/bin/cosmosis-configure
-cd ${CONDA_PREFIX}
-cosmosis-build-standard-library
 ```
 
 ### Finally install augur
