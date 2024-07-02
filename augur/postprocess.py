@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
 import astropy.table
 from scipy.stats import norm, chi2
+from augur.utils.config_io import parse_config
 import os
 
 
@@ -16,16 +17,14 @@ def postprocess(config):
     config : dict
         The yaml parsed dictional of the input yaml file
     """
+    config = parse_config(config)
     pconfig = config["postprocess"]
-    outdir = config["analyze"]["cosmosis"]["output_dir"]
-    fid_params = config["generate"]["parameters"]
-    var_params = config["analyze"]["cosmosis"]["parameters"]
-    input = os.path.join(outdir, "chain.txt")
-    fisher = np.loadtxt(input)
+    fid_params = config["cosmo"]
+    var_params = config["fisher"]["var_pars"]
+    fisher = np.loadtxt(config["fisher"]["output"])
     npars = fisher.shape[0]
-    keys = astropy.table.Table.read(input, format="ascii").keys()
-    keys = np.array(keys)
-
+    keys = np.array(var_params)
+    outdir = config["postprocess"]["outdir"]
     if "labels" not in pconfig.keys():
         labels = keys
     else:
@@ -39,7 +38,7 @@ def postprocess(config):
         centers = np.zeros(npars)
         ind = 0
         for key in fid_params.keys():
-            if key in var_params.keys():
+            if key in var_params:
                 centers[ind] = fid_params[key]
                 ind += 1
 
@@ -90,8 +89,8 @@ def postprocess(config):
     for i in range(npairplots):
         pair0 = pairplots[2*i].split("(")[1]
         pair1 = pairplots[2*i+1].split(")")[0]
-        key1 = f"params--{pair0.lower()}"
-        key2 = f"params--{pair1.lower()}"
+        key1 = f"{pair0}"
+        key2 = f"{pair1}"
         if (key1 not in keys) or (key2 not in keys):
             # The selected set of parameters is not in the forecast
             continue
@@ -115,8 +114,8 @@ def postprocess(config):
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
 
     # w0 -- wa plots are always made
-    iw = np.where(keys == "params--w0")[0][0]
-    iwa = np.where(keys == "params--wa")[0][0]
+    iw = np.where(keys == "w0")[0][0]
+    iwa = np.where(keys == "wa")[0][0]
     sig_w0 = np.sqrt(inv_cache[iw, iw])
     sig_wa = np.sqrt(inv_cache[iwa, iwa])
     FOM, FOM2 = get_FoM_all(fisher, iw, iwa, CL)

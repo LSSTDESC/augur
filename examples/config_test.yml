@@ -75,7 +75,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : '../data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
@@ -98,7 +98,7 @@ fisher:
     #     n_s: [0.9, 0.9645, 1.0]
     #     #mult_bias: [-0.1 0.0 0.1]
     step: 1e-2
-    output: 'fisher.dat'
+    output: 'output/fisher.dat'
     fisher_bias:
         biased_dv: ''  # Path to file containing modified data vector with the systematic shift to probe
                     # If the file is provided it should be a FITS or ASCII file with the  same binning as the
@@ -109,4 +109,9 @@ fisher:
             lens0_delta_z: 0.01
             src3_delta_z: 0.005
         
-
+postprocess:
+  latex_table: output/latex_table.tex
+  triangle_plot: output/triangle_plot.pdf
+  pairplots: [(w0, wa), (omega_c, sigma8)]
+  outdir: 'output/'
+  CL: 0.68
