@@ -75,7 +75,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : '../data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
