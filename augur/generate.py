@@ -9,7 +9,7 @@ and then convincing it to generate data.
 import numpy as np
 import pyccl as ccl
 import sacc
-from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
+from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, SpecDESI2LOWZ
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from packaging.version import Version
@@ -29,17 +29,24 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
 
-implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
+implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, SpecDESI2LOWZ]
 
 
-def _get_tracers(statistic, comb):
+def _get_tracers(statistic, comb, tracer_types ='lens-lens') :
     """
     Auxiliary function to get the tracers in a given statistic
     in the configuration file.
     """
     if 'galaxy_density_cl' in statistic:
-        tr1 = f'lens{comb[0]}'
-        tr2 = f'lens{comb[1]}'
+        if 'lens-lens' in tracer_types:
+            tr1 = f'lens{comb[0]}'
+            tr2 = f'lens{comb[1]}'
+        elif 'spec-spec' in tracer_types:
+            tr1 = f'spec{comb[0]}'
+            tr2 = f'spec{comb[1]}'
+        elif 'spec-lens' in tracer_types:
+            tr1 = f'spec{comb[0]}'
+            tr2 = f'lens{comb[1]}'
     elif 'galaxy_shear_cl_ee' in statistic:
         tr1 = f'src{comb[0]}'
         tr2 = f'src{comb[1]}'
@@ -98,7 +105,7 @@ def generate_sacc_and_stats(config):
     dndz = {}
     # These are to match the N(z)s from the fits file in the firecrown repo
     z = np.linspace(0.004004004004004004,
-                    4.004004004004004004, 1000)  # z to probe the dndz distribution
+                    4.004004004004004004, 100000)  # z to probe the dndz distribution
     sys_params = {}
     # Set up intrinsic alignment systematics
     if 'ia_class' in src_cfg.keys():
@@ -159,6 +166,53 @@ def generate_sacc_and_stats(config):
             sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
             sys_params[f'{sacc_tracer}_mult_bias'] = mult_bias[i]
 
+    # Read spectroscopic tracers from config file
+    if 'spec' in config.keys():
+        spec_cfg = config['spec']
+        nbins = spec_cfg['nbins']
+        spec_root = 'spec'
+        Nz_centers = eval(spec_cfg['Nz_kwargs']['Nz_center'])
+        spec_cfg['Nz_kwargs'].pop('Nz_center')
+
+        if np.isscalar(Nz_centers):
+            Nz_centers = [Nz_centers]
+            if nbins != 1:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+        else:
+            if len(Nz_centers) != nbins:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+        
+        for i in range(nbins):
+            sacc_tracer = f'{spec_root}{i}'
+            
+            if isinstance(spec_cfg['Nz_type'], list):
+                if eval(spec_cfg['Nz_type'][i]) in implemented_nzs:
+                    dndz[sacc_tracer] = eval(spec_cfg['Nz_type'][i])(z, Nz_center=Nz_centers[i],
+                                                                     Nz_nbins=nbins,
+                                                                     **spec_cfg['Nz_kwargs'])
+                else:
+                    raise NotImplementedError('The selected N(z) is yet not implemented')
+            else:
+                if eval(spec_cfg['Nz_type']) in implemented_nzs:
+                    dndz[sacc_tracer] = eval(spec_cfg['Nz_type'])(z, Nz_center=Nz_centers[i],
+                                                                  Nz_nbins=nbins,
+                                                                  **spec_cfg['Nz_kwargs'])
+                else:
+                    raise NotImplementedError('The selected N(z) is yet not implemented')
+            S.add_tracer('NZ', sacc_tracer, quantity='galaxy_density', z=dndz[sacc_tracer].z, nz=dndz[sacc_tracer].Nz)        
+            # Set up the NumberCounts objects for firecrown
+            # Start by retrieving the bias
+            if 'custom' in spec_cfg['bias_type']:
+                bias = spec_cfg['bias_kwargs']['b']
+                if len(bias) != nbins:
+                    raise ValueError('bias_type==custom requires a bias value per bin')
+                bias = bias[i]
+            else:
+                raise NotImplementedError('bias_type implemented are custom')
+            sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer) #FIXME: see what is happing here
+            sources[sacc_tracer].bias = bias
+            sys_params[f'{sacc_tracer}_bias'] = bias
+
     # Read lenses from config file
     if 'lenses' in config.keys():
         lns_cfg = config['lenses']
@@ -202,7 +256,7 @@ def generate_sacc_and_stats(config):
             # Start by retrieving the bias
             if 'inverse_growth' in lns_cfg['bias_type']:  # b(z) = b0/D+(z)
                 bias = lns_cfg['bias_kwargs']['b0'] / \
-                       ccl.growth_factor(cosmo, 1/(1+dndz[sacc_tracer].zav))
+                        ccl.growth_factor(cosmo, 1/(1+dndz[sacc_tracer].zav))
             elif 'custom' in lns_cfg['bias_type']:  # b(z) = list of values
                 bias = lns_cfg['bias_kwargs']['b']
                 if len(bias) != nbins:
@@ -225,34 +279,66 @@ def generate_sacc_and_stats(config):
     stats = []
     ignore_sc = config['general'].get('ignore_scale_cuts', False)
     for key in stat_cfg.keys():
-        tracer_combs = stat_cfg[key]['tracer_combs']
-        kmax = stat_cfg[key]['kmax']
-        ell_edges = eval(stat_cfg[key]['ell_edges'])
-        ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
-        for comb in tracer_combs:
-            tr1, tr2 = _get_tracers(key, comb)
-            if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
-                zmean1 = dndz[tr1].zav
-                zmean2 = dndz[tr2].zav
-                a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
-                ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                ells_here = ells[ells < ell_max]
-            else:
-                ells_here = ells
-            # Trying to add bandpower windows
-            ells_aux = np.arange(0, np.max(ells_here)+1)
-            wgt = np.zeros((len(ells_aux), len(ells_here)))
-            for i in range(len(ells_here)):
-                in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
-                wgt[in_win, i] = 1.0
-            win = sacc.BandpowerWindow(ells_aux, wgt)
-            S.add_ell_cl(key, tr1, tr2,
-                         ells_here, np.zeros(len(ells_here)), window=win)
+        if key == 'galaxy_density_cl' :
+            for tracer_types in stat_cfg[key].keys():
+                stat_tracer_cfg = stat_cfg[key][tracer_types]
+                tracer_combs = stat_tracer_cfg['tracer_combs']  
+                kmax = stat_tracer_cfg['kmax']
+                ell_edges = eval(stat_tracer_cfg['ell_edges'])
+                ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
+                for comb in tracer_combs:
+                    tr1, tr2 = _get_tracers(key, comb, tracer_types)
+                    if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
+                        zmean1 = dndz[tr1].zav
+                        zmean2 = dndz[tr2].zav
+                        a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
+                        ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
+                        ells_here = ells[ells < ell_max]
+                    else:
+                        ells_here = ells
+                    # Trying to add bandpower windows
+                    ells_aux = np.arange(0, np.max(ells_here)+1)
+                    wgt = np.zeros((len(ells_aux), len(ells_here)))
+                    for i in range(len(ells_here)):
+                        in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
+                        wgt[in_win, i] = 1.0
+                    win = sacc.BandpowerWindow(ells_aux, wgt)
+                    S.add_ell_cl(key, tr1, tr2,
+                                ells_here, np.zeros(len(ells_here)), window=win)
 
-            # Now create TwoPoint objects for firecrown
-            _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
-                                 sacc_data_type=key)
-            stats.append(_aux_stat)
+                    # Now create TwoPoint objects for firecrown
+                    _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
+                                        sacc_data_type=key)
+                    stats.append(_aux_stat)
+        elif key != 'galaxy_density_cl':
+            tracer_combs = stat_cfg[key]['tracer_combs']
+            kmax = stat_cfg[key]['kmax']
+            ell_edges = eval(stat_cfg[key]['ell_edges'])
+            ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
+            for comb in tracer_combs:
+                tr1, tr2 = _get_tracers(key, comb)
+                if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
+                    zmean1 = dndz[tr1].zav
+                    zmean2 = dndz[tr2].zav
+                    a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
+                    ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
+                    ells_here = ells[ells < ell_max]
+                else:
+                    ells_here = ells
+                # Trying to add bandpower windows
+                ells_aux = np.arange(0, np.max(ells_here)+1)
+                wgt = np.zeros((len(ells_aux), len(ells_here)))
+                for i in range(len(ells_here)):
+                    in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
+                    wgt[in_win, i] = 1.0
+                win = sacc.BandpowerWindow(ells_aux, wgt)
+                S.add_ell_cl(key, tr1, tr2,
+                            ells_here, np.zeros(len(ells_here)), window=win)
+
+                # Now create TwoPoint objects for firecrown
+                _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
+                                    sacc_data_type=key)
+                stats.append(_aux_stat)
     S.add_covariance(np.ones_like(S.data))
     sys_params = ParamsMap(sys_params)
     return S, cosmo, stats, sys_params
@@ -335,6 +421,7 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         S.add_ell_cl(st.sacc_data_type, tr1, tr2,
                      st.ells, st.get_theory_vector(),  # Only valid for harmonic space
                      window=win_dict[(tr1, tr2)])
+    S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
@@ -360,6 +447,10 @@ def generate(config, return_all_outputs=False, write_sacc=True):
                 bias_all[trname1] = myst1.statistic.source0.bias
             if 'lens' in trname2:
                 bias_all[trname2] = myst1.statistic.source1.bias
+            if 'spec' in trname1:
+                bias_all[trname1] = myst1.statistic.source0.bias
+            if 'spec' in trname2:
+                bias_all[trname2] = myst1.statistic.source1.bias
         for key in bias_all.keys():
             tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
         tjpcov_config['tjpcov']['sacc_file'] = S
@@ -370,10 +461,17 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
             eval(config['cov_options']['binning_info']['ell_edges'])
         for tr in S.tracers:
-            _, ndens = get_noise_power(config, S, tr, return_ndens=True)
-            tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
+            if 'spec' in tr:
+                ndens = 0.1 #FIXME: Just for test need to change values 
+                tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
+
+            else:  
+                _, ndens = get_noise_power(config, S, tr, return_ndens=True)
+                tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
+        
             if 'src' in tr:
                 tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
+        print(tjpcov_config)
         cov_calc = TJPCovGaus(tjpcov_config)
         if config['general']['ignore_scale_cuts']:
             cov_all = cov_calc.get_covariance()

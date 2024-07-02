@@ -1,6 +1,27 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter, convolve
+from scipy.special import gamma
 
+def gamma_dndz(z, z0, beta, d):
+    """
+    Redshift distribution described in the docs: "https://docs.google.com/presentation/d/1cmspOSFhMx9c2f8EGZT3w-g_eQNDxC01xvrWzGL9ID8/edit#slide=id.g2b173133315_0_12"
+    
+    Parameters:
+    -----------
+    z : float or array
+        Redshift values at which to evaluate the redshift distribution.
+    z0: float
+        Pivot redshift parameter.
+    beta : float
+    	FIXME: see what tha meaning of this parameter
+    d: float
+    	FIXME: see what the meaning of this parameter
+    
+    Returns:
+    dndz: float or array
+    	Redshift distribution evaluated at input redshift z.
+    """
+    return beta/(gamma(d/beta)*z0**d)*z**(d-1)*np.exp(-(z/z0)**beta)
 
 def srd_dndz(z, z0, alpha):
     """
@@ -57,8 +78,39 @@ class ZDist(object):
         self.z = z
         self.Nz = None
         self.zav = None
+    
+
+class SpecDESI2LOWZ(ZDist):
+    """
+    Spec from DESI2 High Density - low-z sample
+    follow this docs: "https://docs.google.com/presentation/d/1cmspOSFhMx9c2f8EGZT3w-g_eQNDxC01xvrWzGL9ID8/edit#slide=id.g2b173133315_0_12"
+    """
+    def __init__(self, z, Nz_center, Nz_width, Nz_nbins, Nz_z0, Nz_beta, Nz_d):
+     """
+        Parameters:
+        -----------
+        z : array
+            Redshift values at which to evaluate the redshift distribution.
+        Nz_nbins : int
+            Number of bins/tracers using this type of tracer.
+        Nz_ibin : int
+            Index of redshift bin considered.
+        Nz_z0 : float
+            z0 parameter of dndz
+        Nz_beta: float
+            beta parameter of dndz
+        Nz_d: float
+       	    d parameter of dndz
+     """
+     super().__init__(z)
+     mask = (self.z > Nz_center- Nz_width / 2) & (self.z < Nz_center + Nz_width / 2)
+     dndz_bin = np.zeros_like(self.z)
+     dndz_bin[mask] = gamma_dndz(self.z[mask], Nz_z0, Nz_beta, Nz_d)
+     self.Nz = dndz_bin
+     self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
 
 
+     
 class LensSRD2018(ZDist):
     """
     Lenses from 2018 SRD
@@ -99,8 +151,7 @@ class LensSRD2018(ZDist):
         else:
             self.Nz = convolve(dndz_bin, gaus_kernel(self.z, Nz_sigmaz*(1+self.z)))
         self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
-
-
+    
 class SourceSRD2018(ZDist):
     """
     Source from 2018 SRD
