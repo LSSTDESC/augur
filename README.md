@@ -27,7 +27,7 @@ Start by creating a new anaconda environment from the `environment.yml` file in 
 conda env create --name forecasting --file=environment.yml
 conda activate forecasting
 ```
-### Or updaing an existing environment
+### Or updating an existing environment
 If you already have an existing environment, you can update it with the following command:
 
 ```bash
