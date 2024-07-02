@@ -16,11 +16,11 @@ or actually inside the augur directory running
 
 ```python setup.py install```
 
-## Step-by-Step Installation
+## Step-by-Step Installation (via conda)
 
 This step-by-step installaion shows you how to get a working environment with `firecrown` and `augur` that you can hack away efficiently.
 
-## Clone the repository
+### Clone the repository
 First clone and enter the `augur` repository:
 ```bash
 git clone git@github.com:LSSTDESC/augur.git
@@ -43,6 +43,36 @@ conda env update --name my_env --file=environment.yml --prune
 ```
 and activate your environment with `conda activate [my_env/forecasting]`.
 
+### Configure paths necessary for Augur
+We need to let augur know about the location of Firecrown, to do that, run the following command:
+```bash
+FIRECROWN_DIR=$(python -c "import firecrown; print('/'.join(firecrown.__spec__.submodule_search_locations[0].split('/')[0:-1]))")
+```
+Now let's set the environment variables that augur needs to know about:
+```bash
+conda env config vars set AUGUR_DIR=${PWD} CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
+```
+we now need to reload our environment to make the changes effective:
+```bash
+conda deactivate
+conda activate forecasting
+```
+
+### Cosmosis setup
+Now we need to build the cosmosis standard library:
+```bash
+source ${CONDA_PREFIX}/bin/cosmosis-configure
+cd ${CONDA_PREFIX}
+cosmosis-build-standard-library
+```
+
+### Finally install augur
+```bash
+cd ${AUGUR_DIR}
+# now install augur via pip in editable mode
+python -m pip install --no-deps --editable ${PWD}
+```
+
 <!-- Next install firecrown and augur.
 
 Install a repo version of firecrown:
@@ -57,27 +87,11 @@ Now run a `pytest` to see if things work.
 
 Next repeat the same with `augur`: -->
 
-### Now install augur:
-
-```
-pip install --no-deps -e .
-```
-
-You are now ready to try a simple forecast as outlined in the next section.
-
-#### Set the Augur directory
-To make sure that Augur can find the configuration files, you need to set the `AUGUR_DIR` environment variable. You can do this by running the following command:
-
-```bash
-conda env config vars set AUGUR_DIR=${PWD}/augur
-```
-
-
 #### Using developer version of Firecrown
 To install and modify the developer version of `firecrown`, follow the instructions [here](https://firecrown.readthedocs.io/en/latest/developer_installation.html).
 
 -----------
-## Installation using Conda
+## Installation using Conda (all in one place)
 
 Because Augur depends upon Firecrown, and Firecrown requires installation using Conda, we use Conda to install Augur.
 ```bash
