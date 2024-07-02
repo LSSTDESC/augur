@@ -20,6 +20,13 @@ or actually inside the augur directory running
 
 This step-by-step installaion shows you how to get a working environment with `firecrown` and `augur` that you can hack away efficiently.
 
+## Clone the repository
+First clone and enter the `augur` repository:
+```bash
+git clone git@github.com:LSSTDESC/augur.git
+cd augur
+```
+
 ### Create a new conda environment
 Start by creating a new anaconda environment from the `environment.yml` file in the `augur` directory:
 
@@ -53,8 +60,6 @@ Next repeat the same with `augur`: -->
 ### Now install augur:
 
 ```
-git clone git@github.com:LSSTDESC/augur.git
-cd augur
 pip install --no-deps -e .
 ```
 
