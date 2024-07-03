@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
-import astropy.table
+from astropy.table import Table
 from scipy.stats import norm, chi2
 from augur.utils.config_io import parse_config
 import os
@@ -19,12 +19,20 @@ def postprocess(config):
     """
     config = parse_config(config)
     pconfig = config["postprocess"]
-    fid_params = config["cosmo"]
+    try:
+        fid_params = Table.read(config["fisher"]["fid_output"], format='ascii')
+    except FileNotFoundError:
+        print("Obtain a fiducial file first by running get_fisher_matrix \
+               or provide your own text file.")
     var_params = config["fisher"]["var_pars"]
-    fisher = np.loadtxt(config["fisher"]["output"])
+    try:
+        fisher = np.loadtxt(config["fisher"]["output"])
+    except FileNotFoundError:
+        print("Obtain a Fisher matrix first via analyze or provide your own text file.")
     npars = fisher.shape[0]
     keys = np.array(var_params)
     outdir = config["postprocess"]["outdir"]
+
     if "labels" not in pconfig.keys():
         labels = keys
     else:
@@ -119,10 +127,10 @@ def postprocess(config):
     sig_w0 = np.sqrt(inv_cache[iw, iw])
     sig_wa = np.sqrt(inv_cache[iwa, iwa])
     FOM, FOM2 = get_FoM_all(fisher, iw, iwa, CL)
-    fisher_table = astropy.table.Table([[CL], [FOM], [FOM2], [sig_w0], [sig_wa]],
-                                       names=("CL", "FoM", "FoM (alt.)",
-                                              "sigma_w0", "sigma_wa"))
-    fisher_table.write(pconfig["latex_table"], format="latex")
+    fisher_table = Table([[CL], [FOM], [FOM2], [sig_w0], [sig_wa]],
+                         names=("CL", "FoM", "FoM (alt.)",
+                                "sigma_w0", "sigma_wa"))
+    fisher_table.write(pconfig["latex_table"], format="latex", overwrite=True)
 
 
 def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidth,
