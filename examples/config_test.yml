@@ -112,6 +112,9 @@ fisher:
 postprocess:
   latex_table: output/latex_table.tex
   triangle_plot: output/triangle_plot.pdf
+  facecolor: blue
   pairplots: [(w0, wa), (omega_c, sigma8)]
   outdir: 'output/'
-  CL: 0.68
+  CL: 
+    - 0.68
+    - 0.95
