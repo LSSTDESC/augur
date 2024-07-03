@@ -70,7 +70,8 @@ def postprocess(config):
             for cl in CL:
                 sig0, sig1 = draw_fisher_ellipses(ax[j, i], inv_fisher, facecolors,
                                                   edgecolors, ls, lw,
-                                                  mu=(centers[i], centers[j]), CL=cl, alpha=alpha_count)
+                                                  mu=(centers[i], centers[j]),
+                                                  CL=cl, alpha=alpha_count)
                 alpha_count -= 0.4
             # Create the 1D histogram for i, i
             if j == i+1:
@@ -112,7 +113,7 @@ def postprocess(config):
             for cl in CL:
                 sig0, sig1 = draw_fisher_ellipses(ax, inv_fisher, facecolors,
                                                   edgecolors, ls, lw,
-                                                  mu=(centers[ii], centers[jj]), CL=cl, 
+                                                  mu=(centers[ii], centers[jj]), CL=cl,
                                                   alpha=alpha_count)
                 alpha_count -= 0.4
             ax.set_xlim(-sig0+centers[ii], sig0+centers[ii])
@@ -139,16 +140,12 @@ def postprocess(config):
     # Find indices for w0 and wa
     iw = np.where(keys == "w0")[0][0]
     iwa = np.where(keys == "wa")[0][0]
-
-    # Temporary list to hold row data
-    row_data = []
-
     # Iterate over each CL value
     for cl in CL:
         sig_w0 = np.sqrt(inv_cache[iw, iw])
         sig_wa = np.sqrt(inv_cache[iwa, iwa])
         FOM, FOM2 = get_FoM_all(fisher, iw, iwa, cl)
-        
+
         fisher_table.add_row([cl, FOM, FOM2, sig_w0, sig_wa])
 
     # Write the table to a LaTeX file
