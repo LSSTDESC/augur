@@ -16,11 +16,17 @@ sources:  # Sources
     nbins : 5
     ndens : 10  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
     ellipticity_error : 0.26
-    Nz_type : 'SourceSRD2018'  # For now, this is the assumed N(z) for sources -- check SRD 2018
-    Nz_kwargs :  # keyword arguments for SourceSRD2018 class -- can allow easy generalizations for the future
-        Nz_alpha : 0.78
-        Nz_z0 : 0.13
-        Nz_sigmaz : 0.05
+    
+    # Nz_type : 'SourceSRD2018'  # For now, this is the assumed N(z) for sources -- check SRD 2018
+    # Nz_kwargs :  # keyword arguments for SourceSRD2018 class -- can allow easy generalizations for the future
+       # Nz_alpha : 0.78
+       # Nz_z0 : 0.13
+       # Nz_sigmaz : 0.05
+    Nz_type : 'ZDistFromFile'
+    Nz_kwargs : 
+        input_file : 'data/srd_source_bins_y1.txt'
+        format : 'ascii'
+        # input_file : 'data/srd_source_bins_year_1.npy'
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
@@ -32,17 +38,22 @@ sources:  # Sources
 lenses :  # Lenses
     nbins : 5
     ndens : 18  # in arcmin^-2, same convention as for sources
-    Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
     delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
-    Nz_kwargs :  # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
-        Nz_width : 0.2  # Photo-z bin-width
-        Nz_center : np.arange(1, 6)*0.2 + 0.1  # Photo-z bin centers (it can be a list of values or some np array)
-        Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
-        Nz_alpha : 0.94  # N(z) alpha parameter
-        Nz_z0 : 0.26  # N(z) z-pivot
-    #bias_type : 'inverse_growth'  # Inverse growth bias or custom
-    #bias_kwargs : 
-    #    b0 : 1.33  # Reverse engineeering the bias values from the SRD
+    Nz_type : 'ZDistFromFile'
+    Nz_kwargs : 
+        input_file : 'data/srd_lens_bins_y1.txt'
+        format : 'ascii'
+        # input_file : 'data/srd_lens_bins_year_1.npy'
+    # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
+    # Nz_kwargs :  # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
+    #     Nz_width : 0.2  # Photo-z bin-width
+    #     Nz_center : np.arange(1, 6)*0.2 + 0.1  # Photo-z bin centers (it can be a list of values or some np array)
+    #     Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
+    #     Nz_alpha : 0.94  # N(z) alpha parameter
+    #     Nz_z0 : 0.26  # N(z) z-pivot
+    # bias_type : 'inverse_growth'  # Inverse growth bias or custom
+    # bias_kwargs : 
+    #     b0 : 1.33  # Reverse engineeering the bias values from the SRD
     # Another option is to use the `custom` bias type, but it requires a value per bin
     bias_type : 'custom'
     bias_kwargs :
