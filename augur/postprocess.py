@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
-import astropy.table
+from astropy.table import Table
 from scipy.stats import norm, chi2
 from augur.utils.config_io import parse_config
 import os
@@ -19,12 +19,20 @@ def postprocess(config):
     """
     config = parse_config(config)
     pconfig = config["postprocess"]
-    fid_params = config["cosmo"]
+    try:
+        fid_params = Table.read(config["fisher"]["fid_output"], format='ascii')
+    except FileNotFoundError:
+        print("Obtain a fiducial file first by running get_fisher_matrix \
+               or provide your own text file.")
     var_params = config["fisher"]["var_pars"]
-    fisher = np.loadtxt(config["fisher"]["output"])
+    try:
+        fisher = np.loadtxt(config["fisher"]["output"])
+    except FileNotFoundError:
+        print("Obtain a Fisher matrix first via analyze or provide your own text file.")
     npars = fisher.shape[0]
     keys = np.array(var_params)
     outdir = config["postprocess"]["outdir"]
+
     if "labels" not in pconfig.keys():
         labels = keys
     else:
@@ -46,7 +54,7 @@ def postprocess(config):
     ls = pconfig["linestyle"] if "linestyle" in pconfig.keys() else "-"
     edgecolors = pconfig["linecolor"] if "linecolor" in pconfig.keys() else "k"
     facecolors = pconfig["facecolor"] if "facecolor" in pconfig.keys() else "none"
-    CL = pconfig["CL"] if "CL" in pconfig else [0.68,]
+    CL = pconfig["CL"] if "CL" in pconfig.keys() else [0.68,]
     if not isinstance(CL, list):
         CL = [CL,]
     f, ax = plt.subplots(npars, npars, figsize=(xsize, ysize))

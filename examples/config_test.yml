@@ -99,6 +99,7 @@ fisher:
     #     #mult_bias: [-0.1 0.0 0.1]
     step: 1e-2
     output: 'output/fisher.dat'
+    fid_output: 'output/fiducials.dat'
     fisher_bias:
         biased_dv: ''  # Path to file containing modified data vector with the systematic shift to probe
                     # If the file is provided it should be a FITS or ASCII file with the  same binning as the
