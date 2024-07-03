@@ -143,7 +143,7 @@ def postprocess(config):
     # fisher_table.write(pconfig["latex_table"], format="latex")
     # Initialize table with column names only
     column_names = ["CL", "FoM", "FoM (alt.)", "sigma_w0", "sigma_wa"]
-    fisher_table = astropy.table.Table(names=column_names)
+    fisher_table = Table(names=column_names)
 
     # Find indices for w0 and wa
     iw = np.where(keys == "w0")[0][0]
