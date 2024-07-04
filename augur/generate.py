@@ -10,6 +10,7 @@ import numpy as np
 import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, SpecDESI
+from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from packaging.version import Version
@@ -29,7 +30,7 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
 
-implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, SpecDESI]
+implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, SpecDESI, ZDistFromFile]
 
 
 def _get_tracers(statistic, comb, tracer_types ='lens-lens') :
@@ -96,15 +97,22 @@ def generate_sacc_and_stats(config):
     """
 
     config = parse_config(config)
+
+    # Initialize cosmology
     cosmo_cfg = config['cosmo']
-    transfer_function = cosmo_cfg.get('transfer_function', 'boltzmann_camb')
-    extra_parameters = cosmo_cfg.get('extra_parameters', dict())
-    # Set up ccl.Cosmology object
-    cosmo = ccl.Cosmology(Omega_b=cosmo_cfg['Omega_b'],
-                          Omega_c=cosmo_cfg['Omega_c'],
-                          n_s=cosmo_cfg['n_s'], sigma8=cosmo_cfg['sigma8'],
-                          h=cosmo_cfg['h'], transfer_function=transfer_function,
-                          extra_parameters=extra_parameters)
+
+    if cosmo_cfg.get("transfer_function") is None:
+        cosmo_cfg['transfer_function'] = 'boltzmann_camb'
+
+    if cosmo_cfg.get('extra_parameters') is None:
+        cosmo_cfg['extra_parameters'] = dict()
+
+    try:
+        cosmo = ccl.Cosmology(**cosmo_cfg)
+    except (KeyError, TypeError, ValueError) as e:
+        print('Error in cosmology configuration. Check the config file.')
+        # Reraise the exception to see the full traceback
+        raise e
 
     # First we generate the placeholder SACC file with the correct N(z) and ell-binning
     # TODO add real-space
@@ -151,14 +159,22 @@ def generate_sacc_and_stats(config):
             sacc_tracer = f'{src_root}{i}'
             if isinstance(src_cfg['Nz_type'], list):
                 if eval(src_cfg['Nz_type'][i]) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins, Nz_ibin=i,
-                                                                    **src_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in src_cfg['Nz_type'][i]:
+                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins,
+                                                                        Nz_ibin=i,
+                                                                        **src_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             else:
                 if eval(src_cfg['Nz_type']) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins, Nz_ibin=i,
-                                                                 **src_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in src_cfg['Nz_type']:
+                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins,
+                                                                     Nz_ibin=i,
+                                                                     **src_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
@@ -235,16 +251,17 @@ def generate_sacc_and_stats(config):
         lns_cfg = config['lenses']
         nbins = lns_cfg['nbins']
         lns_root = 'lens'
-        Nz_centers = eval(lns_cfg['Nz_kwargs']['Nz_center'])
-        lns_cfg['Nz_kwargs'].pop('Nz_center')
+        if 'Nz_center' in lns_cfg['Nz_kwargs'].keys():
+            Nz_centers = eval(lns_cfg['Nz_kwargs']['Nz_center'])
+            lns_cfg['Nz_kwargs'].pop('Nz_center')
 
-        if np.isscalar(Nz_centers):
-            Nz_centers = [Nz_centers]
-            if nbins != 1:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
-        else:
-            if len(Nz_centers) != nbins:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
+            if np.isscalar(Nz_centers):
+                Nz_centers = [Nz_centers]
+                if nbins != 1:
+                    raise ValueError('Nz_centers should have the same length as the number of bins')
+            else:
+                if len(Nz_centers) != nbins:
+                    raise ValueError('Nz_centers should have the same length as the number of bins')
         # Checking if there's photo-z shift systematics in the config
         if 'delta_z' in lns_cfg.keys():
             if np.isscalar(lns_cfg['delta_z']):
@@ -256,16 +273,24 @@ def generate_sacc_and_stats(config):
             sacc_tracer = f'{lns_root}{i}'
             if isinstance(lns_cfg['Nz_type'], list):
                 if eval(lns_cfg['Nz_type'][i]) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z, Nz_center=Nz_centers[i],
-                                                                    Nz_nbins=nbins,
-                                                                    **lns_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in lns_cfg['Nz_type'][i]:
+                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z,
+                                                                        Nz_center=Nz_centers[i],
+                                                                        Nz_nbins=nbins,
+                                                                        **lns_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             else:
                 if eval(lns_cfg['Nz_type']) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z, Nz_center=Nz_centers[i],
-                                                                 Nz_nbins=nbins,
-                                                                 **lns_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in lns_cfg['Nz_type']:
+                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z,
+                                                                     Nz_center=Nz_centers[i],
+                                                                     Nz_nbins=nbins,
+                                                                     **lns_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)

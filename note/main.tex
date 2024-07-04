@@ -1,0 +1,133 @@
+%                                                                                                                                                   
+\RequirePackage{docswitch}
+\setjournal{\flag}
+
+%\documentclass[\docopts]{\docclass}
+\documentclass[modern]{lsstdescnote}
+
+% You could define the document class directly                                                                                                      
+%\documentclass[]{emulateapj}                                                                                                                       
+
+%\input{macros}
+
+\usepackage[outdir=./]{epstopdf}
+\usepackage{graphicx,verbatim}
+\usepackage{xspace}
+\usepackage{desc-tex/styles/lsstdesc_macros}
+
+\graphicspath{{./}{./figures/}}
+%\bibliographystyle{apj}
+\newcommand{\todo}[1]{\textcolor{magenta}{To do: #1}}
+\newcommand{\mrm}[1]{\mathrm{#1}}
+\newcommand{\augur}{{\tt Augur}\xspace}
+\newcommand{\CC}{C\nolinebreak\hspace{-.05em}\raisebox{.3ex}{\footnotesize +}\nolinebreak\hspace{-.10em}\raisebox{.3ex}{\footnotesize +}}
+
+
+\begin{document}
+
+\title{{\tt Augur}: a forecasting tool for LSST DESC}
+
+\maketitlepre
+
+\begin{abstract}
+  This document describes the forecasting formalism underlying the {\tt augur} code. This is used for determining modelling choices and constraining power of multi-probe combinations of LSST data.
+  {\tt augur} has two forecasting modalities: direct likelihood sampling or Fisher forecasting.
+  For the Fisher forecasting scenario, we describe the specific implementation of: expected uncertainties and ellipse contours for pairs of parameters; expected biases in presence of unknown systematics; model choice citeria.
+  For now, {\tt augur} only works for 3x2pt probes.
+\end{abstract}
+
+\maketitlepost
+
+\newpage
+\tableofcontents{}
+\newpage
+
+
+\section{Introduction - The Fisher formalism}
+Once raw data have been obtained and compressed into maps, a theoretical model is chosen 
+to be analyzed. In a $3\times 2$-pt analysis the corresponding two-point functions and the covariance matrix are calculated;
+Finally, combining the above ingredients, and possibly multiple probes, the likelihood can be computed.
+In order to find the best-fit parameters and corresponding fiducial contours, a sampler is used to compute the likelihood 
+for many sets of parameters. One can sense that finding the maximum of the likelihood must be achieved numerically.
+However, this is computationally demanding: if the cosmological model under consideration includes say 20 free parameters,
+then the required number of likelihood evaluations would be $20^{20}$. Algorithms have been developed to achieve this (e.g., the MCMC).\\
+Otherwise, there is the possibility, in a forecasting phase, when data are not available yet, to employ the Fisher 
+foremalism to approximately predict the expcted error bars. This constitutes a computationally inexpensive way
+to predict the uncertainties that the measurements will carry out.
+
+\section{How to obtain errors and contours from Fisher matrices}
+It is possible to obtain the errors from the Fisher matrices by considering that, under certain conditions,
+the Fisher matrix is the inverse of the covariance matrix.
+For instance, in the simple case of a one-parameter space, the $1\sigma$ uncertainty on $\theta$ (square root of the covariance) is $1/\sqrt{F}$, while in a two-parameter space we have 
+\begin{equation}
+[F]^{-1}=[C]=\left[\begin{array}{cc}
+\sigma_{x}^{2} & \sigma_{x y} \\
+\sigma_{x y} & \sigma_{y}^{2}
+\end{array}\right].
+\end{equation}
+
+In particular, we can distinguish two cases.
+On one hand, if we assume to have perfect knowledge of the parameter $\theta_2$, then the error on $\theta_1$ is given by $1/\sqrt{F_{11}}$. 
+On the other hand, if $\theta_2$ can vary freely, then the proper error on $\theta_1$ can be obtained only after
+marginalizing over all possible values of $\theta_2$.
+Then the resulting error on $\theta_1$ will be given by $\sqrt{\left(F^{-1}\right)_{11}}$ (according to the above equation). 
+These results can be easily generalized to the case of a higher-dimensional parameter space.
+
+Moreover, it is possible to obtain fiducial ellipses by considering
+that the ellipse parameters are related to the Fisher matrix elements by the following relations
+\begin{align}
+  a^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}+\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  b^{2} &=\frac{\sigma_{x}^{2}+\sigma_{y}^{2}}{2}-\sqrt{\frac{\left(\sigma_{x}^{2}-\sigma_{y}^{2}\right)^{2}}{4}+\sigma_{x y}^{2}} \\
+  \tan 2 \theta &=\frac{2 \sigma_{x y}}{\sigma_{x}^{2}-\sigma_{y}^{2}},
+\end{align}
+where $a$ and $b$ are the axis lengths and $\theta$ the inclination angle.
+
+\section{Methods}
+\subsection{Fisher Bias}
+Our goal is to determine the bias in some of the cosmological parameters caused by systematics effects. 
+Systematic errors are not random, but instead they will replicate when an experiment is repeated under the same conditions.
+One possible source of such errors are imperfect theoretical models. In paritcular, imperfect modelling choices 
+can happen, for instance, when we neglect or wrongly model effects that are instead present in the real universe.\\
+
+We now introduce the equation that allows to compute the bias in a certain cosmological parameter $\theta_i$ in the most general way. 
+The bias is expressed in terms of the inverse of the Fisher matrix, $(\boldsymbol{F})^{-1}_{ij}$, the inverse of the covariance matrix, $\boldsymbol{C_A}^{-1}$, and in terms of the difference between the data vector
+corresponding to a fiducial model (assumed to provide a suitable description for the Universe), $\boldsymbol{D}^{\mathrm{true}}$, and the one of the model being analyzed, $\boldsymbol{D}^{\mathrm{model}}$.
+We notice that the Fisher matrix is evaluated at the fiducial values of the cosmological parameters under consideration.
+
+\begin{align}
+  \begin{split}
+  b\left[\hat{\theta}_{i}\right]&=\left(\boldsymbol{F}^{-1}\right)_{i j} \Tilde{\boldsymbol{B}}_{j}\\
+  &=\left(\boldsymbol{F}^{-1}\right)_{i j}\sum_{\ell}\left[\boldsymbol{D}^{\mathrm{true}}-\boldsymbol{D}^{\mathrm{model}}(\boldsymbol{\theta})\right](\boldsymbol{\ell})\boldsymbol{C_A}^{-1}(\boldsymbol{\ell})\left(\dfrac{d\boldsymbol{D}^{\mathrm{model}}}{d\theta_j}(\boldsymbol{\ell})\right).
+  \end{split}
+  \end{align}
+
+
+\subsection{Model selection}
+
+One can apply model selection criteria in a forecasting phase in order to study an experiment's ability to carry out model selection tests. For instance, if we consider an experiment aimed at obtaining information on dark energy, we could use model selection techniques to predict whether or not, with our experiment, we will be able to distinguish, say, the $w$CDM from the $\Lambda$CDM model.
+
+The natural question that now arises regards the possible criteria to select models. Although there are quite a few, they are all expressed in terms of the likelihood, which is computationally demanding. Thus, we focus on the Bayes factor as it is possible to express it in terms of the Fisher matrix only. We would like to implement such expression in {\tt augur} as it is computationally inexpensive and can provide interesting information.
+
+The Bayes factor is defined as the ratio of the evidences (marginzalized likelihoods) of the two models under consideration.
+In this way, although a complicated model will lead to a higher likelihood (or at least as high) with respect to a simpler/nested model, the evidence will favour the simpler model (provided that the fit is nearly as good), thanks to the smaller prior volume.  Then, computing the ratio between the evidences of two models will automatically disfavor complex models involving many parameters.
+
+With this in mind, we now present the equation to compute the Bayes factor in a 2-dimensional parameter space (for nested models). It is expressed in terms of the Fisher matrix $F$ and the prior knowledge
+on each parameter (encoded in the ranges $\Delta \theta_{1}$ and $\Delta \theta_{2}$, respectively). 
+\begin{equation}
+  \langle B\rangle=\frac{\Delta \theta_{1} \Delta \theta_{2}}{2 \pi \sqrt{\operatorname{det} F^{-1}}} \mathrm{e}^{-(1 / 2) \sum_{\alpha \beta}\left(\theta_{\alpha}-\theta_{\alpha}^{*}\right) F_{\alpha \beta}\left(\theta_{\beta}-\theta_{\beta}^{*}\right)}
+\end{equation}
+
+
+\section{Validation}
+
+TBC
+
+
+%\input{acknowledgments}
+
+\input{desc-tex/ack/standard}
+
+\input{contributions}
+
+
+\end{document}

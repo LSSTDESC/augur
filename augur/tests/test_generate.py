@@ -1,5 +1,7 @@
+from pathlib import Path
 from augur.generate import generate
 
 
 def test_generate():
-    generate('./examples/config_test.yml')
+    base_path = Path(__file__).parent
+    generate(f'{base_path}/test.yaml')

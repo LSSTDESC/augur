@@ -4,6 +4,7 @@ from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
 from augur.utils.config_io import parse_config
 from firecrown.parameters import ParamsMap
+from astropy.table import Table
 
 
 class Analyze(object):
@@ -181,12 +182,16 @@ class Analyze(object):
         else:
             return self.derivatives
 
-    def get_fisher_matrix(self, method='5pt_stencil'):
+    def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
             self.get_derivatives(method=method)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
+            if save_txt:
+                np.savetxt(self.config['output'], self.Fij)
+                tab_out = Table(self.x.T, names=self.var_pars)
+                tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
             return self.Fij
         else:
             return self.Fij
