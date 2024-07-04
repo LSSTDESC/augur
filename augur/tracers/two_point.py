@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from scipy.ndimage import gaussian_filter, convolve
 
 
@@ -22,7 +23,7 @@ def srd_dndz(z, z0, alpha):
     dndz: float or array.
         Redshift distribution evaluated at input redshift z.
     """
-    return z**2*np.exp(-(z/z0)**alpha)
+    return (z/z0)**2.*np.exp(-(z/z0)**alpha)
 
 
 def gaus_kernel(z, sig_z):
@@ -44,6 +45,27 @@ def gaus_kernel(z, sig_z):
     z_samp = np.linspace(-10*np.max(sig_z), 10*np.max(sig_z), len(z))
     return 1./np.sqrt(2*np.pi*sig_z**2)*np.exp(-0.5*z_samp**2/sig_z**2)
 
+def equal_density_zbins(z, nz, nbins):
+    """
+    This function takes a redshift distribution and returns the redshift bins
+    that contain equal number of galaxies.
+
+    Parameters:
+    -----------
+    z : array
+        Redshift values at which to evaluate the redshift distribution.
+    nz : array
+        Redshift distribution.
+    nbins : int
+        Number of redshift bins.
+    """
+    # based on N. Tessore's cumtrapz method implemented in Glass
+    cuml_nz = np.empty_like(nz)
+    np.cumsum((nz[..., 1:] + nz[..., :-1])/2*np.diff(z), axis=-1, out=cuml_nz[..., 1:])
+    cuml_nz[..., 0] = 0
+    cuml_nz /= cuml_nz[-1]
+    zbinedges = np.interp(np.linspace(0, 1, nbins+1), cuml_nz, z)
+    return list(zip(zbinedges, zbinedges[1:]))
 
 class ZDist(object):
     """
@@ -100,13 +122,12 @@ class LensSRD2018(ZDist):
             self.Nz = convolve(dndz_bin, gaus_kernel(self.z, Nz_sigmaz*(1+self.z)))
         self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
 
-
 class SourceSRD2018(ZDist):
     """
-    Source from 2018 SRD
+    Source from 2018 SRD, benchmarked against Paul Rogozenski's notebook
     """
     def __init__(self, z, Nz_nbins, Nz_sigmaz, Nz_ibin,
-                 Nz_alpha=0.78, Nz_z0=0.13, use_filter=True):
+                 Nz_alpha=0.78, Nz_z0=0.13):
         """
         Parameters:
         -----------
@@ -122,29 +143,26 @@ class SourceSRD2018(ZDist):
             alpha parameter of srd_dndz.
         Nz_z0 : float
             z0 parameter of srd_dndz.
-        use_filter : bool
-            If `True` it uses scipy.ndimage.gaussian_filter to distort the N(z).
-            If `False` it convolves by a Gaussian kernel (as defined in gaus_kernel).
-            The defaut (True) reproduces the distributions from the SRD.
         """
         super().__init__(z)
-        tile_hi = 1.0 / Nz_nbins * (Nz_ibin + 1)
-        tile_low = 1.0 / Nz_nbins * Nz_ibin
-        nz_sum = np.cumsum(srd_dndz(self.z, Nz_z0, Nz_alpha))
-        nz_sum /= np.sum(srd_dndz(self.z, Nz_z0, Nz_alpha))
-        zlow = self.z[np.argmin(np.fabs(nz_sum - tile_low))]
-        zhi = self.z[np.argmin(np.fabs(nz_sum - tile_hi))]
-        mask = (self.z >= zlow) & (self.z <= zhi)
-        dndz_bin = np.zeros_like(self.z)
-        dndz_bin[mask] = srd_dndz(self.z[mask], Nz_z0, Nz_alpha)
-        if use_filter:
-            zcent = 0.2 * Nz_ibin + 0.25  # Start at z=0.2 -- Caution!! this is hacky
-            dz = self.z[1] - self.z[0]
-            self.Nz = gaussian_filter(dndz_bin, Nz_sigmaz*(1+zcent)/dz)
-        else:
-            self.Nz = convolve(dndz_bin, gaus_kernel(self.z, Nz_sigmaz*(1+self.z)))
-        self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
+        dndz = srd_dndz(self.z, Nz_z0, Nz_alpha)
+        zbins = equal_density_zbins(self.z, dndz, Nz_nbins)
+        # Based on A. Loureiro's implementation in Glass
+        zbins_arr = np.asanyarray(zbins)
+        z_high = zbins_arr[:, 1, np.newaxis]
+        z_low = zbins_arr[:, 0, np.newaxis]
+        # vectorises the erf function:
 
+        erf_vec = np.vectorize(math.erf, otypes=(float,))
+        sz = 2**0.5*Nz_sigmaz*(1+ self.z)
+        binned_nz = erf_vec((z - z_low)/sz)
+        binned_nz -= erf_vec((z - z_high)/sz)
+        binned_nz /= 1 + erf_vec(z / sz)
+        binned_nz *= dndz
+        # FIXME: this function is vectorised but the generate.py loop is not
+        # FIXME: so I am generating all the bins but only using one at the time
+        self.Nz = binned_nz[Nz_ibin]
+        self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
 
 class TopHat(ZDist):
     """
