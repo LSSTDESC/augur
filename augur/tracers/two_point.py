@@ -221,3 +221,34 @@ class WLSource(object):
         dict_out = self.__dict__
         dict_out['kind'] = 'WLSource'
         return dict_out
+
+
+class ZDistFromFile(ZDist):
+    """
+    Class to pass an arbitrary redshift distribution to a tracer
+    """
+    def __init__(self, input_file, ibin=None, format='npy', **kwargs):
+        """
+        Parameters:
+        -----------
+        input_file : str
+            Path to input file with z and dndz
+        """
+        if 'npy' in format:
+            data = np.load(input_file, allow_pickle=True)
+            self.z = data[()]['redshift_range']
+            if ibin is None:
+                raise ValueError('Expected bin number for this format')
+            else:
+                self.Nz = data[()]['bins'][ibin]
+        elif 'ascii' in format:
+            data = np.loadtxt(input_file)
+            self.z = data[:, 0]
+            if ibin is None:
+                self.Nz = data[:, 1]
+            else:
+                self.Nz = data[:, ibin+1]
+        else:
+            raise NotImplementedError('Only ascii files or npy files are currently supported')
+
+        self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))

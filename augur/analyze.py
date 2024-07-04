@@ -191,7 +191,7 @@ class Analyze(object):
             if save_txt:
                 np.savetxt(self.config['output'], self.Fij)
                 tab_out = Table(self.x.T, names=self.var_pars)
-                tab_out.write(self.config['fid_output'], format='ascii')
+                tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
             return self.Fij
         else:
             return self.Fij
