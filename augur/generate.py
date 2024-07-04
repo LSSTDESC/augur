@@ -9,7 +9,7 @@ and then convincing it to generate data.
 import numpy as np
 import pyccl as ccl
 import sacc
-from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, SpecDESI2LOWZ
+from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, SpecDESI
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from packaging.version import Version
@@ -29,7 +29,7 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
 
-implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, SpecDESI2LOWZ]
+implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, SpecDESI]
 
 
 def _get_tracers(statistic, comb, tracer_types ='lens-lens') :
@@ -41,11 +41,23 @@ def _get_tracers(statistic, comb, tracer_types ='lens-lens') :
         if 'lens-lens' in tracer_types:
             tr1 = f'lens{comb[0]}'
             tr2 = f'lens{comb[1]}'
-        elif 'spec-spec' in tracer_types:
-            tr1 = f'spec{comb[0]}'
-            tr2 = f'spec{comb[1]}'
-        elif 'spec-lens' in tracer_types:
-            tr1 = f'spec{comb[0]}'
+        elif 'spec_bgs-spec_bgs' in tracer_types:
+            tr1 = f'spec_bgs{comb[0]}'
+            tr2 = f'spec_bgs{comb[1]}'
+        elif 'spec_lrg-spec_lrg' in tracer_types:
+            tr1 = f'spec_lrg{comb[0]}'
+            tr2 = f'spec_lrg{comb[1]}'
+        elif 'spec_elg-spec_elg' in tracer_types:
+            tr1 = f'spec_elg{comb[0]}'
+            tr2 = f'spec_elg{comb[1]}'
+        elif 'spec_bgs-lens' in tracer_types:
+            tr1 = f'spec_bgs{comb[0]}'
+            tr2 = f'lens{comb[1]}'
+        elif 'spec_lrg-lens' in tracer_types:
+            tr1 = f'spec_lrg{comb[0]}'
+            tr2 = f'lens{comb[1]}'
+        elif 'spec_elg-lens' in tracer_types:
+            tr1 = f'spec_elg{comb[0]}'
             tr2 = f'lens{comb[1]}'
     elif 'galaxy_shear_cl_ee' in statistic:
         tr1 = f'src{comb[0]}'
@@ -168,50 +180,55 @@ def generate_sacc_and_stats(config):
 
     # Read spectroscopic tracers from config file
     if 'spec' in config.keys():
-        spec_cfg = config['spec']
-        nbins = spec_cfg['nbins']
-        spec_root = 'spec'
-        Nz_centers = eval(spec_cfg['Nz_kwargs']['Nz_center'])
-        spec_cfg['Nz_kwargs'].pop('Nz_center')
-
-        if np.isscalar(Nz_centers):
-            Nz_centers = [Nz_centers]
-            if nbins != 1:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
-        else:
-            if len(Nz_centers) != nbins:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
-        
-        for i in range(nbins):
-            sacc_tracer = f'{spec_root}{i}'
+        sconfig = config['spec']
+        for key in sconfig.keys():
+            spec_cfg = sconfig[key]
+            nbins = spec_cfg['nbins']
+            spec_root = key
+            Nz_centers = eval(spec_cfg['Nz_kwargs']['Nz_center'])
+            spec_cfg['Nz_kwargs'].pop('Nz_center')
+            if np.isscalar(Nz_centers):
+                Nz_centers = [Nz_centers]
+                if nbins != 1:
+                    raise ValueError('Nz_centers should have the same length as the number of bins')
+            else:
+                if len(Nz_centers) != nbins:
+                    raise ValueError('Nz_centers should have the same length as the number of bins')
             
-            if isinstance(spec_cfg['Nz_type'], list):
-                if eval(spec_cfg['Nz_type'][i]) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(spec_cfg['Nz_type'][i])(z, Nz_center=Nz_centers[i],
-                                                                     Nz_nbins=nbins,
-                                                                     **spec_cfg['Nz_kwargs'])
+            for i in range(nbins):
+                sacc_tracer = f'{spec_root}{i}'
+
+                if isinstance(spec_cfg['Nz_type'], list):
+                    if eval(spec_cfg['Nz_type'][i]) in implemented_nzs:
+                        dndz[sacc_tracer] = eval(spec_cfg['Nz_type'][i])(z, type=key, Nz_center=Nz_centers[i],
+                                                                        **spec_cfg['Nz_kwargs'])
+                    else:
+                        raise NotImplementedError('The selected N(z) is yet not implemented')
                 else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            else:
-                if eval(spec_cfg['Nz_type']) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(spec_cfg['Nz_type'])(z, Nz_center=Nz_centers[i],
-                                                                  Nz_nbins=nbins,
-                                                                  **spec_cfg['Nz_kwargs'])
+                    if eval(spec_cfg['Nz_type']) in implemented_nzs:
+                        dndz[sacc_tracer] = eval(spec_cfg['Nz_type'])(z, type=key, Nz_center=Nz_centers[i],
+                                                                    **spec_cfg['Nz_kwargs'])
+                    else:
+                        raise NotImplementedError('The selected N(z) is yet not implemented')
+                S.add_tracer('NZ', sacc_tracer, quantity='galaxy_density', z=dndz[sacc_tracer].z, nz=dndz[sacc_tracer].Nz)        
+                # Set up the NumberCounts objects for firecrown
+                # Start by retrieving the bias
+                if 'custom' in spec_cfg['bias_type']:
+                    bias = spec_cfg['bias_kwargs']['b']
+                    if len(bias) != nbins:
+                        raise ValueError('bias_type==custom requires a bias value per bin')
+                    bias = bias[i]
+                elif 'inverse_growth' in spec_cfg['bias_type']:             
+                    if key == 'spec_bgs':
+                        bias = 1/(ccl.growth_factor(cosmo, 1/(1+dndz[sacc_tracer].zav))**2.5)
+                    else:
+                        bias = spec_cfg['bias_kwargs']['b0'] / \
+                            ccl.growth_factor(cosmo, 1/(1+dndz[sacc_tracer].zav))
                 else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            S.add_tracer('NZ', sacc_tracer, quantity='galaxy_density', z=dndz[sacc_tracer].z, nz=dndz[sacc_tracer].Nz)        
-            # Set up the NumberCounts objects for firecrown
-            # Start by retrieving the bias
-            if 'custom' in spec_cfg['bias_type']:
-                bias = spec_cfg['bias_kwargs']['b']
-                if len(bias) != nbins:
-                    raise ValueError('bias_type==custom requires a bias value per bin')
-                bias = bias[i]
-            else:
-                raise NotImplementedError('bias_type implemented are custom')
-            sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer) #FIXME: see what is happing here
-            sources[sacc_tracer].bias = bias
-            sys_params[f'{sacc_tracer}_bias'] = bias
+                    raise NotImplementedError('bias_type implemented are custom')
+                sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer) #FIXME: see what is happing here
+                sources[sacc_tracer].bias = bias
+                sys_params[f'{sacc_tracer}_bias'] = bias
 
     # Read lenses from config file
     if 'lenses' in config.keys():

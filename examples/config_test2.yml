@@ -1,0 +1,141 @@
+general:
+  ignore_scale_cuts: True # If True ignore any values of kmax
+cosmo:
+  Omega_c: 0.2664315
+  Omega_b: 0.0491685
+  h: 0.6727
+  n_s: 0.9645
+  sigma8: 0.831
+  extra_parameters:
+    camb:
+      dark_energy_model: "ppf"
+  # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
+  # If the transfer function is not specified, it defaults to using CAMB
+
+sources: # Sources
+  nbins: 5
+  ndens: 10 # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
+  ellipticity_error: 0.26
+  Nz_type: "SourceSRD2018" # For now, this is the assumed N(z) for sources -- check SRD 2018
+  Nz_kwargs: # keyword arguments for SourceSRD2018 class -- can allow easy generalizations for the future
+    Nz_alpha: 0.78
+    Nz_z0: 0.13
+    Nz_sigmaz: 0.05
+  mult_bias: 0 # Scalar or list (if list, then it's a value per bin)
+  delta_z: 0 # Photo-z shift, Scalar or list (if list, then it's a value per bin)
+  ia_class: "wl.LinearAlignmentSystematic"
+  ia_bias: 0.5 # ia-bias
+  alphaz: 0.
+  z_piv: 1.0
+  ia_kwargs: # Left here for future extensions to pass as optional parameter to IA-systematics
+
+lenses: # Lenses
+  nbins: 5
+  ndens: 18 # in arcmin^-2, same convention as for sources
+  Nz_type: "LensSRD2018" # For now, this is the assumed N(z) for lenses -- check SRD 2018
+  delta_z: 0 # Photo-z shift for lenses (if ommited it assumes no shift)
+  Nz_kwargs: # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
+    Nz_width: 0.2 # Photo-z bin-width
+    Nz_center: np.arange(1, 6)*0.2 + 0.1 # Photo-z bin centers (it can be a list of values or some np array)
+    Nz_sigmaz: 0.03 # Sigma of photo-z Gaussian smearing
+    Nz_alpha: 0.94 # N(z) alpha parameter
+    Nz_z0: 0.26 # N(z) z-pivot
+  #bias_type : 'inverse_growth'  # Inverse growth bias or custom
+  #bias_kwargs :
+  #    b0 : 1.33  # Reverse engineeering the bias values from the SRD
+  # Another option is to use the `custom` bias type, but it requires a value per bin
+  bias_type: "custom"
+  bias_kwargs:
+    b: [1.562362, 1.732963, 1.913252, 2.100644, 2.293210] # Values from SRD
+
+statistics:
+  galaxy_density_cl:
+    lens-lens: # The statistics are supposed to be SACC statistics
+      tracer_combs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]] # These need to be lists for now
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: 0.201 # scale cut (in Mpc^-1)
+      # kmax : None
+
+  galaxy_shear_cl_ee:
+    tracer_combs:
+      [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [0, 3],
+        [0, 4],
+        [1, 1],
+        [1, 2],
+        [1, 3],
+        [1, 4],
+        [2, 2],
+        [2, 3],
+        [2, 4],
+        [3, 3],
+        [3, 4],
+        [4, 4],
+      ]
+    ell_edges: np.linspace(20, 2000, 21, endpoint=True)
+    kmax: None
+  galaxy_shearDensity_cl_e:
+    tracer_combs: [[0, 2], [0, 3], [0, 4], [1, 3], [1, 4], [2, 4], [3, 4]]
+    ell_edges: np.linspace(20, 2000, 21, endpoint=True)
+    kmax: 0.201
+
+fiducial_sacc_path: /home/vitor/lib/python/BMGroup/src/fisher_forecast_vitor/augur_vitor/test_sacc_3x2pt.sacc
+cov_options:
+  # Several options implemented -- Gaussian internal
+  #cov_type : 'gaus_internal'
+  #fsky : 0.3
+  # ------
+  # Or you can also get it from a file
+  #cov_type: "SRD"
+  #SRD_cov_path: "/home/vitor/lib/python/augur/data/Y1_3x2_SRD_cov.npy"
+  # Or using TJPCov
+  cov_type: "tjpcov"
+  IA: 0.5
+  fsky: 0.42
+  binning_info:
+    ell_edges: np.linspace(20, 2000, 21, endpoint=True).astype(np.int32)
+
+fisher:
+  var_pars:
+    [
+      "Omega_c",
+      "sigma8",
+      "n_s",
+      "w0",
+      "wa",
+      "Omega_b",
+      "h",
+      "lens0_bias",
+      "lens1_bias",
+      "lens2_bias",
+      "lens3_bias",
+      "lens4_bias",
+      "lens0_delta_z",
+      "lens1_delta_z",
+      "lens2_delta_z",
+      "lens3_delta_z",
+      "lens4_delta_z",
+    ]
+  # parameters:  # TODO: For now priors are ignored
+  #     Omega_c: [0.1, 0.26, 0.9]
+  #     sigma8: [0.4, 0.81, 1.2]
+  #     w0: [-1.8, -1.0, -0.2]
+  #     wa: [-4, 0.0, 0.5]
+  #     h: [0.5, 0.6727, 0.8]
+  #     n_s: [0.9, 0.9645, 1.0]
+  #     #mult_bias: [-0.1 0.0 0.1]
+  step: 1e-2
+  output: "fisher.dat"
+  fisher_bias:
+    biased_dv:
+      "" # Path to file containing modified data vector with the systematic shift to probe
+      # If the file is provided it should be a FITS or ASCII file with the  same binning as the
+      # fiducial data vector and the column dv_sys
+    bias_params:
+      #Omega_c: 0.27
+      #lens0_bias: 1.3
+      #lens0_delta_z: 0.01
+      #src3_delta_z: 0.005
