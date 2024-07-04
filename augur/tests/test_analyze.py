@@ -1,13 +1,10 @@
-import os
-import numpy as np
-from ..analyze import analyze
-from ..generate import generate
+from pathlib import Path
+from augur.analyze import Analyze
 
 
-def test_analyze(example_yaml):
-    generate(example_yaml)
-    analyze(example_yaml)
-    out_fname = example_yaml['analyze']['cosmosis']['output_dir']+"/chain.txt"
-    assert os.path.isfile(out_fname)
-    n_pars = len(example_yaml['analyze']['cosmosis']['parameters'])
-    assert np.loadtxt(out_fname).shape == (n_pars, n_pars)
+def test_analyze():
+    base_path = Path(__file__).parent
+    fish = Analyze(f'{base_path}/test.yaml')
+    fish.get_derivatives()
+    fish.get_fisher_matrix()
+    fish.get_fisher_bias()

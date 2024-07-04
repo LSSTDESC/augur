@@ -1,0 +1,13 @@
+name: forecasting
+channels:
+  - conda-forge
+dependencies:
+  - firecrown>=1.7.5
+  - flake8
+  - scipy < 1.14.0
+  - healpy
+  - jinja2
+  - numdifftools
+  - numpydoc
+  - qp-prob
+  - tjpcov

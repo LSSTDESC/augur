@@ -1,8 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
-import astropy.table
+from astropy.table import Table
 from scipy.stats import norm, chi2
+from augur.utils.config_io import parse_config
 import os
 
 
@@ -16,15 +17,21 @@ def postprocess(config):
     config : dict
         The yaml parsed dictional of the input yaml file
     """
+    config = parse_config(config)
     pconfig = config["postprocess"]
-    outdir = config["analyze"]["cosmosis"]["output_dir"]
-    fid_params = config["generate"]["parameters"]
-    var_params = config["analyze"]["cosmosis"]["parameters"]
-    input = os.path.join(outdir, "chain.txt")
-    fisher = np.loadtxt(input)
+    try:
+        fid_params = Table.read(config["fisher"]["fid_output"], format='ascii')
+    except FileNotFoundError:
+        print("Obtain a fiducial file first by running get_fisher_matrix \
+               or provide your own text file.")
+    var_params = config["fisher"]["var_pars"]
+    try:
+        fisher = np.loadtxt(config["fisher"]["output"])
+    except FileNotFoundError:
+        print("Obtain a Fisher matrix first via analyze or provide your own text file.")
     npars = fisher.shape[0]
-    keys = astropy.table.Table.read(input, format="ascii").keys()
-    keys = np.array(keys)
+    keys = np.array(var_params)
+    outdir = config["postprocess"]["outdir"]
 
     if "labels" not in pconfig.keys():
         labels = keys
@@ -39,7 +46,7 @@ def postprocess(config):
         centers = np.zeros(npars)
         ind = 0
         for key in fid_params.keys():
-            if key in var_params.keys():
+            if key in var_params:
                 centers[ind] = fid_params[key]
                 ind += 1
 
@@ -47,7 +54,9 @@ def postprocess(config):
     ls = pconfig["linestyle"] if "linestyle" in pconfig.keys() else "-"
     edgecolors = pconfig["linecolor"] if "linecolor" in pconfig.keys() else "k"
     facecolors = pconfig["facecolor"] if "facecolor" in pconfig.keys() else "none"
-    CL = pconfig["CL"] if "CL" in pconfig.keys() else 0.68
+    CL = pconfig["CL"] if "CL" in pconfig.keys() else [0.68,]
+    if not isinstance(CL, list):
+        CL = [CL,]
     f, ax = plt.subplots(npars, npars, figsize=(xsize, ysize))
 
     try:
@@ -65,9 +74,13 @@ def postprocess(config):
             inv_fisher[0, 1] = inv_cache[i, j]
             inv_fisher[1, 0] = inv_cache[j, i]
             inv_fisher[1, 1] = inv_cache[j, j]
-            sig0, sig1 = draw_fisher_ellipses(ax[j, i], inv_fisher, facecolors,
-                                              edgecolors, ls, lw,
-                                              mu=(centers[i], centers[j]), CL=CL)
+            alpha_count = 1.0
+            for cl in CL:
+                sig0, sig1 = draw_fisher_ellipses(ax[j, i], inv_fisher, facecolors,
+                                                  edgecolors, ls, lw,
+                                                  mu=(centers[i], centers[j]),
+                                                  CL=cl, alpha=alpha_count)
+                alpha_count -= 0.4
             # Create the 1D histogram for i, i
             if j == i+1:
                 xarr = np.linspace(centers[i]-5*sig0,
@@ -90,8 +103,8 @@ def postprocess(config):
     for i in range(npairplots):
         pair0 = pairplots[2*i].split("(")[1]
         pair1 = pairplots[2*i+1].split(")")[0]
-        key1 = f"params--{pair0.lower()}"
-        key2 = f"params--{pair1.lower()}"
+        key1 = f"{pair0}"
+        key2 = f"{pair1}"
         if (key1 not in keys) or (key2 not in keys):
             # The selected set of parameters is not in the forecast
             continue
@@ -104,9 +117,13 @@ def postprocess(config):
             inv_fisher[0, 1] = inv_cache[ii, jj]
             inv_fisher[1, 0] = inv_cache[jj, ii]
             inv_fisher[1, 1] = inv_cache[jj, jj]
-            sig0, sig1 = draw_fisher_ellipses(ax, inv_fisher, facecolors,
-                                              edgecolors, ls, lw,
-                                              mu=(centers[ii], centers[jj]), CL=CL)
+            alpha_count = 1.0
+            for cl in CL:
+                sig0, sig1 = draw_fisher_ellipses(ax, inv_fisher, facecolors,
+                                                  edgecolors, ls, lw,
+                                                  mu=(centers[ii], centers[jj]), CL=cl,
+                                                  alpha=alpha_count)
+                alpha_count -= 0.4
             ax.set_xlim(-sig0+centers[ii], sig0+centers[ii])
             ax.set_ylim(-sig1+centers[jj], sig1+centers[jj])
             ax.set_xlabel(pair0)
@@ -115,19 +132,36 @@ def postprocess(config):
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
 
     # w0 -- wa plots are always made
-    iw = np.where(keys == "params--w0")[0][0]
-    iwa = np.where(keys == "params--wa")[0][0]
-    sig_w0 = np.sqrt(inv_cache[iw, iw])
-    sig_wa = np.sqrt(inv_cache[iwa, iwa])
-    FOM, FOM2 = get_FoM_all(fisher, iw, iwa, CL)
-    fisher_table = astropy.table.Table([[CL], [FOM], [FOM2], [sig_w0], [sig_wa]],
-                                       names=("CL", "FoM", "FoM (alt.)",
-                                              "sigma_w0", "sigma_wa"))
-    fisher_table.write(pconfig["latex_table"], format="latex")
+    # iw = np.where(keys == "w0")[0][0]
+    # iwa = np.where(keys == "wa")[0][0]
+    # sig_w0 = np.sqrt(inv_cache[iw, iw])
+    # sig_wa = np.sqrt(inv_cache[iwa, iwa])
+    # FOM, FOM2 = get_FoM_all(fisher, iw, iwa, CL)
+    # fisher_table = astropy.table.Table([[CL], [FOM], [FOM2], [sig_w0], [sig_wa]],
+    #                                    names=("CL", "FoM", "FoM (alt.)",
+    #                                           "sigma_w0", "sigma_wa"))
+    # fisher_table.write(pconfig["latex_table"], format="latex")
+    # Initialize table with column names only
+    column_names = ["CL", "FoM", "FoM (alt.)", "sigma_w0", "sigma_wa"]
+    fisher_table = Table(names=column_names)
+
+    # Find indices for w0 and wa
+    iw = np.where(keys == "w0")[0][0]
+    iwa = np.where(keys == "wa")[0][0]
+    # Iterate over each CL value
+    for cl in CL:
+        sig_w0 = np.sqrt(inv_cache[iw, iw])
+        sig_wa = np.sqrt(inv_cache[iwa, iwa])
+        FOM, FOM2 = get_FoM_all(fisher, iw, iwa, cl)
+
+        fisher_table.add_row([cl, FOM, FOM2, sig_w0, sig_wa])
+
+    # Write the table to a LaTeX file
+    fisher_table.write(pconfig["latex_table"], format="latex", overwrite=True)
 
 
 def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidth,
-                         mu=[0, 0], CL=0.95):
+                         mu=[0, 0], CL=0.95, alpha=1.0):
     """
     Draw uncertainty ellipses for a set of Fisher matrices.
 
@@ -173,7 +207,7 @@ def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidt
     ellipses = EllipseCollection(
         widths, heights, angles, units="xy", offsets=mu,
         transOffset=ax.transData, facecolors=facecolors,
-        edgecolors=edgecolors, linestyles=linestyles, linewidth=linewidth)
+        edgecolors=edgecolors, linestyles=linestyles, linewidth=linewidth, alpha=alpha)
     ax.add_collection(ellipses)
 
     sig0 = np.sqrt(C[0, 0])
