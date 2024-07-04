@@ -59,6 +59,38 @@ lenses: # Lenses
   bias_kwargs:
     b: [1.562362, 1.732963, 1.913252, 2.100644, 2.293210] # Values from SRD
 
+spec:
+  spec_bgs:
+    nbins: 10
+    ndens: 5 # in arcmin^-2
+    Nz_type: "SpecDESI"
+    Nz_kwargs:
+      Nz_width: 0.05 #Spec bin-width
+      Nz_center: np.arange(1, 11)*0.05
+    bias_type: "inverse_growth"
+    bias_kwargs:
+      b0: None
+  spec_lrg:
+    nbins: 13
+    ndens: 3 # in arcmin^-2
+    Nz_type: "SpecDESI"
+    Nz_kwargs:
+      Nz_width: 0.05 #Spec bin-width
+      Nz_center: np.arange(11, 24)*0.05
+    bias_type: "inverse_growth"
+    bias_kwargs:
+      b0: 1.7
+  spec_elg:
+    nbins: 22
+    ndens: 3 # in arcmin^-2
+    Nz_type: "SpecDESI"
+    Nz_kwargs:
+      Nz_width: 0.05 #Spec bin-width
+      Nz_center: np.arange(13, 35)*0.05
+    bias_type: "inverse_growth"
+    bias_kwargs:
+      b0: 0.84
+
 statistics:
   galaxy_density_cl:
     lens-lens: # The statistics are supposed to be SACC statistics
@@ -66,6 +98,130 @@ statistics:
       ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
       kmax: 0.201 # scale cut (in Mpc^-1)
       # kmax : None
+    spec_bgs-spec_bgs:
+      tracer_combs: [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+          [5, 5],
+          [6, 6],
+          [7, 7],
+          [8, 8],
+          [9, 9],
+        ] # These need to be lists for now
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: None
+    spec_elg-spec_elg:
+      tracer_combs: [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+          [5, 5],
+          [6, 6],
+          [7, 7],
+          [8, 8],
+          [9, 9],
+          [10, 10],
+          [11, 11],
+          [12, 12],
+          [13, 13],
+          [14, 14],
+          [15, 15],
+          [16, 16],
+          [17, 17],
+          [18, 18],
+          [19, 19],
+          [20, 20],
+          [21, 21],
+        ] # These need to be lists for now
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: None
+    spec_lrg-spec_lrg:
+      tracer_combs: [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+          [5, 5],
+          [6, 6],
+          [7, 7],
+          [8, 8],
+          [9, 9],
+          [10, 10],
+          [11, 11],
+          [12, 12],
+        ] # These need to be lists for now
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: None
+    spec_bgs-lens:
+      tracer_combs:
+        [
+          [3, 0],
+          [4, 0],
+          [5, 0],
+          [6, 0],
+          [7, 0],
+          [8, 0],
+          [9, 0],
+          [5, 1],
+          [6, 1],
+          [7, 1],
+          [8, 1],
+          [9, 1],
+          [9, 2],
+        ]
+        # These need to be lists for now
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: None
+    spec_lrg-lens:
+      tracer_combs:
+        [
+          [0, 1],
+          [1, 1],
+          [2, 1],
+          [3, 1],
+          [4, 1],
+          [0, 2],
+          [1, 2],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+          [5, 2],
+          [6, 2],
+          [7, 2],
+          [4, 3],
+          [5, 3],
+          [7, 3],
+          [6, 4],
+          [7, 4],
+        ]
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: None
+    spec_elg-lens:
+      tracer_combs: [
+          [7, 2],
+          [6, 3],
+          [7, 3],
+          [8, 3],
+          [9, 3],
+          [10, 3],
+          [6, 4],
+          [7, 4],
+          [8, 4],
+          [9, 4],
+          [10, 4],
+          [11, 4],
+          [12, 4],
+          [13, 4],
+          [14, 4],
+        ] # These need to be lists for now
+      ell_edges: np.linspace(20, 2000, 21, endpoint=True) # bandpower edges
+      kmax: None
 
   galaxy_shear_cl_ee:
     tracer_combs:
@@ -93,7 +249,7 @@ statistics:
     ell_edges: np.linspace(20, 2000, 21, endpoint=True)
     kmax: 0.201
 
-fiducial_sacc_path: "/home/vitor/lib/python/BMGroup/src/fisher_forecast_vitor/augur_vitor/test_sacc_3x2pt.sacc"
+fiducial_sacc_path: "/home/vitor/lib/python/BMGroup/src/fisher_forecast_vitor/augur_vitor/test_sacc_6x2pt.sacc"
 cov_options:
   # Several options implemented -- Gaussian internal
   #cov_type : 'gaus_internal'
