@@ -103,16 +103,14 @@ We notice that the Fisher matrix is evaluated at the fiducial values of the cosm
 
 
 \subsection{Model selection}
-One can apply model selection criteria in a forecasting phase in order to study an experiment's ability to carry out model selection tests.
-For instance, if we consider an experiment aimed at obtaining information on dark energy, we could use model selection techniques to predict whether or not,
-with our experiment, we will be able to distinguish, say, the $w$CDM from the $\Lambda$CDM model.
-The natural question that now arises regards the possible criteria to select models. Although there are quite a few, they are all expressed in terms of the likelihood,
-which is computationally demanding. Thus, we focus on the Bayes factor as it is possible to express it in terms of the Fisher matrix only. We would like to implement
-such expression in {\tt augur} as it is computationally inexpensive and can provide interesting information.\\
+
+One can apply model selection criteria in a forecasting phase in order to study an experiment's ability to carry out model selection tests. For instance, if we consider an experiment aimed at obtaining information on dark energy, we could use model selection techniques to predict whether or not, with our experiment, we will be able to distinguish, say, the $w$CDM from the $\Lambda$CDM model.
+
+The natural question that now arises regards the possible criteria to select models. Although there are quite a few, they are all expressed in terms of the likelihood, which is computationally demanding. Thus, we focus on the Bayes factor as it is possible to express it in terms of the Fisher matrix only. We would like to implement such expression in {\tt augur} as it is computationally inexpensive and can provide interesting information.
+
 The Bayes factor is defined as the ratio of the evidences (marginzalized likelihoods) of the two models under consideration.
-In this way, although a complicated model will lead to a higher likelihood (or at least as high) with respect to a simpler/nested model, the evidence will favour
-the simpler model (provided that the fit is nearly as good), thanks to the smaller prior volume. 
-Then, computing the ratio between the evidences of two models will automatically disfavor complex models involving many parameters.\\
+In this way, although a complicated model will lead to a higher likelihood (or at least as high) with respect to a simpler/nested model, the evidence will favour the simpler model (provided that the fit is nearly as good), thanks to the smaller prior volume.  Then, computing the ratio between the evidences of two models will automatically disfavor complex models involving many parameters.
+
 With this in mind, we now present the equation to compute the Bayes factor in a 2-dimensional parameter space (for nested models). It is expressed in terms of the Fisher matrix $F$ and the prior knowledge
 on each parameter (encoded in the ranges $\Delta \theta_{1}$ and $\Delta \theta_{2}$, respectively). 
 \begin{equation}
