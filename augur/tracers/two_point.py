@@ -45,6 +45,7 @@ def gaus_kernel(z, sig_z):
     z_samp = np.linspace(-10*np.max(sig_z), 10*np.max(sig_z), len(z))
     return 1./np.sqrt(2*np.pi*sig_z**2)*np.exp(-0.5*z_samp**2/sig_z**2)
 
+
 def equal_density_zbins(z, nz, nbins):
     """
     This function takes a redshift distribution and returns the redshift bins
@@ -66,6 +67,7 @@ def equal_density_zbins(z, nz, nbins):
     cuml_nz /= cuml_nz[-1]
     zbinedges = np.interp(np.linspace(0, 1, nbins+1), cuml_nz, z)
     return list(zip(zbinedges, zbinedges[1:]))
+
 
 class ZDist(object):
     """
@@ -122,6 +124,7 @@ class LensSRD2018(ZDist):
             self.Nz = convolve(dndz_bin, gaus_kernel(self.z, Nz_sigmaz*(1+self.z)))
         self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
 
+
 class SourceSRD2018(ZDist):
     """
     Source from 2018 SRD, benchmarked against Paul Rogozenski's notebook
@@ -154,7 +157,7 @@ class SourceSRD2018(ZDist):
         # vectorises the erf function:
 
         erf_vec = np.vectorize(math.erf, otypes=(float,))
-        sz = 2**0.5*Nz_sigmaz*(1+ self.z)
+        sz = 2 ** 0.5 * Nz_sigmaz * (1 + self.z)
         binned_nz = erf_vec((z - z_low)/sz)
         binned_nz -= erf_vec((z - z_high)/sz)
         binned_nz /= 1 + erf_vec(z / sz)
@@ -163,6 +166,7 @@ class SourceSRD2018(ZDist):
         # FIXME: so I am generating all the bins but only using one at the time
         self.Nz = binned_nz[Nz_ibin]
         self.zav = np.average(self.z, weights=self.Nz/np.sum(self.Nz))
+
 
 class TopHat(ZDist):
     """
