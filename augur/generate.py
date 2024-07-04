@@ -78,15 +78,22 @@ def generate_sacc_and_stats(config):
     """
 
     config = parse_config(config)
+
+    # Initialize cosmology
     cosmo_cfg = config['cosmo']
-    transfer_function = cosmo_cfg.get('transfer_function', 'boltzmann_camb')
-    extra_parameters = cosmo_cfg.get('extra_parameters', dict())
-    # Set up ccl.Cosmology object
-    cosmo = ccl.Cosmology(Omega_b=cosmo_cfg['Omega_b'],
-                          Omega_c=cosmo_cfg['Omega_c'],
-                          n_s=cosmo_cfg['n_s'], sigma8=cosmo_cfg['sigma8'],
-                          h=cosmo_cfg['h'], transfer_function=transfer_function,
-                          extra_parameters=extra_parameters)
+
+    if cosmo_cfg.get("transfer_function") is None:
+        cosmo_cfg['transfer_function'] = 'boltzmann_camb'
+
+    if cosmo_cfg.get('extra_parameters') is None:
+        cosmo_cfg['extra_parameters'] = dict()
+
+    try:
+        cosmo = ccl.Cosmology(**cosmo_cfg)
+    except (KeyError, TypeError, ValueError) as e:
+        print('Error in cosmology configuration. Check the config file.')
+        # Reraise the exception to see the full traceback
+        raise e
 
     # First we generate the placeholder SACC file with the correct N(z) and ell-binning
     # TODO add real-space
