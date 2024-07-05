@@ -88,6 +88,30 @@ def generate_sacc_and_stats(config):
     if cosmo_cfg.get('extra_parameters') is None:
         cosmo_cfg['extra_parameters'] = dict()
 
+    if 'ccl_accuracy' in config.keys():
+        # Pass along spline control parameters
+        if 'spline_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['spline_params'].keys():
+                try:
+                    type_here = type(ccl.spline_params[key])
+                    value = config['ccl_accuracy']['spline_params'][key]
+                    ccl.spline_params[key] = type_here(value)
+                except KeyError:
+                    print(f'The selected spline keyword `{key}` is not recognized.')
+                except ValueError:
+                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+        # Pass along GSL control parameters
+        if 'gsl_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['gsl_params'].keys():
+                try:
+                    type_here = type(ccl.gsl_params[key])
+                    value = config['ccl_accuracy']['gsl_params'][key]
+                    ccl.gsl_params[key] = type_here(value)
+                except KeyError:
+                    print(f'The selected GSL keyword `{key}` is not recognized.')
+                except ValueError:
+                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:

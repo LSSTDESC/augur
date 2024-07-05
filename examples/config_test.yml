@@ -12,6 +12,12 @@ cosmo:
     # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
     # If the transfer function is not specified, it defaults to using CAMB
 
+ccl_accuracy:  # Example of a couple of parameters to modify.
+    spline_params:  # You can change here any pyccl.spline_params
+        K_MAX_SPLINE : 100
+    gsl_params:  # You can change here any pyccl.gsl_params
+        INTEGRATION_EPSREL: 1e-6
+
 sources:  # Sources
     nbins : 5
     ndens : 10  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
