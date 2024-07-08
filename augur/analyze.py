@@ -31,6 +31,9 @@ class Analyze(object):
         fisher: np.ndarray
         Output Fisher matrix
         """
+
+        _config = parse_config(config)  # Load full config
+
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
@@ -38,13 +41,39 @@ class Analyze(object):
             if (tools is None) or (req_params is None):
                 raise ValueError('If a likelihood is passed tools and req_params are required! \
                                 Please, remove the likelihood or add tools and req_params.')
+            else:
+                # Load the ccl accuracy parameters if `generate` is not run
+                if 'ccl_accuracy' in config.keys():
+                    # Pass along spline control parameters
+                    if 'spline_params' in config['ccl_accuracy'].keys():
+                        for key in config['ccl_accuracy']['spline_params'].keys():
+                            try:
+                                type_here = type(ccl.spline_params[key])
+                                value = config['ccl_accuracy']['spline_params'][key]
+                                ccl.spline_params[key] = type_here(value)
+                            except KeyError:
+                                print(f'The selected spline keyword `{key}` is not recognized.')
+                            except ValueError:
+                                print(f'The selected value `{value}` could not be casted to \
+                                      `{type_here}`.')
+                    # Pass along GSL control parameters
+                    if 'gsl_params' in config['ccl_accuracy'].keys():
+                        for key in config['ccl_accuracy']['gsl_params'].keys():
+                            try:
+                                type_here = type(ccl.gsl_params[key])
+                                value = config['ccl_accuracy']['gsl_params'][key]
+                                ccl.gsl_params[key] = type_here(value)
+                            except KeyError:
+                                print(f'The selected GSL keyword `{key}` is not recognized.')
+                            except ValueError:
+                                print(f'The selected value `{value}` could not be casted to \
+                                      `{type_here}`.')
 
         self.lk = likelihood  # Just to save some typing
         self.tools = tools
         self.req_params = req_params
         self.data_fid = self.lk.get_data_vector()
 
-        _config = parse_config(config)  # Load full config
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
 
