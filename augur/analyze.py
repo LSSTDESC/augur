@@ -146,7 +146,7 @@ class Analyze(object):
         else:
             if isinstance(labels, list):
                 raise ValueError('x is a scalar and labels has more than one entry')
-        
+
         if isinstance(x, list):
             x = np.array(x)
         # Scalar variable
