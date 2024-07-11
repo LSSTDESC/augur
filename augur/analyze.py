@@ -142,14 +142,13 @@ class Analyze(object):
         """
         if hasattr(x, "__len__"):
             if len(labels) != len(x):
+                print(len(labels), len(x))
                 raise ValueError('The labels should have the same length as the parameters!')
         else:
             if isinstance(labels, list):
-                raise ValueError('x is a scalar and labels has more than one entry')
+                if len(labels) > 1:
+                    raise ValueError('x is a scalar and labels has more than one entry')
 
-        if isinstance(x, list):
-            x = np.array(x)
-        # Scalar variable
         if isinstance(x, (float, int)):
             _pars = pars_fid.copy()
             _sys_pars = sys_fid.copy()
@@ -165,6 +164,12 @@ class Analyze(object):
             self.tools.update(pmap)
             self.tools.prepare(cosmo)
             f_out = self.lk.compute_theory_vector(self.tools)
+            return np.array(f_out)
+
+        if isinstance(x, list):
+            x = np.array(x)
+        # Scalar variable
+
         # 1D
         if x.ndim == 1:
             _pars = pars_fid.copy()
@@ -208,7 +213,7 @@ class Analyze(object):
                 f_out.append(self.lk.compute_theory_vector(self.tools))
         return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='stem'):
+    def get_derivatives(self, force=False, method='5pt_stencil'):
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:

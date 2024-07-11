@@ -346,17 +346,27 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
-    # The newest version of firecrown requires a modeling tool rather than a cosmology
-    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
-        with_NC=False,
-        with_IA=True,
-        log10k_min=-4,  # Leaving defaults for now
-        log10k_max=2,
-        nk_per_decade=20,
-        cosmo=cosmo
-    )
+
+    # Run cosmo to get the power spectra
     cosmo.compute_nonlin_power()
-    tools = ModelingTools(pt_calculator=pt_calculator)
+
+    if 'use_pt_calculator' in config['general'].keys():
+        if config['general']['use_pt_calculator']:
+            # The newest version of firecrown requires a modeling tool rather than a cosmology
+            pt_calculator = ccl.nl_pt.EulerianPTCalculator(
+                with_NC=False,
+                with_IA=True,
+                log10k_min=-4,  # Leaving defaults for now
+                log10k_max=2,
+                nk_per_decade=20,
+                cosmo=cosmo
+            )
+
+            tools = ModelingTools(pt_calculator=pt_calculator)
+        else:
+            tools = ModelingTools()
+    else:
+        tools = ModelingTools()
     lk.update(sys_params)
     tools.update(sys_params)
     tools.prepare(cosmo)
