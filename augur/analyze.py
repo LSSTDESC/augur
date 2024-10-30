@@ -32,7 +32,7 @@ class Analyze(object):
         Output Fisher matrix
         """
 
-        _config = parse_config(config)  # Load full config
+        config = parse_config(config)  # Load full config
 
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
@@ -78,7 +78,7 @@ class Analyze(object):
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
 
         # Load the relevant section of the configuration file
-        self.config = _config['fisher']
+        self.config = config['fisher']
 
         # Initialize pivot point
         self.x = []
@@ -187,13 +187,29 @@ class Analyze(object):
                     f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil'):
+    def get_derivatives(self, force=False, method='5pt_stencil', normalize_params=True):
+        """
+        Auxiliary function to compute numerical derivatives of the helper function `f`
+
+        Parameters:
+        -----------
+        force : bool, If `True` force recalculation of the derivatives
+        method : str, Method to compute derivatives, currently only `5pt_stencil` or 
+                 numdifftools are accepted.
+        normalize_params : bool, If `True` it normalizes the parameters before computing the
+                 derivatives. 
+        """
+        if normalize_params:
+            x_piv = self.x  # Modify
+        else:
+            x_piv = self.x
+
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params),
-                                                   self.x, h=float(self.config['step']))
+                                                   x_piv, h=float(self.config['step']))
             elif 'numdifftools' in method:
                 import numdifftools as nd
                 if 'numdifftools_kwargs' in self.config.keys():
@@ -203,7 +219,7 @@ class Analyze(object):
                 self.derivatives = nd.Gradient(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                self.req_params),
                                                step=float(self.config['step']),
-                                               **ndkwargs)(self.x).T
+                                               **ndkwargs)(x_piv).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
