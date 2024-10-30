@@ -212,7 +212,7 @@ class Analyze(object):
                     f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil'):
+    def get_derivatives(self, force=False, method='5pt_stencil', step=None):
         """
         Auxiliary function to compute numerical derivatives of the helper function `f`
 
@@ -223,9 +223,12 @@ class Analyze(object):
         method : str
             Method to compute derivatives, currently only `5pt_stencil` or `numdifftools`
             are allowed.
+        step : float
+            Step size for numerical differentiation
         """
 
-        step = float(self.config['step'])
+        if step is None:
+            step = float(self.config['step'])
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
