@@ -171,8 +171,6 @@ class Analyze(object):
             # If we normalize the sampling we need to undo the normalization
             if self.norm_step:
                 x = self.norm * x + self.par_bounds[:, 0]
-            self.tools.reset()
-            self.lk.reset()
 
             if x.ndim == 1:
                 _pars = pars_fid.copy()
@@ -349,6 +347,8 @@ class Analyze(object):
         f_out : ndarray,
             Predicted data vector for the given input parameters _sys_pars, _pars.
         """
+        self.lk.reset()
+        self.tools.reset()
         if Version(firecrown.__version__) < Version('1.8.0a'):
             pmap = ParamsMap(_sys_pars)
             cosmo = ccl.Cosmology(**_pars)
@@ -384,10 +384,9 @@ class Analyze(object):
             if self.cf is None:
                 self.cf = CCLFactory(**extra_dict)
                 self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=self.cf)
+                self.tools.reset()
             pmap = ParamsMap(dict_all)
             self.cf.update(pmap)
-            self.tools.reset()
-            self.lk.reset()
             self.tools.update(pmap)
             self.tools.prepare()
             self.lk.update(pmap)
