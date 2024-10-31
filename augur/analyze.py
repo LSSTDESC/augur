@@ -386,10 +386,11 @@ class Analyze(object):
                 self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=self.cf)
             pmap = ParamsMap(dict_all)
             self.cf.update(pmap)
+            self.tools.reset()
+            self.lk.reset()
             self.tools.update(pmap)
             self.tools.prepare()
             self.lk.update(pmap)
             f_out = self.lk.compute_theory_vector(self.tools)
-            self.tools.reset()
-            self.lk.reset()
+
             return f_out
