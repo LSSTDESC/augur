@@ -6,6 +6,8 @@ from augur.utils.config_io import parse_config
 from firecrown.parameters import ParamsMap
 from astropy.table import Table
 import warnings
+from packaging.version import Version
+import firecrown
 
 
 class Analyze(object):
@@ -167,6 +169,9 @@ class Analyze(object):
             # If we normalize the sampling we need to undo the normalization
             if self.norm_step:
                 x = self.norm * x + self.par_bounds[:, 0]
+            self.tools.reset()
+            self.lk.reset()
+
             if x.ndim == 1:
                 _pars = pars_fid.copy()
                 _sys_pars = sys_fid.copy()
@@ -177,14 +182,9 @@ class Analyze(object):
                         _sys_pars.update({labels[i]: x[i]})
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
-                self.tools.reset()
-                self.lk.reset()
-                pmap = ParamsMap(_sys_pars)
-                cosmo = ccl.Cosmology(**_pars)
-                self.lk.update(pmap)
-                self.tools.update(pmap)
-                self.tools.prepare(cosmo)
-                f_out = self.lk.compute_theory_vector(self.tools)
+
+                f_out = self.compute_new_theory_vector(_sys_pars, _pars)
+
             elif x.ndim == 2:
                 f_out = []
                 for i in range(len(labels)):
@@ -198,14 +198,7 @@ class Analyze(object):
                             _sys_pars.update({labels[j]: xi[j]})
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
-                    self.tools.reset()
-                    self.lk.reset()
-                    pmap = ParamsMap(_sys_pars)
-                    cosmo = ccl.Cosmology(**_pars)
-                    self.lk.update(pmap)
-                    self.tools.update(pmap)
-                    self.tools.prepare(cosmo)
-                    f_out.append(self.lk.compute_theory_vector(self.tools))
+                    f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
             return np.array(f_out)
 
     def get_derivatives(self, force=False, method='5pt_stencil', step=None):
@@ -334,3 +327,63 @@ class Analyze(object):
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
             return self.bi
+
+    def compute_new_theory_vector(self, _sys_pars, _pars):
+        """
+        Utility function to update the likelihood and modeling tool objects to use a new
+        set of parameters and compute a new theory prediction
+
+        Parameters:
+        -----------
+        _sys_pars : dict,
+            Dictionary containing the "systematic" modeling parameters.
+        _pars : dict,
+            Dictionary containing the cosmological parameters
+
+        Returns:
+        --------
+        f_out : ndarray,
+            Predicted data vector for the given input parameters _sys_pars, _pars.
+        """
+        if Version(firecrown.__version__) < Version('1.8.0a'):
+            pmap = ParamsMap(_sys_pars)
+            cosmo = ccl.Cosmology(**_pars)
+            self.lk.update(pmap)
+            self.tools.update(pmap)
+            self.tools.prepare(cosmo)
+            f_out = self.lk.compute_theory_vector(self.tools)
+            return f_out
+        else:
+            from firecrown.ccl_factory import CCLFactory
+            dict_all = {**_sys_pars, **_pars}
+            extra_dict = {}
+            if dict_all['A_s'] is None:
+                extra_dict['amplitude_parameter'] = 'sigma8'
+                dict_all.pop('A_s')
+            else:
+                extra_dict['amplitude_parameter'] = 'A_s'
+                dict_all.pop('sigma8')
+
+            extra_dict['mass_split'] = dict_all['mass_split']
+            dict_all.pop('mass_split')
+            print(dict_all)
+            if 'extra_parameters' in dict_all.keys():
+                if 'camb' in dict_all['extra_parameters'].keys():
+                    extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
+                    if 'kmin' in dict_all['extra_parameters']['camb'].keys():
+                        extra_dict['camb_extra_params'].pop('kmin')
+                dict_all.pop('extra_parameters')
+            keys = list(dict_all.keys())
+            # Remove None values
+            for key in keys:
+                if (dict_all[key] is None) or (dict_all[key] == 'None'):
+                    dict_all.pop(key)
+            cf = CCLFactory(**extra_dict)
+            self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
+            pmap = ParamsMap(dict_all)
+            cf.update(pmap)
+            self.tools.update(pmap)
+            self.tools.prepare()
+            self.lk.update(pmap)
+            f_out = self.lk.compute_theory_vector(self.tools)
+            return f_out
