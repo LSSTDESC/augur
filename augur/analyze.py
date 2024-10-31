@@ -390,4 +390,6 @@ class Analyze(object):
             self.tools.prepare()
             self.lk.update(pmap)
             f_out = self.lk.compute_theory_vector(self.tools)
+            self.tools.reset()
+            self.lk.reset()
             return f_out
