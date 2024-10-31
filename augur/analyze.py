@@ -170,9 +170,7 @@ class Analyze(object):
                 x = np.array(x)
             # If we normalize the sampling we need to undo the normalization
             if self.norm_step:
-                print(x)
                 x = self.norm * x + self.par_bounds[:, 0]
-                print(x)
             self.tools.reset()
             self.lk.reset()
 
@@ -242,11 +240,9 @@ class Analyze(object):
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
-            if self.norm is None:
-                return self.derivatives
-            else:
+            if self.norm is not None:
                 self.derivatives /= self.norm[:, None]
-                return self.derivatives
+            return self.derivatives
         else:
             return self.derivatives
 
