@@ -245,6 +245,8 @@ class Analyze(object):
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
+            if self.norm is not None:
+                self.derivatives /= self.norm[:, None]
             return self.derivatives
         else:
             return self.derivatives
