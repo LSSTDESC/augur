@@ -166,9 +166,7 @@ class Analyze(object):
                 x = np.array(x)
             # If we normalize the sampling we need to undo the normalization
             if self.norm_step:
-                print(x)
                 x = self.norm * x + self.par_bounds[:, 0]
-                print(x)
             if x.ndim == 1:
                 _pars = pars_fid.copy()
                 _sys_pars = sys_fid.copy()
@@ -179,8 +177,6 @@ class Analyze(object):
                         _sys_pars.update({labels[i]: x[i]})
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
-                print(_pars)
-                print(_sys_pars)
                 self.tools.reset()
                 self.lk.reset()
                 pmap = ParamsMap(_sys_pars)
