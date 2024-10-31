@@ -83,6 +83,8 @@ class Analyze(object):
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
+        # CCL Factory placeholder (for newer firecrown)
+        self.cf = None
 
         # Load the relevant section of the configuration file
         self.config = config['fisher']
@@ -168,7 +170,9 @@ class Analyze(object):
                 x = np.array(x)
             # If we normalize the sampling we need to undo the normalization
             if self.norm_step:
+                print(x)
                 x = self.norm * x + self.par_bounds[:, 0]
+                print(x)
             self.tools.reset()
             self.lk.reset()
 
@@ -238,7 +242,11 @@ class Analyze(object):
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
-            return self.derivatives
+            if self.norm is None:
+                return self.derivatives
+            else:
+                self.derivatives /= self.norm[:, None]
+                return self.derivatives
         else:
             return self.derivatives
 
@@ -366,7 +374,6 @@ class Analyze(object):
 
             extra_dict['mass_split'] = dict_all['mass_split']
             dict_all.pop('mass_split')
-            print(dict_all)
             if 'extra_parameters' in dict_all.keys():
                 if 'camb' in dict_all['extra_parameters'].keys():
                     extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
@@ -378,10 +385,11 @@ class Analyze(object):
             for key in keys:
                 if (dict_all[key] is None) or (dict_all[key] == 'None'):
                     dict_all.pop(key)
-            cf = CCLFactory(**extra_dict)
-            self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
+            if self.cf is None:
+                self.cf = CCLFactory(**extra_dict)
+                self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=self.cf)
             pmap = ParamsMap(dict_all)
-            cf.update(pmap)
+            self.cf.update(pmap)
             self.tools.update(pmap)
             self.tools.prepare()
             self.lk.update(pmap)
