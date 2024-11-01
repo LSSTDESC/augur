@@ -5,10 +5,12 @@ from augur import generate
 from augur.utils.config_io import parse_config
 from firecrown.parameters import ParamsMap
 from astropy.table import Table
+import warnings
 
 
 class Analyze(object):
-    def __init__(self, config, likelihood=None, tools=None, req_params=None):
+    def __init__(self, config, likelihood=None, tools=None, req_params=None,
+                 norm_step=True):
         """
         Run numerical derivatives of a likelihood to obtain a Fisher matrix estimate.
 
@@ -25,6 +27,9 @@ class Analyze(object):
         req_params: dict
             Dictionary containing the required parameters for the likelihood. Required if a
             likelihood object is passed.
+        norm_step : bool
+            If `True` it internally normalizes the step size using the sampling bounds in order
+            to determine the samples.
 
         Returns:
         --------
@@ -32,7 +37,7 @@ class Analyze(object):
         Output Fisher matrix
         """
 
-        _config = parse_config(config)  # Load full config
+        config = parse_config(config)  # Load full config
 
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
@@ -73,12 +78,12 @@ class Analyze(object):
         self.tools = tools
         self.req_params = req_params
         self.data_fid = self.lk.get_data_vector()
-
+        self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
 
         # Load the relevant section of the configuration file
-        self.config = _config['fisher']
+        self.config = config['fisher']
 
         # Initialize pivot point
         self.x = []
@@ -87,22 +92,27 @@ class Analyze(object):
         self.Fij = None
         self.bi = None
         self.biased_cls = None
+        self.par_bounds = []
+        self.norm = None
         # Load the parameters to vary
         # We will allow 2 options -- one where we pass something
         # a la cosmosis with parameters and minimum, central, and max
         # we can also allow priors
         if set(['parameters', 'var_pars']).issubset(set(self.config.keys())):
-            raise Warning('Both `parameters` and `var_pars` found in Fisher. \
+            warnings.warn('Both `parameters` and `var_pars` found in Fisher. \
                         Ignoring `parameters and using fiducial cosmology \
                         as pivot.`')
+
         if 'parameters' in self.config.keys():
             self.var_pars = list(self.config['parameters'].keys())
             for var in self.var_pars:
                 _val = self.config['parameters'][var]
                 if isinstance(_val, list):
                     self.x.append(_val[1])
+                    self.par_bounds.append([_val[0], _val[-1]])
                 else:
                     self.x.append(_val)
+
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
         elif 'var_pars' in self.config.keys():
@@ -117,6 +127,14 @@ class Analyze(object):
                                     in the list of parameters in the likelihood.')
         # Cast to numpy array (this will be done later anyway)
         self.x = np.array(self.x)
+        self.par_bounds = np.array(self.par_bounds)
+        if (len(self.par_bounds) < 1) & (self.norm_step):
+            self.norm_step = False
+            warnings.warn('Parameter bounds not provided -- the step will not be normalized')
+        # Normalize the pivot point given the sampling region
+        if self.norm_step:
+            self.norm = self.par_bounds[:, 1] - self.par_bounds[:, 0]
+            self.x = (self.x - self.par_bounds[:, 0]) * 1/self.norm
 
     def f(self, x, labels, pars_fid, sys_fid):
         """
@@ -127,14 +145,14 @@ class Analyze(object):
         -----------
 
         x : float, list or np.ndarray
-            Point at which to compute the theory vector
+            Point at which to compute the theory vector.
         labels : list
-            Names of parameters to vary
+            Names of parameters to vary.
         pars_fid : dict
             Dictionary containing the fiducial ccl cosmological parameters
         sys_fid: dict
             Dictionary containing the fiducial `systematic` (required) parameters
-            for the likelihood
+            for the likelihood.
         Returns:
         --------
         f_out : np.ndarray
@@ -146,6 +164,9 @@ class Analyze(object):
         else:
             if isinstance(x, list):
                 x = np.array(x)
+            # If we normalize the sampling we need to undo the normalization
+            if self.norm_step:
+                x = self.norm * x + self.par_bounds[:, 0]
             if x.ndim == 1:
                 _pars = pars_fid.copy()
                 _sys_pars = sys_fid.copy()
@@ -187,26 +208,45 @@ class Analyze(object):
                     f_out.append(self.lk.compute_theory_vector(self.tools))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil'):
+    def get_derivatives(self, force=False, method='5pt_stencil', step=None):
+        """
+        Auxiliary function to compute numerical derivatives of the helper function `f`
+
+        Parameters:
+        -----------
+        force : bool
+            If `True` force recalculation of the derivatives.
+        method : str
+            Method to compute derivatives, currently only `5pt_stencil` or `numdifftools`
+            are allowed.
+        step : float
+            Step size for numerical differentiation
+        """
+
+        if step is None:
+            step = float(self.config['step'])
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params),
-                                                   self.x, h=float(self.config['step']))
+                                                   self.x, h=step)
             elif 'numdifftools' in method:
                 import numdifftools as nd
                 if 'numdifftools_kwargs' in self.config.keys():
                     ndkwargs = self.config['numdifftools_kwargs']
                 else:
                     ndkwargs = {}
-                self.derivatives = nd.Gradient(lambda y: self.f(y, self.var_pars, self.pars_fid,
-                                               self.req_params),
-                                               step=float(self.config['step']),
-                                               **ndkwargs)(self.x).T
+                jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
+                                                             self.req_params),
+                                            step=step,
+                                            **ndkwargs)
+                self.derivatives = jacobian_calc(self.x).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
+            if self.norm is not None:
+                self.derivatives /= self.norm[:, None]
             return self.derivatives
         else:
             return self.derivatives
