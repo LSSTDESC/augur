@@ -295,6 +295,7 @@ def generate_sacc_and_stats(config):
                 in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
                 wgt[in_win, i] = 1.0
             win = sacc.BandpowerWindow(ells_aux, wgt)
+            print(win.nv, win.nell, len(ells_here))
             S.add_ell_cl(key, tr1, tr2,
                          ells_here, np.zeros(len(ells_here)), window=win)
 
@@ -364,12 +365,15 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk.compute_loglike(tools)
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
+    ell_dict = {}
     for st in lk.statistics:
         st = st.statistic
         tr1 = st.source0.sacc_tracer
         tr2 = st.source1.sacc_tracer
+        dtype = st.sacc_data_type
         idx = S.indices(tracers=(tr1, tr2))
         win_dict[(tr1, tr2)] = S.get_bandpower_windows(idx)
+        ell_dict[(tr1, tr2)], _ = S.get_ell_cl(dtype, tr1, tr2)
     # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
     S.covariance = None
     S.data = []
@@ -382,7 +386,7 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         tr2 = st.source1.sacc_tracer
         st.ready = False
         S.add_ell_cl(st.sacc_data_type, tr1, tr2,
-                     st.ells, st.get_theory_vector(),  # Only valid for harmonic space
+                     ell_dict[(tr1, tr2)], st.get_theory_vector(),  # Only valid for harmonic space
                      window=win_dict[(tr1, tr2)])
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
