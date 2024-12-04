@@ -365,7 +365,7 @@ class Analyze(object):
                 extra_dict['amplitude_parameter'] = 'sigma8'
                 dict_all.pop('A_s')
             else:
-                extra_dict['amplitude_parameter'] = 'A_s'
+                extra_dict['amplitude_parameter'] = 'As'
                 dict_all.pop('sigma8')
 
             extra_dict['mass_split'] = dict_all['mass_split']
@@ -377,11 +377,15 @@ class Analyze(object):
                         extra_dict['camb_extra_params'].pop('kmin')
                 dict_all.pop('extra_parameters')
             keys = list(dict_all.keys())
+
             # Remove None values
             for key in keys:
                 if (dict_all[key] is None) or (dict_all[key] == 'None'):
                     dict_all.pop(key)
             if self.cf is None:
+                print(extra_dict)
+                for key in extra_dict.keys():
+                    print(extra_dict[key], type(extra_dict[key]))
                 self.cf = CCLFactory(**extra_dict)
                 self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=self.cf)
                 self.tools.reset()
