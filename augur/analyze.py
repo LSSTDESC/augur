@@ -140,7 +140,7 @@ class Analyze(object):
             self.norm = self.par_bounds[:, 1] - self.par_bounds[:, 0]
             self.x = (self.x - self.par_bounds[:, 0]) * 1/self.norm
 
-    def f(self, x, labels, pars_fid, sys_fid):
+    def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
         Labels are the name of the parameters x (with the same length and order)
@@ -157,6 +157,8 @@ class Analyze(object):
         sys_fid: dict
             Dictionary containing the fiducial `systematic` (required) parameters
             for the likelihood.
+        norm: bool
+            If `True` it normalizes the input datavector (useful for derivatives).
         Returns:
         --------
         f_out : np.ndarray
@@ -169,7 +171,7 @@ class Analyze(object):
             if isinstance(x, list):
                 x = np.array(x)
             # If we normalize the sampling we need to undo the normalization
-            if self.norm_step:
+            if donorm:
                 x = self.norm * x + self.par_bounds[:, 0]
 
             if x.ndim == 1:
@@ -222,7 +224,7 @@ class Analyze(object):
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
-                                                   self.req_params),
+                                                   self.req_params, donorm=self.norm_step),
                                                    self.x, h=step)
             elif 'numdifftools' in method:
                 import numdifftools as nd
@@ -231,7 +233,8 @@ class Analyze(object):
                 else:
                     ndkwargs = {}
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
-                                                             self.req_params),
+                                                             self.req_params,
+                                                             donorm=self.norm_step),
                                             step=step,
                                             **ndkwargs)
                 self.derivatives = jacobian_calc(self.x).T
@@ -322,8 +325,8 @@ class Analyze(object):
                 else:
                     raise ValueError('bias_params is required if no biased_dv file is passed')
 
-                self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here) \
-                    - self.data_fid
+                self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
+                                         donorm=False) - self.data_fid
 
             Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
