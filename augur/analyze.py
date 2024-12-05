@@ -158,7 +158,7 @@ class Analyze(object):
             Dictionary containing the fiducial `systematic` (required) parameters
             for the likelihood.
         norm: bool
-            If `True` it normalizes the input datavector (useful for derivatives).
+            If `True` it normalizes the input parameters vector (useful for derivatives).
         Returns:
         --------
         f_out : np.ndarray
