@@ -15,11 +15,12 @@ from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from packaging.version import Version
 import firecrown
-if Version(firecrown.__version__) >= Version('1.8'):
+if Version(firecrown.__version__) >= Version('1.8.0a'):
     import firecrown.likelihood.weak_lensing as wl
     import firecrown.likelihood.number_counts as nc
     from firecrown.likelihood.two_point import TwoPoint
     from firecrown.likelihood.gaussian import ConstGaussian
+    from firecrown.ccl_factory import CCLFactory
 elif Version(firecrown.__version__) >= Version('1.7.4'):
     import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
     import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
@@ -346,30 +347,66 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
-    # The newest version of firecrown requires a modeling tool rather than a cosmology
-    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
-        with_NC=False,
-        with_IA=True,
-        log10k_min=-4,  # Leaving defaults for now
-        log10k_max=2,
-        nk_per_decade=20,
-        cosmo=cosmo
-    )
+
     cosmo.compute_nonlin_power()
-    tools = ModelingTools(pt_calculator=pt_calculator)
-    lk.update(sys_params)
-    tools.update(sys_params)
-    tools.prepare(cosmo)
-    # Run the likelihood (to get the theory)
-    lk.compute_loglike(tools)
+
+    # Populate ModelingTools and likelihood
+
+    # Old firecrown
+    if Version(firecrown.__version__) < Version('1.8.0a'):
+        tools = ModelingTools()
+        lk.update(sys_params)
+        tools.update(sys_params)
+        tools.prepare(cosmo)
+        # Run the likelihood (to get the theory)
+        lk.compute_loglike(tools)
+    # New firecrown with CCLFactory
+    else:
+        _pars = cosmo.__dict__['_params_init_kwargs']
+        dict_all = {**sys_params, **_pars}
+        extra_dict = {}
+        if dict_all['A_s'] is None:
+            extra_dict['amplitude_parameter'] = 'sigma8'
+            dict_all.pop('A_s')
+        else:
+            extra_dict['amplitude_parameter'] = 'A_s'
+            dict_all.pop('sigma8')
+
+        extra_dict['mass_split'] = dict_all['mass_split']
+        dict_all.pop('mass_split')
+        if 'extra_parameters' in dict_all.keys():
+            if 'camb' in dict_all['extra_parameters'].keys():
+                extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
+                if 'kmin' in dict_all['extra_parameters']['camb'].keys():
+                    extra_dict['camb_extra_params'].pop('kmin')
+            dict_all.pop('extra_parameters')
+        keys = list(dict_all.keys())
+
+        # Remove None values from dict_all
+        for key in keys:
+            if (dict_all[key] is None) or (dict_all[key] == 'None'):
+                dict_all.pop(key)
+        cf = CCLFactory(**extra_dict)
+        tools = ModelingTools(ccl_factory=cf)
+        tools.reset()
+        pmap = ParamsMap(dict_all)
+        cf.update(pmap)
+        tools.update(pmap)
+        tools.prepare()
+        lk.update(pmap)
+        lk.compute_theory_vector(tools)
+
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
+    ell_dict = {}
     for st in lk.statistics:
         st = st.statistic
         tr1 = st.source0.sacc_tracer
         tr2 = st.source1.sacc_tracer
+        dtype = st.sacc_data_type
         idx = S.indices(tracers=(tr1, tr2))
         win_dict[(tr1, tr2)] = S.get_bandpower_windows(idx)
+        ell_dict[(tr1, tr2)], _ = S.get_ell_cl(dtype, tr1, tr2)
     # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
     S.covariance = None
     S.data = []
@@ -382,7 +419,7 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         tr2 = st.source1.sacc_tracer
         st.ready = False
         S.add_ell_cl(st.sacc_data_type, tr1, tr2,
-                     st.ells, st.get_theory_vector(),  # Only valid for harmonic space
+                     ell_dict[(tr1, tr2)], st.get_theory_vector(),  # Only valid for harmonic space
                      window=win_dict[(tr1, tr2)])
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']

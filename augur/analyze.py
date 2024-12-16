@@ -368,7 +368,7 @@ class Analyze(object):
                 extra_dict['amplitude_parameter'] = 'sigma8'
                 dict_all.pop('A_s')
             else:
-                extra_dict['amplitude_parameter'] = 'As'
+                extra_dict['amplitude_parameter'] = 'A_s'
                 dict_all.pop('sigma8')
 
             extra_dict['mass_split'] = dict_all['mass_split']
@@ -386,7 +386,6 @@ class Analyze(object):
                 if (dict_all[key] is None) or (dict_all[key] == 'None'):
                     dict_all.pop(key)
             if self.cf is None:
-                print(extra_dict)
                 for key in extra_dict.keys():
                     print(extra_dict[key], type(extra_dict[key]))
                 self.cf = CCLFactory(**extra_dict)
