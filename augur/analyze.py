@@ -3,11 +3,9 @@ import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
 from augur.utils.config_io import parse_config
-from firecrown.parameters import ParamsMap
+from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
-from packaging.version import Version
-import firecrown
 
 
 class Analyze(object):
@@ -138,7 +136,6 @@ class Analyze(object):
         # Normalize the pivot point given the sampling region
         if self.norm_step:
             self.norm = self.par_bounds[:, 1] - self.par_bounds[:, 0]
-            self.x = (self.x - self.par_bounds[:, 0]) * 1/self.norm
 
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
@@ -223,21 +220,29 @@ class Analyze(object):
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
+                if self.norm_step:
+                    x_here = (self.x - self.par_bounds[:, 0]) * 1/self.norm
+                else:
+                    x_here = self.x
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params, donorm=self.norm_step),
-                                                   self.x, h=step)
+                                                   x_here, h=step)
             elif 'numdifftools' in method:
                 import numdifftools as nd
                 if 'numdifftools_kwargs' in self.config.keys():
                     ndkwargs = self.config['numdifftools_kwargs']
                 else:
                     ndkwargs = {}
+                if self.norm_step:
+                    x_here = (self.x - self.par_bounds[:, 0]) * 1/self.norm
+                else:
+                    x_here = self.x
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                              self.req_params,
                                                              donorm=self.norm_step),
                                             step=step,
                                             **ndkwargs)
-                self.derivatives = jacobian_calc(self.x).T
+                self.derivatives = jacobian_calc(x_here).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
@@ -350,52 +355,6 @@ class Analyze(object):
         f_out : ndarray,
             Predicted data vector for the given input parameters _sys_pars, _pars.
         """
-        self.lk.reset()
-        self.tools.reset()
-        if Version(firecrown.__version__) < Version('1.8.0a'):
-            pmap = ParamsMap(_sys_pars)
-            cosmo = ccl.Cosmology(**_pars)
-            self.lk.update(pmap)
-            self.tools.update(pmap)
-            self.tools.prepare(cosmo)
-            f_out = self.lk.compute_theory_vector(self.tools)
-            return f_out
-        else:
-            from firecrown.ccl_factory import CCLFactory
-            dict_all = {**_sys_pars, **_pars}
-            extra_dict = {}
-            if dict_all['A_s'] is None:
-                extra_dict['amplitude_parameter'] = 'sigma8'
-                dict_all.pop('A_s')
-            else:
-                extra_dict['amplitude_parameter'] = 'A_s'
-                dict_all.pop('sigma8')
+        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars)
 
-            extra_dict['mass_split'] = dict_all['mass_split']
-            dict_all.pop('mass_split')
-            if 'extra_parameters' in dict_all.keys():
-                if 'camb' in dict_all['extra_parameters'].keys():
-                    extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
-                    if 'kmin' in dict_all['extra_parameters']['camb'].keys():
-                        extra_dict['camb_extra_params'].pop('kmin')
-                dict_all.pop('extra_parameters')
-            keys = list(dict_all.keys())
-
-            # Remove None values
-            for key in keys:
-                if (dict_all[key] is None) or (dict_all[key] == 'None'):
-                    dict_all.pop(key)
-            if self.cf is None:
-                for key in extra_dict.keys():
-                    print(extra_dict[key], type(extra_dict[key]))
-                self.cf = CCLFactory(**extra_dict)
-                self.tools = firecrown.modeling_tools.ModelingTools(ccl_factory=self.cf)
-                self.tools.reset()
-            pmap = ParamsMap(dict_all)
-            self.cf.update(pmap)
-            self.tools.update(pmap)
-            self.tools.prepare()
-            self.lk.update(pmap)
-            f_out = self.lk.compute_theory_vector(self.tools)
-
-            return f_out
+        return f_out

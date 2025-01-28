@@ -13,20 +13,20 @@ from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
+from augur.utils.theory_utils import compute_new_theory_vector
 from packaging.version import Version
 import firecrown
+
 if Version(firecrown.__version__) >= Version('1.8.0a'):
     import firecrown.likelihood.weak_lensing as wl
     import firecrown.likelihood.number_counts as nc
     from firecrown.likelihood.two_point import TwoPoint
     from firecrown.likelihood.gaussian import ConstGaussian
-    from firecrown.ccl_factory import CCLFactory
 elif Version(firecrown.__version__) >= Version('1.7.4'):
     import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
     import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
     from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
     from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
-from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
@@ -349,52 +349,10 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk.read(S)
 
     cosmo.compute_nonlin_power()
-
+    _pars = cosmo.__dict__['_params_init_kwargs']
     # Populate ModelingTools and likelihood
-
-    # Old firecrown
-    if Version(firecrown.__version__) < Version('1.8.0a'):
-        tools = ModelingTools()
-        lk.update(sys_params)
-        tools.update(sys_params)
-        tools.prepare(cosmo)
-        # Run the likelihood (to get the theory)
-        lk.compute_loglike(tools)
-    # New firecrown with CCLFactory
-    else:
-        _pars = cosmo.__dict__['_params_init_kwargs']
-        dict_all = {**sys_params, **_pars}
-        extra_dict = {}
-        if dict_all['A_s'] is None:
-            extra_dict['amplitude_parameter'] = 'sigma8'
-            dict_all.pop('A_s')
-        else:
-            extra_dict['amplitude_parameter'] = 'A_s'
-            dict_all.pop('sigma8')
-
-        extra_dict['mass_split'] = dict_all['mass_split']
-        dict_all.pop('mass_split')
-        if 'extra_parameters' in dict_all.keys():
-            if 'camb' in dict_all['extra_parameters'].keys():
-                extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
-                if 'kmin' in dict_all['extra_parameters']['camb'].keys():
-                    extra_dict['camb_extra_params'].pop('kmin')
-            dict_all.pop('extra_parameters')
-        keys = list(dict_all.keys())
-
-        # Remove None values from dict_all
-        for key in keys:
-            if (dict_all[key] is None) or (dict_all[key] == 'None'):
-                dict_all.pop(key)
-        cf = CCLFactory(**extra_dict)
-        tools = ModelingTools(ccl_factory=cf)
-        tools.reset()
-        pmap = ParamsMap(dict_all)
-        cf.update(pmap)
-        tools.update(pmap)
-        tools.prepare()
-        lk.update(pmap)
-        lk.compute_theory_vector(tools)
+    tools = firecrown.modeling_tools.ModelingTools()
+    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
