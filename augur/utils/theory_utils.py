@@ -24,7 +24,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
     return_all : bool,
         If `False` it will just return the predicted data vector. Else,
         it will return the internal ModelingTools and Likelihood objects.
-    
+
     Returns:
     --------
     f_out : ndarray,
