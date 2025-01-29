@@ -13,9 +13,11 @@ from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
+from augur.utils.theory_utils import compute_new_theory_vector
 from packaging.version import Version
 import firecrown
-if Version(firecrown.__version__) >= Version('1.8'):
+
+if Version(firecrown.__version__) >= Version('1.8.0a'):
     import firecrown.likelihood.weak_lensing as wl
     import firecrown.likelihood.number_counts as nc
     from firecrown.likelihood.two_point import TwoPoint
@@ -25,7 +27,6 @@ elif Version(firecrown.__version__) >= Version('1.7.4'):
     import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
     from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
     from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
-from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
@@ -347,22 +348,13 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
-    # The newest version of firecrown requires a modeling tool rather than a cosmology
-    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
-        with_NC=False,
-        with_IA=True,
-        log10k_min=-4,  # Leaving defaults for now
-        log10k_max=2,
-        nk_per_decade=20,
-        cosmo=cosmo
-    )
+
     cosmo.compute_nonlin_power()
-    tools = ModelingTools(pt_calculator=pt_calculator)
-    lk.update(sys_params)
-    tools.update(sys_params)
-    tools.prepare(cosmo)
-    # Run the likelihood (to get the theory)
-    lk.compute_loglike(tools)
+    _pars = cosmo.__dict__['_params_init_kwargs']
+    # Populate ModelingTools and likelihood
+    tools = firecrown.modeling_tools.ModelingTools()
+    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
+
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
     ell_dict = {}
