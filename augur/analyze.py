@@ -224,7 +224,7 @@ class Analyze(object):
                 if self.norm_step:
                     print(self.x)
                     x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                              * 1/self.norm
+                        * 1/self.norm
                 else:
                     x_here = self.x
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
@@ -239,7 +239,7 @@ class Analyze(object):
                 if self.norm_step:
                     print(self.x)
                     x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                              * 1/self.norm
+                        * 1/self.norm
                 else:
                     x_here = self.x
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
