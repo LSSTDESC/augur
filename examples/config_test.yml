@@ -5,6 +5,7 @@ cosmo:
     Omega_b : 0.0491685
     h : 0.6727
     n_s : 0.9645
+    #A_s : 2.105e-9
     sigma8 : 0.831
     extra_parameters :
         camb :
@@ -108,7 +109,8 @@ fisher:
                'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
     # parameters:  # TODO: For now priors are ignored
     #     Omega_c: [0.1, 0.26, 0.9]
-    #     sigma8: [0.4, 0.81, 1.2]
+    #     A_s: [1e-9, 4e-9]
+    #     #sigma8: [0.4, 0.81, 1.2]
     #     w0: [-1.8, -1.0, -0.2]
     #     wa: [-4, 0.0, 0.5]
     #     h: [0.5, 0.6727, 0.8]

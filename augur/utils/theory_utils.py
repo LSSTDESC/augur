@@ -57,7 +57,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             extra_dict['amplitude_parameter'] = 'sigma8'
             dict_all.pop('A_s')
         else:
-            extra_dict['amplitude_parameter'] = 'A_s'
+            extra_dict['amplitude_parameter'] = 'As'
             dict_all.pop('sigma8')
 
         extra_dict['mass_split'] = dict_all['mass_split']
