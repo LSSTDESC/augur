@@ -128,14 +128,15 @@ class Analyze(object):
                     raise ValueError(f'The requested parameter {var} is not \
                                     in the list of parameters in the likelihood.')
         # Cast to numpy array (this will be done later anyway)
-        self.x = np.array(self.x)
+        self.x = np.array(self.x).astype(np.float64)
         self.par_bounds = np.array(self.par_bounds)
         if (len(self.par_bounds) < 1) & (self.norm_step):
             self.norm_step = False
             warnings.warn('Parameter bounds not provided -- the step will not be normalized')
         # Normalize the pivot point given the sampling region
         if self.norm_step:
-            self.norm = self.par_bounds[:, 1] - self.par_bounds[:, 0]
+            self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
+                        np.array(self.par_bounds[:, 0]).astype(np.float64)
 
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
@@ -166,10 +167,10 @@ class Analyze(object):
             raise ValueError('The labels should have the same length as the parameters!')
         else:
             if isinstance(x, list):
-                x = np.array(x)
+                x = np.array(x).astype(np.float64)
             # If we normalize the sampling we need to undo the normalization
             if donorm:
-                x = self.norm * x + self.par_bounds[:, 0]
+                x = self.norm * x + np.array(self.par_bounds[:, 0]).astype(np.float64)
 
             if x.ndim == 1:
                 _pars = pars_fid.copy()
@@ -221,7 +222,9 @@ class Analyze(object):
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
                 if self.norm_step:
-                    x_here = (self.x - self.par_bounds[:, 0]) * 1/self.norm
+                    print(self.x)
+                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
+                              * 1/self.norm
                 else:
                     x_here = self.x
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
@@ -234,7 +237,9 @@ class Analyze(object):
                 else:
                     ndkwargs = {}
                 if self.norm_step:
-                    x_here = (self.x - self.par_bounds[:, 0]) * 1/self.norm
+                    print(self.x)
+                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
+                              * 1/self.norm
                 else:
                     x_here = self.x
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
