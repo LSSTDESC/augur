@@ -92,10 +92,13 @@ class Analyze(object):
         self.var_pars = None
         self.derivatives = None
         self.Fij = None
+        self.Fij_with_gprior = None
         self.bi = None
         self.biased_cls = None
         self.par_bounds = []
         self.norm = None
+        self.gpriors = []
+        self.gprior_pars = None
         # Load the parameters to vary
         # We will allow 2 options -- one where we pass something
         # a la cosmosis with parameters and minimum, central, and max
@@ -138,6 +141,14 @@ class Analyze(object):
             self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
                         np.array(self.par_bounds[:, 0]).astype(np.float64)
 
+        # reads in associated gaussian prior width of parameters
+        if 'gaussian_priors' in self.config.keys():
+            self.gprior_pars = list(self.config['gaussian_priors'].keys())
+            for var in self.gprior_pars:
+                _val = self.config['gaussian_priors'][var]
+                self.gpriors.append(_val)
+
+        print(self.gprior_pars, self.gpriors, self.var_pars)
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
@@ -257,21 +268,64 @@ class Analyze(object):
         else:
             return self.derivatives
 
+
+    def add_gaussian_priors(self, save_txt=True):
+        """
+        Auxiliary function to add user-specified Gaussian priors to parameters.
+        Called immediately after calculating the Fisher matrix if gaussian_priors
+        header is specified.
+
+        Parameters:
+        -----------
+        save_txt : bool
+            Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
+        """
+        if self.Fij_with_gprior is None:
+
+            indices = []
+            for gvar in self.gprior_pars:
+                print(gvar)
+                print(np.where(np.array(self.var_pars) == gvar))
+                if gvar in self.var_pars:
+                    indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
+                else:
+                    raise ValueError(f'The requested prior `{gvar}` is not recognized. \
+                                       Please make sure that it is part of your model.')
+
+            self.Fij_with_gprior = np.copy(self.Fij)
+            gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
+            for i in range(len(self.gpriors)):
+                j = indices[i]
+                print(j, i, self.gpriors[i])
+                self.Fij_with_gprior[j][j]+=1.0/self.gpriors[i]**2
+                gprior_only[j][j]+=1.0/self.gpriors[i]**2
+            
+            if save_txt:
+                np.savetxt(self.config['output']+".priors_only", gprior_only)
+                np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
+
+        return self.Fij_with_gprior
+
+
     def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
             self.get_derivatives(method=method)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
+            
             if save_txt:
                 np.savetxt(self.config['output'], self.Fij)
                 tab_out = Table(self.x.T, names=self.var_pars)
                 tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
-            return self.Fij
-        else:
-            return self.Fij
 
-    def get_fisher_bias(self):
+        if self.gprior_pars is not None:
+            print('adding priors')
+            self.add_gaussian_priors(save_txt=save_txt)
+
+        return self.Fij
+
+    def get_fisher_bias(self, force=False, method='5pt_stencil', save_txt=True, use_fid=False):
         # Compute Fisher bias following the generalized Amara formalism
         # More details in Bianca's thesis and the note here:
         # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
@@ -282,10 +336,10 @@ class Analyze(object):
         import os
 
         if self.derivatives is None:
-            self.get_derivatives()
+            self.get_derivatives(force=force, method=method)
 
         if self.Fij is None:
-            self.get_fisher_matrix()
+            self.get_fisher_matrix(method=method, save_txt=save_txt)
 
         if self.bi is not None:
             return self.bi
@@ -311,8 +365,12 @@ class Analyze(object):
                         raise ValueError('The length of the provided Cls should be equal \
                                         to the length of the data-vector')
                     _calculate_biased_cls = False
-                    self.biased_cls = biased_cls['dv_sys'] - self.data_fid
+                    if use_fid:
+                        self.biased_cls = biased_cls['dv_sys'] - self.data_fid
+                    else:
 
+                        self.biased_cls = biased_cls['dv_sys'] - self.f(self.x, self.var_pars, self.pars_fid,
+                                                   self.req_params, donorm=False)
             # If there's no biased data vector, calculate it
             if _calculate_biased_cls:
                 _x_here = []
@@ -335,9 +393,13 @@ class Analyze(object):
                 else:
                     raise ValueError('bias_params is required if no biased_dv file is passed')
 
-                self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
-                                         donorm=False) - self.data_fid
-
+                if use_fid:
+                    self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
+                                         donorm=False)- self.data_fid
+                else:
+                    self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
+                                         donorm=False) - self.f(self.x, self.var_pars, self.pars_fid,
+                                                   self.req_params, donorm=False)
             Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
