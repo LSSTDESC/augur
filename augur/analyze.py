@@ -148,7 +148,6 @@ class Analyze(object):
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
 
-        print(self.gprior_pars, self.gpriors, self.var_pars)
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
@@ -233,7 +232,6 @@ class Analyze(object):
         if (self.derivatives is None) or (force):
             if '5pt_stencil' in method:
                 if self.norm_step:
-                    print(self.x)
                     x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                         * 1/self.norm
                 else:
@@ -248,7 +246,6 @@ class Analyze(object):
                 else:
                     ndkwargs = {}
                 if self.norm_step:
-                    print(self.x)
                     x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                         * 1/self.norm
                 else:
@@ -268,7 +265,6 @@ class Analyze(object):
         else:
             return self.derivatives
 
-
     def add_gaussian_priors(self, save_txt=True):
         """
         Auxiliary function to add user-specified Gaussian priors to parameters.
@@ -284,8 +280,6 @@ class Analyze(object):
 
             indices = []
             for gvar in self.gprior_pars:
-                print(gvar)
-                print(np.where(np.array(self.var_pars) == gvar))
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
                 else:
@@ -296,16 +290,14 @@ class Analyze(object):
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
             for i in range(len(self.gpriors)):
                 j = indices[i]
-                print(j, i, self.gpriors[i])
-                self.Fij_with_gprior[j][j]+=1.0/self.gpriors[i]**2
-                gprior_only[j][j]+=1.0/self.gpriors[i]**2
-            
+                self.Fij_with_gprior[j][j] += 1.0/self.gpriors[i]**2
+                gprior_only[j][j] += 1.0/self.gpriors[i]**2
+
             if save_txt:
                 np.savetxt(self.config['output']+".priors_only", gprior_only)
                 np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
 
         return self.Fij_with_gprior
-
 
     def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
@@ -313,7 +305,7 @@ class Analyze(object):
             self.get_derivatives(method=method)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
-            
+
             if save_txt:
                 np.savetxt(self.config['output'], self.Fij)
                 tab_out = Table(self.x.T, names=self.var_pars)
@@ -368,9 +360,11 @@ class Analyze(object):
                     if use_fid:
                         self.biased_cls = biased_cls['dv_sys'] - self.data_fid
                     else:
-
-                        self.biased_cls = biased_cls['dv_sys'] - self.f(self.x, self.var_pars, self.pars_fid,
-                                                   self.req_params, donorm=False)
+                        self.biased_cls = biased_cls['dv_sys'] - self.f(self.x,
+                                                                        self.var_pars,
+                                                                        self.pars_fid,
+                                                                        self.req_params,
+                                                                        donorm=False)
             # If there's no biased data vector, calculate it
             if _calculate_biased_cls:
                 _x_here = []
@@ -395,11 +389,13 @@ class Analyze(object):
 
                 if use_fid:
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
-                                         donorm=False)- self.data_fid
+                                             donorm=False) - self.data_fid
                 else:
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
-                                         donorm=False) - self.f(self.x, self.var_pars, self.pars_fid,
-                                                   self.req_params, donorm=False)
+                                             donorm=False) - self.f(self.x, self.var_pars,
+                                                                    self.pars_fid,
+                                                                    self.req_params,
+                                                                    donorm=False)
             Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi

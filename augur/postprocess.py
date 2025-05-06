@@ -54,9 +54,9 @@ def postprocess(config):
     ls = pconfig["linestyle"] if "linestyle" in pconfig.keys() else "-"
     edgecolors = pconfig["linecolor"] if "linecolor" in pconfig.keys() else "k"
     facecolors = pconfig["facecolor"] if "facecolor" in pconfig.keys() else "none"
-    CL = pconfig["CL"] if "CL" in pconfig.keys() else [0.68,]
+    CL = pconfig["CL"] if "CL" in pconfig.keys() else [0.68, ]
     if not isinstance(CL, list):
-        CL = [CL,]
+        CL = [CL, ]
     f, ax = plt.subplots(npars, npars, figsize=(xsize, ysize))
 
     try:

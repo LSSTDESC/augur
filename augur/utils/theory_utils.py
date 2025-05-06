@@ -77,7 +77,8 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
         if cf is None:
             cf = CCLFactory(**extra_dict)
             if tools.pt_calculator is not None:
-                tools = firecrown.modeling_tools.ModelingTools(pt_calculator=tools.get_pt_calculator(), ccl_factory=cf)
+                ptc = tools.get_pt_calculator()
+                tools = firecrown.modeling_tools.ModelingTools(pt_calculator=ptc, ccl_factory=cf)
             else:
                 tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
             tools.reset()
