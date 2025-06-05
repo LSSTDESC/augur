@@ -81,7 +81,6 @@ class Analyze(object):
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
-        print(self.pars_fid)
         # CCL Factory placeholder (for newer firecrown)
         self.cf = None
 
@@ -105,6 +104,18 @@ class Analyze(object):
         self.Om = None
         self.S8 = None
         self.J = None
+        if 'transform_S8' in self.config.keys():
+            if type(self.config['transform_S8']) is not bool:
+                warnings.warn('transform_S8 not a boolean, therefore \
+                                not transforming Fisher to S8')
+            else:
+                self.transform_S8 = self.config['transform_S8']
+        if 'transform_Omega_m' in self.config.keys():
+            if type(self.config['transform_Omega_m']) is not bool:
+                warnings.warn('transform_Omega_m not a boolean, therefore \
+                                not transforming Fisher to Omega_m')
+            else:
+                self.transform_Omega_m = self.config['transform_Omega_m']
         # Load the parameters to vary
         # We will allow 2 options -- one where we pass something
         # a la cosmosis with parameters and minimum, central, and max
@@ -155,47 +166,79 @@ class Analyze(object):
                 self.gpriors.append(_val)
 
     def get_Om(self):
-        if self.Om == None:
+        """
+        Function that calculates the fiducial value of Omega_m from the input fiducial cosmology.
+
+        Returns:
+        --------
+        Om : float
+             Fiducial value of Om evaluated about pars_fid.
+        """
+        if self.Om is None:
             Om = 0.0
             if 'Omega_c' not in self.var_pars:
-                raise ValueError('Require Omega_c to be specified when transforming the Fisher matrix to Omega_m')
+                raise ValueError('Require Omega_c to be specified \
+                                 when transforming the Fisher matrix to Omega_m')
             if 'Omega_c' in self.pars_fid.keys():
-                Om += self.pars_fid['Omega_c']             
+                Om += self.pars_fid['Omega_c']
             if 'Omega_b' in self.pars_fid.keys():
-                Om += self.pars_fid['Omega_b'] 
+                Om += self.pars_fid['Omega_b']
             if 'm_nu' in self.pars_fid.keys():
                 m_nu = self.pars_fid['m_nu']
-                if m_nu >0.0:
+                if m_nu > 0.0:
                     if 'h' not in self.pars_fid.keys():
-                        raise ValueError('Require h to be specified when transforming the Fisher matrix to Omega_m with m_nu')
+                        raise ValueError('Require h to be specified \
+                                         when transforming the Fisher matrix to Omega_m with m_nu')
                     h = self.pars_fid['h']
-                    m_nu = self.x[ind_mnu]
                     Om += m_nu/h/h/93.14
             self.Om = Om
         return self.Om
 
     def get_S8(self):
-        if self.S8 == None:
+        """
+        Function that calculates the fiducial value of S8 from the input fiducial cosmology.
+
+        Returns:
+        --------
+        S8 : float
+             Fiducial value of S8 evaluated about pars_fid.
+        """
+        if self.S8 is None:
             S8 = 0.0
             Om = self.get_Om()
             if 'sigma8' in self.pars_fid.keys():
                 sigma_8 = self.pars_fid['sigma8']
                 S8 = np.sqrt(Om/0.3) * sigma_8
             else:
-                raise ValueError('Require sigma8 to be specified when transforming the Fisher matrix to S8')
+                raise ValueError('Require sigma8 to be specified \
+                                 when transforming the Fisher matrix to S8')
             self.S8 = S8
         return self.S8
 
     def Jacobian_transform(self):
-        if self.J==None:
+        """
+        Function that returns the Jacobian to transform the basis from:
+        - Omega_c -> Omega_m
+        - sigma8 -> S8
+        and will replace its value in the Fisher matrix.
+        If neither transform is specified, this function will return the Identity matrix
+        to keep all subsequent operations consistent.
+
+        Returns:
+        --------
+        J : np.ndarray
+            Jacobian transformation matrix evaluated about pars_fid.
+        """
+        if self.J is None:
             J = np.identity(len(self.x))
             if self.transform_Omega_m:
                 Om = self.get_Om()
                 ind_c = None
                 if 'Omega_c' in self.var_pars:
                     ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                if ind_c == None:
-                    raise ValueError('Require Omega_c to be specified when transforming the Fisher matrix to Omega_m')
+                if ind_c is None:
+                    raise ValueError('Require Omega_c to be specified \
+                                     when transforming the Fisher matrix to Omega_m')
                 J[ind_c][ind_c] = 1.0
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
@@ -216,15 +259,15 @@ class Analyze(object):
                         J[ind_h][ind_c] = 1.0/dOm_dh
                 print('Replaced Omega_c with Omega_m in Jacobian')
 
-
             if self.transform_S8:
                 S8 = self.get_S8()
                 Om = self.get_Om()
                 ind_sigma8 = None
                 if 'sigma8' in self.var_pars:
                     ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
-                if ind_sigma8 == None:
-                    raise ValueError('Require sigma8 to be specified when transforming the Fisher matrix to S8')
+                if ind_sigma8 is None:
+                    raise ValueError('Require sigma8 to be specified \
+                                     when transforming the Fisher matrix to S8')
                 J[ind_sigma8][ind_sigma8] = 1.0/(np.sqrt(Om/0.3))
                 sigma_8 = self.pars_fid['sigma8']
                 if 'Omega_c' in self.var_pars:
@@ -235,8 +278,8 @@ class Analyze(object):
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
                     dOb_dS8 = 2 * 0.3 * S8/sigma_8**2
-                    J[ind_b][ind_sigma8] = dOc_dS8
-                    J[ind_sigma8][ind_b] = dOc_dS8
+                    J[ind_b][ind_sigma8] = dOb_dS8
+                    J[ind_sigma8][ind_b] = dOb_dS8
                 if 'm_nu' in self.var_pars:
                     mnu = self.pars_fid['m_nu']
                     h = self.pars_fid['h']
@@ -246,9 +289,10 @@ class Analyze(object):
                     J[ind_nu][ind_sigma8] = dmnu_dS8
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        dh_dS8 = -0.5 * h**3 *(93.14/mnu) *(2 * 0.3 * S8/sigma_8**2)
+                        dh_dS8 = -0.5 * h**3 * (93.14 / mnu) * (2 * 0.3 * S8 / sigma_8**2)
                         J[ind_sigma8][ind_h] = dh_dS8
                         J[ind_h][ind_sigma8] = dh_dS8
+                print("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
         return self.J
@@ -296,7 +340,6 @@ class Analyze(object):
                         _sys_pars.update({labels[i]: x[i]})
                     elif 'extra_parameters' in pars_fid.keys():
                         if 'camb' in pars_fid['extra_parameters'].keys():
-                            #need to generatlize for all baryonic parameters but keep some mutually exclusive
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
                                 _sys_pars.update({labels[i]: x[i]})
@@ -386,12 +429,31 @@ class Analyze(object):
         save_txt : bool
             Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
         """
+
+        # 1) transformed parameters are specified (Omega_m or S8)
+        # if they are, we check and make sure Omega_c/sigma8 priors not speficied
+        # then we J transform, and apply 1/sigma^2 to the digaonal
+        # 2) otherwise, just apply the J to the prior-only matrix and sum to Fij_with_prior
         if self.Fij_with_gprior is None:
 
             indices = []
+            ind_sigma8 = None
+            ind_c = None
+            ind_m = None
+            ind_S8 = None
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
+                elif gvar == 'Omega_m' and self.transform_Omega_m:
+                    ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
+                    ind_m = np.where(np.array(self.gprior_pars) == 'Omega_m')[0][0]
+                    if 'Omega_c' in self.gprior_pars:
+                        raise ValueError('Cannot set priors for both Omega_c and Omega_m')
+                elif gvar == 'S8' and self.transform_S8:
+                    ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
+                    ind_S8 = np.where(np.array(self.gprior_pars) == 'S8')[0][0]
+                    if 'sigma8' in self.gprior_pars:
+                        raise ValueError('Cannot set priors for both sigma8 and S8')
                 else:
                     raise ValueError(f'The requested prior `{gvar}` is not recognized. \
                                        Please make sure that it is part of your model.')
@@ -400,8 +462,16 @@ class Analyze(object):
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
             for i in range(len(self.gpriors)):
                 j = indices[i]
-                self.Fij_with_gprior[j][j] += 1.0/self.gpriors[i]**2
                 gprior_only[j][j] += 1.0/self.gpriors[i]**2
+
+            J = self.Jacobian_transform()
+            gprior_only = J.T @ gprior_only @ J
+            if ind_sigma8 is not None and ind_S8 is not None:
+                gprior_only[ind_sigma8][ind_sigma8] = 1.0/self.gpriors[ind_S8]**2
+            if ind_c is not None and ind_m is not None:
+                gprior_only[ind_c][ind_c] = 1.0/self.gpriors[ind_m]**2
+
+            self.Fij_with_gprior += gprior_only
 
             if save_txt:
                 np.savetxt(self.config['output']+".priors_only", gprior_only)
@@ -416,20 +486,31 @@ class Analyze(object):
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
 
-            if self.transform_S8 or self.transform_Omega_m:
-                J = self.Jacobian_transform()
-                F_new = J.T @ self.Fij @ J
-                #continue here
+            J = self.Jacobian_transform()
+            self.Fij = J.T @ self.Fij @ J
+
+            save_vals = np.copy(self.x.T)
+            save_names = np.copy(self.var_pars)
+
+            if self.transform_S8:
+                # swap sigma8 with S8
+                ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
+                save_vals[ind_sigma8] = self.get_S8()
+                save_names[ind_sigma8] = 'S8'
+            if self.transform_Omega_m:
+                # swap Omega_c with Omega_m
+                ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
+                save_vals[ind_c] = self.get_Om()
+                save_names[ind_c] = 'Omega_m'
 
             if save_txt:
                 np.savetxt(self.config['output'], self.Fij)
-                tab_out = Table(self.x.T, names=self.var_pars)
+                tab_out = Table(save_vals, names=save_names)
                 tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
                 fid = self.f(self.x, self.var_pars, self.pars_fid, self.req_params)
                 np.savetxt(self.config['output']+".theory_vector", fid)
         if self.gprior_pars is not None:
             print('adding priors')
-            #require gaussian priors to be in new basis?
             self.add_gaussian_priors(save_txt=save_txt)
 
         return self.Fij
@@ -517,9 +598,23 @@ class Analyze(object):
             Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
+
+            J = self.Jacobian_transform()
+            self.bi = J.T @ self.bi
+            save_names = np.copy(self.var_pars)
+
+            if self.transform_S8:
+                # swap sigma8 with S8
+                ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
+                save_names[ind_sigma8] = 'S8'
+            if self.transform_Omega_m:
+                # swap Omega_c with Omega_m
+                ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
+                save_names[ind_c] = 'Omega_m'
             if save_txt:
-                tab_out = Table(self.bi.T, names=self.var_pars)
-                tab_out.write(self.config['fid_output']+".biased_params", format='ascii', overwrite=True)
+                tab_out = Table(self.bi, names=self.save_names)
+                tab_out.write(self.config['fid_output']+".biased_params",
+                              format='ascii', overwrite=True)
             return self.bi
 
     def compute_new_theory_vector(self, _sys_pars, _pars):
