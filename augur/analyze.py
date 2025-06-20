@@ -570,7 +570,6 @@ class Analyze(object):
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = self.pars_fid.copy()
                     _sys_here = self.req_params.copy()
-                    print(_pars_here, _sys_here, self.pars_fid, self.var_pars)
                     for key, value in self.config['fisher_bias']['bias_params'].items():
                         if key in _pars_here.keys():
                             _pars_here[key] = value
@@ -585,7 +584,6 @@ class Analyze(object):
                                             Please make sure that it is part of your model.')
                 else:
                     raise ValueError('bias_params is required if no biased_dv file is passed')
-                print(_labels_here, _pars_here, _sys_here, self.pars_fid, self.var_pars)
                 if use_fid:
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
                                              donorm=False) - self.data_fid
@@ -615,6 +613,7 @@ class Analyze(object):
                 tab_out = Table(self.bi, names=self.save_names)
                 tab_out.write(self.config['fid_output']+".biased_params",
                               format='ascii', overwrite=True)
+                np.savetxt(self.config['output']+".theory_vector_biased", self.biased_cls)
             return self.bi
 
     def compute_new_theory_vector(self, _sys_pars, _pars):
