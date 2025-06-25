@@ -242,7 +242,6 @@ class Analyze(object):
                 J[ind_c][ind_c] = 1.0
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
-                    J[ind_c][ind_b] = 1.0
                     J[ind_b][ind_c] = 1.0
 
                 if 'm_nu' in self.var_pars:
@@ -250,12 +249,10 @@ class Analyze(object):
                     h = self.pars_fid['h']
                     dOm_dmnu = 1.0/(h*h*93.14)
                     ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_c][ind_nu] = 1.0/dOm_dmnu
                     J[ind_nu][ind_c] = 1.0/dOm_dmnu
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                         dOm_dh = -2.0*mnu/(h*h*h*93.14)
-                        J[ind_c][ind_h] = 1.0/dOm_dh
                         J[ind_h][ind_c] = 1.0/dOm_dh
                 print('Replaced Omega_c with Omega_m in Jacobian')
 
@@ -274,23 +271,19 @@ class Analyze(object):
                     ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
                     dOc_dS8 = 2 * 0.3 * S8/sigma_8**2
                     J[ind_c][ind_sigma8] = dOc_dS8
-                    J[ind_sigma8][ind_c] = dOc_dS8
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
                     dOb_dS8 = 2 * 0.3 * S8/sigma_8**2
                     J[ind_b][ind_sigma8] = dOb_dS8
-                    J[ind_sigma8][ind_b] = dOb_dS8
                 if 'm_nu' in self.var_pars:
                     mnu = self.pars_fid['m_nu']
                     h = self.pars_fid['h']
                     dmnu_dS8 = 2 * 0.3 * h**2 * 93.14 * S8/sigma_8**2
                     ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_sigma8][ind_nu] = dmnu_dS8
                     J[ind_nu][ind_sigma8] = dmnu_dS8
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                         dh_dS8 = -0.5 * h**3 * (93.14 / mnu) * (2 * 0.3 * S8 / sigma_8**2)
-                        J[ind_sigma8][ind_h] = dh_dS8
                         J[ind_h][ind_sigma8] = dh_dS8
                 print("Replaced sigma8 with S8 in Jacobian")
             self.J = J
