@@ -603,7 +603,7 @@ class Analyze(object):
                 ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
                 save_names[ind_c] = 'Omega_m'
             if save_txt:
-                tab_out = Table(self.bi, names=self.save_names)
+                tab_out = Table(self.bi, names=save_names)
                 tab_out.write(self.config['fid_output']+".biased_params",
                               format='ascii', overwrite=True)
                 np.savetxt(self.config['output']+".theory_vector_biased", self.biased_cls)
