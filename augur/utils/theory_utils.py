@@ -62,11 +62,17 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
 
         extra_dict['mass_split'] = dict_all['mass_split']
         dict_all.pop('mass_split')
+        camb_baryon = False
         if 'extra_parameters' in dict_all.keys():
             if 'camb' in dict_all['extra_parameters'].keys():
                 extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
                 if 'kmin' in dict_all['extra_parameters']['camb'].keys():
                     extra_dict['camb_extra_params'].pop('kmin')
+                if 'halofit_version' in dict_all['extra_parameters']['camb'].keys():
+                    halofit_version = dict_all['extra_parameters']['camb']['halofit_version']
+                    if halofit_version == ('mead2020_feedback'
+                                           or 'mead' or 'mead2015' or 'mead2016'):
+                        camb_baryon = True
             dict_all.pop('extra_parameters')
         keys = list(dict_all.keys())
 
@@ -75,8 +81,15 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             if (dict_all[key] is None) or (dict_all[key] == 'None'):
                 dict_all.pop(key)
         if cf is None:
-            cf = CCLFactory(**extra_dict)
-            tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
+            if camb_baryon:
+                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True, use_camb_hm_sampling=True)
+            else:
+                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True)
+            if tools.pt_calculator is not None:
+                ptc = tools.get_pt_calculator()
+                tools = firecrown.modeling_tools.ModelingTools(pt_calculator=ptc, ccl_factory=cf)
+            else:
+                tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
             tools.reset()
         pmap = ParamsMap(dict_all)
         cf.update(pmap)
