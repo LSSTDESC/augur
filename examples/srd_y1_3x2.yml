@@ -10,10 +10,11 @@ cosmo:
     sigma8 : 0.831
     w0: -1.0
     wa: 0.0
+    Omega_k: 0.0
     extra_parameters :
         camb :
             dark_energy_model : 'ppf'
-    #transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
+    # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
     # If the transfer function is not specified, it defaults to using CAMB
 
 ccl_accuracy:  # Example of a couple of parameters to modify.
@@ -21,6 +22,8 @@ ccl_accuracy:  # Example of a couple of parameters to modify.
         K_MAX_SPLINE : 100
     gsl_params:  # You can change here any pyccl.gsl_params
         INTEGRATION_EPSREL: 1e-6
+        INTEGRATION_LIMBER_EPSREL: 1e-2
+
 
 sources:  # Sources
     nbins : 5
@@ -49,7 +52,7 @@ sources:  # Sources
 lenses :  # Lenses
     nbins : 5
     ndens : 18  # in arcmin^-2, same convention as for sources
-    delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
+    delta_z : 0.0  # Photo-z shift for lenses (if ommited it assumes no shift)
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
         input_file : 'data/srd_lens_bins_y1.txt'
@@ -107,9 +110,10 @@ cov_options:
 
 fisher:
     var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias', 
-               'lens2_bias', 'lens3_bias', 'lens4_bias', 
+               'lens2_bias', 'lens3_bias', 'lens4_bias', 'ia_bias', 'alphaz',
                'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
                'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
+               'lens0_sigma_z', 'lens1_sigma_z', 'lens2_sigma_z', 'lens3_sigma_z', 'lens4_sigma_z',
                'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
     # parameters:  # These uniform "priors" are useful for defining normalized step sizes 
     #     Omega_c: [0.1, 0.26, 0.9]
@@ -141,16 +145,18 @@ fisher:
        lens2_sigma_z: 0.1
        lens3_sigma_z: 0.1
        lens4_sigma_z: 0.1
-       src0_delta_z: 0.002 #SRD p18
+       src0_delta_z: 0.002 # SRD p18
        src1_delta_z: 0.002
        src2_delta_z: 0.002
        src3_delta_z: 0.002
        src4_delta_z: 0.002
-       src0_mult_bias: 0.013 #SRD p19
+       src0_mult_bias: 0.013 # SRD p19
        src1_mult_bias: 0.013
        src2_mult_bias: 0.013
        src3_mult_bias: 0.013
        src4_mult_bias: 0.013
+       ia_bias: 3.9 # SRD p55
+       alphaz: 2.3
        Omega_m : 0.2 # actually for Omega_m, as per SRD p43
        Omega_b : 0.006 #SRD p43
        h : 0.063
