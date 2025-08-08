@@ -31,7 +31,7 @@ sources:  # Sources
        # Nz_sigmaz : 0.05
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_source_bins_y1.txt'
+        input_file : ${AUGUR_DIR}/data/srd_source_bins_y1.txt
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
@@ -48,9 +48,9 @@ lenses :  # Lenses
     delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_lens_bins_y1.txt'
+        input_file : ${AUGUR_DIR}/data/srd_lens_bins_y1.txt
         format : 'ascii'
-        # input_file : 'data/srd_lens_bins_year_1.npy'
+        # input_file : ${AUGUR_DIR}/data/srd_lens_bins_year_1.npy
     # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
     # Nz_kwargs :  # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
     #     Nz_width : 0.2  # Photo-z bin-width
@@ -93,7 +93,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : ${AUGUR_DIR}/data/Y1_3x2_SRD_cov.npy
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
