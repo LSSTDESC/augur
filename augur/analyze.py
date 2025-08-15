@@ -330,12 +330,12 @@ class Analyze(object):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
                     elif labels[i] in sys_fid.keys():
-                        _sys_pars.update({labels[i]: x[i]})
+                        _sys_pars.params.update({labels[i]: x[i]})
                     elif 'extra_parameters' in pars_fid.keys():
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                _sys_pars.update({labels[i]: x[i]})
+                                _sys_pars.params.update({labels[i]: x[i]})
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
@@ -351,7 +351,7 @@ class Analyze(object):
                         if labels[j] in pars_fid.keys():
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
-                            _sys_pars.update({labels[j]: xi[j]})
+                            _sys_pars.params.update({labels[j]: xi[j]})
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
