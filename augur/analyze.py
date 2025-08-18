@@ -22,7 +22,7 @@ def update_params(sys_pars, new_pars):
 
     """
     if version.parse(firecrown_version.__version__) < version.parse('1.12.0a0'):
-        ys_pars.update(new_pars)
+        sys_pars.update(new_pars)
     else:
         sys_pars.params.update(new_pars)
 
@@ -183,7 +183,6 @@ class Analyze(object):
             for var in self.gprior_pars:
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
-
 
     def get_Om(self):
         """
