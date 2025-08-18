@@ -1,11 +1,30 @@
 import numpy as np
+from packaging import version
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
 from augur.utils.config_io import parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
+import firecrown.version as firecrown_version
 from astropy.table import Table
 import warnings
+
+
+def update_params(sys_pars, new_pars):
+    """Update the parameters in the _sys_pars with the given new parameters.
+
+    Parameters
+    ----------
+    sys_pars : the parameters to be updated
+
+    new_pars : dict
+        Dictionary containing the new parameters
+
+    """
+    if version.parse(firecrown_version.__version__) < version.parse('1.12.0a0'):
+        sys_pars.update(new_pars)
+    else:
+        sys_pars.params.update(new_pars)
 
 
 class Analyze(object):
@@ -330,12 +349,12 @@ class Analyze(object):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
                     elif labels[i] in sys_fid.keys():
-                        _sys_pars.update({labels[i]: x[i]})
+                        update_params(_sys_pars, {labels[i]: x[i]})
                     elif 'extra_parameters' in pars_fid.keys():
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                _sys_pars.update({labels[i]: x[i]})
+                                update_params(_sys_pars, {labels[i]: x[i]})
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
@@ -351,7 +370,7 @@ class Analyze(object):
                         if labels[j] in pars_fid.keys():
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
-                            _sys_pars.update({labels[j]: xi[j]})
+                            update_params(_sys_pars, {labels[j]: xi[j]})
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
