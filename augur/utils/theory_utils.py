@@ -2,6 +2,7 @@ from packaging.version import Version
 import pyccl as ccl
 import firecrown
 from firecrown.parameters import ParamsMap
+from firecrown.ccl_factory import CCLCreationMode
 
 
 def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=False):
@@ -57,7 +58,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             extra_dict['amplitude_parameter'] = 'sigma8'
             dict_all.pop('A_s')
         else:
-            extra_dict['amplitude_parameter'] = 'As'
+            extra_dict['amplitude_parameter'] = 'as'
             dict_all.pop('sigma8')
 
         extra_dict['mass_split'] = dict_all['mass_split']
@@ -82,9 +83,14 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
                 dict_all.pop(key)
         if cf is None:
             if camb_baryon:
-                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True, use_camb_hm_sampling=True)
+                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True,
+                                use_camb_hm_sampling=True,
+                                creation_mode=CCLCreationMode.PURE_CCL_MODE
+                                )
             else:
-                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True)
+                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True,
+                                creation_mode=CCLCreationMode.PURE_CCL_MODE
+                                )
             if tools.pt_calculator is not None:
                 ptc = tools.get_pt_calculator()
                 tools = firecrown.modeling_tools.ModelingTools(pt_calculator=ptc, ccl_factory=cf)

@@ -415,15 +415,10 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
             eval(config['cov_options']['binning_info']['ell_edges'])
         for tr in S.tracers:
-            print(tr, config['cov_options'].get(f'Ngal_{tr}', 10.0))
-            #try:
             _, ndens = get_noise_power(config, S, tr, return_ndens=True)
             tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
-            #except:
-            #    tjpcov_config['tjpcov'][f'Ngal_{tr}'] = config['cov_options'].get(f'Ngal_{tr}', 10.0)                    
             if 'src' in tr:
                 tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
-        print(tjpcov_config['tjpcov'])
 
         cov_calc = TJPCovGaus(tjpcov_config)
         if config['general']['ignore_scale_cuts']:

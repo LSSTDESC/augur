@@ -561,7 +561,7 @@ class Analyze(object):
                 _x_here = []
                 _labels_here = []
                 if self.transform_S8 or self.transform_Omega_m:
-                    raise InputError("Fisher Biasing involving derived parameters is ill-defined.")
+                    raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = self.pars_fid.copy()
                     _sys_here = self.req_params.copy()
@@ -583,8 +583,6 @@ class Analyze(object):
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
                                              donorm=False) - self.data_fid
                 else:
-                    print(_x_here, _labels_here, _pars_here, _sys_here,)
-                    print(self.x, self.var_pars,self.pars_fid,self.req_params,)
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
                                              donorm=False) - self.f(self.x, self.var_pars,
                                                                     self.pars_fid,
