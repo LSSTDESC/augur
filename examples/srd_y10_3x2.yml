@@ -77,8 +77,8 @@ statistics:
         tracer_combs : [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4],
                      [5, 5], [6, 6], [7, 7], [8, 8], [9, 9]]  # These need to be lists for now
         ell_edges : np.geomspace(20, 15000, 21, endpoint=True)  # bandpower edges
-        kmax : 0.202  # scale cut (in Mpc^-1), 0.3 h/Mpc in SRD
-        # kmax : None
+        kmax : 0.201  # scale cut (in Mpc^-1), 0.3 h/Mpc in SRD
+        #kmax : None
     galaxy_shear_cl_ee : 
         tracer_combs :  [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], 
                   [1, 1], [1, 2], [1, 3], [1, 4],
@@ -89,11 +89,12 @@ statistics:
         kmax : None
     galaxy_shearDensity_cl_e : 
         tracer_combs : [[0, 1], [0, 2], [0, 3], [0, 4], [1, 1], [1, 2], [1, 3], [1, 4],
-                     [2, 2], [2, 3], [2, 4], [3, 2], [3, 3], [3, 4], [4, 2], [4, 3],
-                     [4, 4], [5, 3], [5, 4], [6, 3], [6, 4], [7, 3], [7, 4], [8, 4],
-                     [9, 4]]
+                                [2, 2], [2, 3], [2, 4], [3, 2], [3, 3], [3, 4], [4, 2],
+                                [4, 4], [5, 3], [5, 4], [6, 3], [6, 4], [7, 3], [7, 4], [8, 4],
+                                [9, 4]]
         ell_edges : np.geomspace(20, 15000, 21, endpoint=True)
-        kmax : 0.202
+        kmax : 0.201
+        #kmax : None
 
 fiducial_sacc_path : test_sacc_srd_y10_3x2.sacc
 cov_options:
@@ -107,9 +108,29 @@ cov_options:
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
-    #fsky: 0.3
+    #fsky: 0.42
     #binning_info : 
     #    ell_edges : np.geomspace(20, 15000, 21, endpoint=True).astype(np.int32)
+    # Survey params:
+    # 10 lens bins
+    #Ngal_lens0: 2.25
+    #Ngal_lens1: 3.098
+    #Ngal_lens2: 3.071
+    #Ngal_lens3: 2.595
+    #Ngal_lens4: 1.998
+    #Ngal_lens5: 1.998
+    #Ngal_lens6: 1.998
+    #Ngal_lens7: 1.998
+    #Ngal_lens8: 1.998
+    #Ngal_lens9: 1.998
+
+    # 5 source bins
+    #Ngal_src0: 2.036
+    #Ngal_src1: 1.964
+    #Ngal_src2: 1.973
+    #Ngal_src3: 1.987
+    #Ngal_src4: 2.023
+
 
 fisher:
     var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias', 
@@ -118,8 +139,8 @@ fisher:
                'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
                'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
                'lens5_delta_z', 'lens6_delta_z', 'lens7_delta_z', 'lens8_delta_z', 'lens9_delta_z',
-               'lens0_sigma_z', 'lens1_sigma_z', 'lens2_sigma_z', 'lens3_sigma_z', 'lens4_sigma_z',
-               'lens5_sigma_z', 'lens6_sigma_z', 'lens7_sigma_z', 'lens8_sigma_z', 'lens9_sigma_z',
+               #'lens0_sigma_z', 'lens1_sigma_z', 'lens2_sigma_z', 'lens3_sigma_z', 'lens4_sigma_z',
+               #'lens5_sigma_z', 'lens6_sigma_z', 'lens7_sigma_z', 'lens8_sigma_z', 'lens9_sigma_z',
                'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
     # parameters:  # These uniform "priors" are useful for defining normalized step sizes 
     #     Omega_c: [0.1, 0.26, 0.9]
@@ -130,7 +151,7 @@ fisher:
     #     h: [0.5, 0.6727, 0.8]
     #     n_s: [0.9, 0.9645, 1.0]
     #     #mult_bias: [-0.1 0.0 0.1]
-    step: 1e-3
+    step: 1e-5
     output: 'output/fisher.dat'
     fid_output: 'output/fiducials.dat'
     transform_Omega_m: True
@@ -156,16 +177,16 @@ fisher:
        lens7_delta_z: 0.003
        lens8_delta_z: 0.003
        lens9_delta_z: 0.003
-       lens0_sigma_z: 0.03 # SRD p17
-       lens1_sigma_z: 0.03
-       lens2_sigma_z: 0.03
-       lens3_sigma_z: 0.03
-       lens4_sigma_z: 0.03
-       lens5_sigma_z: 0.03 
-       lens6_sigma_z: 0.03
-       lens7_sigma_z: 0.03
-       lens8_sigma_z: 0.03
-       lens9_sigma_z: 0.03
+       #lens0_sigma_z: 0.03 # SRD p17
+       #lens1_sigma_z: 0.03
+       #lens2_sigma_z: 0.03
+       #lens3_sigma_z: 0.03
+       #lens4_sigma_z: 0.03
+       #lens5_sigma_z: 0.03 
+       #lens6_sigma_z: 0.03
+       #lens7_sigma_z: 0.03
+       #lens8_sigma_z: 0.03
+       #lens9_sigma_z: 0.03
        src0_delta_z: 0.001 #SRD p18
        src1_delta_z: 0.001
        src2_delta_z: 0.001

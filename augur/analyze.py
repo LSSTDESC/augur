@@ -82,7 +82,7 @@ class Analyze(object):
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
         # CCL Factory placeholder (for newer firecrown)
-        self.cf = None
+        self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
         self.config = config['fisher']
@@ -560,6 +560,8 @@ class Analyze(object):
             if _calculate_biased_cls:
                 _x_here = []
                 _labels_here = []
+                if self.transform_S8 or self.transform_Omega_m:
+                    raise InputError("Fisher Biasing involving derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = self.pars_fid.copy()
                     _sys_here = self.req_params.copy()
@@ -581,6 +583,8 @@ class Analyze(object):
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
                                              donorm=False) - self.data_fid
                 else:
+                    print(_x_here, _labels_here, _pars_here, _sys_here,)
+                    print(self.x, self.var_pars,self.pars_fid,self.req_params,)
                     self.biased_cls = self.f(_x_here, _labels_here, _pars_here, _sys_here,
                                              donorm=False) - self.f(self.x, self.var_pars,
                                                                     self.pars_fid,
@@ -626,6 +630,6 @@ class Analyze(object):
         f_out : ndarray,
             Predicted data vector for the given input parameters _sys_pars, _pars.
         """
-        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars)
+        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars, cf=self.cf)
 
         return f_out
