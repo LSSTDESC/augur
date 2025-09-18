@@ -164,7 +164,7 @@ def get_SRD_cov(config, S):
                       ('lens1', 'src1'), ('lens1', 'src2'), ('lens1', 'src3'), ('lens1', 'src4'),
                       ('lens2', 'src2'), ('lens2', 'src3'), ('lens2', 'src4'),
                       ('lens3', 'src2'), ('lens3', 'src3'), ('lens3', 'src4'),
-                      ('lens4', 'src2'), ('lens4', 'src4'),
+                      ('lens4', 'src2'), ('lens4', 'src3'), ('lens4', 'src4'),
                       ('lens5', 'src3'), ('lens5', 'src4'),
                       ('lens6', 'src3'), ('lens6', 'src4'),
                       ('lens7', 'src3'), ('lens7', 'src4'),
