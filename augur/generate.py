@@ -10,18 +10,28 @@ import numpy as np
 import pyccl as ccl
 import sacc
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
+from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
-import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
-import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
-from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
-from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
-from firecrown.modeling_tools import ModelingTools
+from augur.utils.theory_utils import compute_new_theory_vector
+from packaging.version import Version
+import firecrown
+
+if Version(firecrown.__version__) >= Version('1.8.0a'):
+    import firecrown.likelihood.weak_lensing as wl
+    import firecrown.likelihood.number_counts as nc
+    from firecrown.likelihood.two_point import TwoPoint
+    from firecrown.likelihood.gaussian import ConstGaussian
+elif Version(firecrown.__version__) >= Version('1.7.4'):
+    import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
+    import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
+    from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
+    from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
 
-implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018]
+implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
 
 def _get_tracers(statistic, comb):
@@ -69,15 +79,46 @@ def generate_sacc_and_stats(config):
     """
 
     config = parse_config(config)
+
+    # Initialize cosmology
     cosmo_cfg = config['cosmo']
-    transfer_function = cosmo_cfg.get('transfer_function', 'boltzmann_camb')
-    extra_parameters = cosmo_cfg.get('extra_parameters', dict())
-    # Set up ccl.Cosmology object
-    cosmo = ccl.Cosmology(Omega_b=cosmo_cfg['Omega_b'],
-                          Omega_c=cosmo_cfg['Omega_c'],
-                          n_s=cosmo_cfg['n_s'], sigma8=cosmo_cfg['sigma8'],
-                          h=cosmo_cfg['h'], transfer_function=transfer_function,
-                          extra_parameters=extra_parameters)
+
+    if cosmo_cfg.get("transfer_function") is None:
+        cosmo_cfg['transfer_function'] = 'boltzmann_camb'
+
+    if cosmo_cfg.get('extra_parameters') is None:
+        cosmo_cfg['extra_parameters'] = dict()
+
+    if 'ccl_accuracy' in config.keys():
+        # Pass along spline control parameters
+        if 'spline_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['spline_params'].keys():
+                try:
+                    type_here = type(ccl.spline_params[key])
+                    value = config['ccl_accuracy']['spline_params'][key]
+                    ccl.spline_params[key] = type_here(value)
+                except KeyError:
+                    print(f'The selected spline keyword `{key}` is not recognized.')
+                except ValueError:
+                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+        # Pass along GSL control parameters
+        if 'gsl_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['gsl_params'].keys():
+                try:
+                    type_here = type(ccl.gsl_params[key])
+                    value = config['ccl_accuracy']['gsl_params'][key]
+                    ccl.gsl_params[key] = type_here(value)
+                except KeyError:
+                    print(f'The selected GSL keyword `{key}` is not recognized.')
+                except ValueError:
+                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+
+    try:
+        cosmo = ccl.Cosmology(**cosmo_cfg)
+    except (KeyError, TypeError, ValueError) as e:
+        print('Error in cosmology configuration. Check the config file.')
+        # Reraise the exception to see the full traceback
+        raise e
 
     # First we generate the placeholder SACC file with the correct N(z) and ell-binning
     # TODO add real-space
@@ -124,14 +165,22 @@ def generate_sacc_and_stats(config):
             sacc_tracer = f'{src_root}{i}'
             if isinstance(src_cfg['Nz_type'], list):
                 if eval(src_cfg['Nz_type'][i]) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins, Nz_ibin=i,
-                                                                    **src_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in src_cfg['Nz_type'][i]:
+                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins,
+                                                                        Nz_ibin=i,
+                                                                        **src_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             else:
                 if eval(src_cfg['Nz_type']) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins, Nz_ibin=i,
-                                                                 **src_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in src_cfg['Nz_type']:
+                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins,
+                                                                     Nz_ibin=i,
+                                                                     **src_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
@@ -156,16 +205,17 @@ def generate_sacc_and_stats(config):
         lns_cfg = config['lenses']
         nbins = lns_cfg['nbins']
         lns_root = 'lens'
-        Nz_centers = eval(lns_cfg['Nz_kwargs']['Nz_center'])
-        lns_cfg['Nz_kwargs'].pop('Nz_center')
+        if 'Nz_center' in lns_cfg['Nz_kwargs'].keys():
+            Nz_centers = eval(lns_cfg['Nz_kwargs']['Nz_center'])
+            lns_cfg['Nz_kwargs'].pop('Nz_center')
 
-        if np.isscalar(Nz_centers):
-            Nz_centers = [Nz_centers]
-            if nbins != 1:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
-        else:
-            if len(Nz_centers) != nbins:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
+            if np.isscalar(Nz_centers):
+                Nz_centers = [Nz_centers]
+                if nbins != 1:
+                    raise ValueError('Nz_centers should have the same length as the number of bins')
+            else:
+                if len(Nz_centers) != nbins:
+                    raise ValueError('Nz_centers should have the same length as the number of bins')
         # Checking if there's photo-z shift systematics in the config
         if 'delta_z' in lns_cfg.keys():
             if np.isscalar(lns_cfg['delta_z']):
@@ -177,16 +227,24 @@ def generate_sacc_and_stats(config):
             sacc_tracer = f'{lns_root}{i}'
             if isinstance(lns_cfg['Nz_type'], list):
                 if eval(lns_cfg['Nz_type'][i]) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z, Nz_center=Nz_centers[i],
-                                                                    Nz_nbins=nbins,
-                                                                    **lns_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in lns_cfg['Nz_type'][i]:
+                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z,
+                                                                        Nz_center=Nz_centers[i],
+                                                                        Nz_nbins=nbins,
+                                                                        **lns_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             else:
                 if eval(lns_cfg['Nz_type']) in implemented_nzs:
-                    dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z, Nz_center=Nz_centers[i],
-                                                                 Nz_nbins=nbins,
-                                                                 **lns_cfg['Nz_kwargs'])
+                    if 'ZDistFromFile' not in lns_cfg['Nz_type']:
+                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z,
+                                                                     Nz_center=Nz_centers[i],
+                                                                     Nz_nbins=nbins,
+                                                                     **lns_cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
                 else:
                     raise NotImplementedError('The selected N(z) is yet not implemented')
             S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
@@ -238,6 +296,7 @@ def generate_sacc_and_stats(config):
                 in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
                 wgt[in_win, i] = 1.0
             win = sacc.BandpowerWindow(ells_aux, wgt)
+            print(win.nv, win.nell, len(ells_here))
             S.add_ell_cl(key, tr1, tr2,
                          ells_here, np.zeros(len(ells_here)), window=win)
 
@@ -289,22 +348,24 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
-    # The newest version of firecrown requires a modeling tool rather than a cosmology
-    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
-        with_NC=False,
-        with_IA=True,
-        log10k_min=-4,  # Leaving defaults for now
-        log10k_max=2,
-        nk_per_decade=20,
-        cosmo=cosmo
-    )
+
     cosmo.compute_nonlin_power()
-    tools = ModelingTools(pt_calculator=pt_calculator)
-    lk.update(sys_params)
-    tools.update(sys_params)
-    tools.prepare(cosmo)
-    # Run the likelihood (to get the theory)
-    lk.compute_loglike(tools)
+    _pars = cosmo.__dict__['_params_init_kwargs']
+    # Populate ModelingTools and likelihood
+    tools = firecrown.modeling_tools.ModelingTools()
+    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
+
+    # Get all bandpower windows before erasing the placeholder sacc
+    win_dict = {}
+    ell_dict = {}
+    for st in lk.statistics:
+        st = st.statistic
+        tr1 = st.source0.sacc_tracer
+        tr2 = st.source1.sacc_tracer
+        dtype = st.sacc_data_type
+        idx = S.indices(tracers=(tr1, tr2))
+        win_dict[(tr1, tr2)] = S.get_bandpower_windows(idx)
+        ell_dict[(tr1, tr2)], _ = S.get_ell_cl(dtype, tr1, tr2)
     # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
     S.covariance = None
     S.data = []
@@ -313,10 +374,12 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     for st in lk.statistics:
         # Hack to be able to reuse the statistics
         st = st.statistic
+        tr1 = st.source0.sacc_tracer
+        tr2 = st.source1.sacc_tracer
         st.ready = False
-        S.add_ell_cl(st.sacc_data_type, st.sacc_tracers[0], st.sacc_tracers[1],
-                     st.ell_or_theta_, st.get_theory_vector(),
-                     window=st.theory_window_function)
+        S.add_ell_cl(st.sacc_data_type, tr1, tr2,
+                     ell_dict[(tr1, tr2)], st.get_theory_vector(),  # Only valid for harmonic space
+                     window=win_dict[(tr1, tr2)])
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)

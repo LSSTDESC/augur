@@ -16,80 +16,121 @@ or actually inside the augur directory running
 
 ```python setup.py install```
 
-## Step-by-Step Installation
+## Step-by-Step Installation (via conda)
 
 This step-by-step installaion shows you how to get a working environment with `firecrown` and `augur` that you can hack away efficiently.
 
-Start by creating a new anaconda environment:
-
+### Clone the repository
+First clone and enter the `augur` repository:
+```bash
+git clone git@github.com:LSSTDESC/augur.git
+cd augur
+# set the variable AUGUR_DIR to the current directory
+AUGUR_DIR=${PWD}
 ```
-conda create --name forecasting
+
+### Create a new conda environment
+Start by creating a new anaconda environment from the `environment.yml` file in the `augur` directory:
+
+```bash
+conda env create --name forecasting --file=environment.yml
+conda activate forecasting
+```
+### Or updating an existing environment
+If you already have an existing environment, you can update it with the following command:
+
+```bash
+conda activate my_env
+conda env update --name my_env --file=environment.yml --prune
+```
+and activate your environment with `conda activate [my_env/forecasting]`.
+
+### Cosmosis setup
+Now we need to build the cosmosis standard library:
+```bash
+source ${CONDA_PREFIX}/bin/cosmosis-configure
+cd ${CONDA_PREFIX}
+cosmosis-build-standard-library
+# go back to the augur directory
+cd ${AUGUR_DIR}
+```
+
+### Configure paths necessary for Augur
+We need to let augur know about the location of Firecrown, to do that, run the following command:
+```bash
+FIRECROWN_DIR=$(python -c "import firecrown; print('/'.join(firecrown.__spec__.submodule_search_locations[0].split('/')[0:-1]))")
+```
+Now let's set the environment variables that augur needs to know about:
+```bash
+conda env config vars set AUGUR_DIR=${PWD} CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
+```
+we now need to reload our environment to make the changes effective:
+```bash
+conda deactivate
 conda activate forecasting
 ```
 
-Next install firecrown and augur.
+### Finally install augur
+```bash
+cd ${AUGUR_DIR}
+# now install augur via pip in editable mode
+python -m pip install --no-deps --editable ${PWD}
+```
+
+<!-- Next install firecrown and augur.
 
 Install a repo version of firecrown:
 
 ```
 git clone git@github.com:LSSTDESC/firecrown.git
 cd firecrown
-```
-
-The current version of `augur` relies on firecrown v0.5 or lower so in the same directory you can do:
-
-```
-git checkout tags/v0.5
-pip install . -e
+pythong -m pip install .
 ```
 
 Now run a `pytest` to see if things work.
 
-Next repeat the same with `augur`:
+Next repeat the same with `augur`: -->
 
-```
-git clone git@github.com:LSSTDESC/augur.git
-cd augur
-pip install --no-deps -e .
-```
-
-You are now ready to try a simple forecast as outlined in the next section.
-
+#### Using developer version of Firecrown
+To install and modify the developer version of `firecrown`, follow the instructions [here](https://firecrown.readthedocs.io/en/latest/developer_installation.html).
 
 -----------
-## Installation using Conda
+## Installation using Conda (all in one place)
 
 Because Augur depends upon Firecrown, and Firecrown requires installation using Conda, we use Conda to install Augur.
+```bash
+# clone the Augur repository
+git clone git@github.com:LSSTDESC/augur.git
 
-    # clone the Augur repository
-    git clone git@github.com:LSSTDESC/augur.git
+cd augur
 
-    # conda env update, when run as suggested, is able to create a new environment, as
-    # well as updating an existing environment.
-    conda env update -f augur/environment.yml
-    conda activate forecasting
+# conda env update, when run as suggested, is able to create a new environment, as
+# well as updating an existing environment.
+conda env update -f environment.yml
+conda activate forecasting
 
-    # The following line loads the firecrown module from the environment, and queries
-    # it to find the installation location.
-    FIRECROWN_DIR=$(python -c "import firecrown; print('/'.join(firecrown.__spec__.submodule_search_locations[0].split('/')[0:-1]))")
+# The following line loads the firecrown module from the environment, and queries
+# it to find the installation location.
+FIRECROWN_DIR=$(python -c "import firecrown; print('/'.join(firecrown.__spec__.submodule_search_locations[0].split('/')[0:-1]))")
 
-    # We define some environment variables that will be defined whenever you activate
-    # the conda environment.
-    conda env config vars set AUGUR_DIR=${PWD}/augur CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
-    # The command above does not immediately define the environment variables.
-    # They are made available on every fresh activation of the environment.
-    # So we have to deactivate and then reactivate...
-    conda deactivate
-    conda activate forecasting
-    # Now we can finish building the CosmoSIS Standard Library.
-    source ${CONDA_PREFIX}/bin/cosmosis-configure
-    # We want to put the CSL into the same directory as conda environment upon which it depends
-    cd ${CONDA_PREFIX}
-    cosmosis-build-standard-library
-    # Now change directory into the Augur repository
-    cd ${AUGUR_DIR}
-    # And finally make an editable (developer) installation of firecrown into the conda environment
-    python -m pip install --no-deps --editable ${PWD}
+# We define some environment variables that will be defined whenever you activate
+# the conda environment.
+conda env config vars set AUGUR_DIR=${PWD} CSL_DIR=${CONDA_PREFIX}/cosmosis-standard-library FIRECROWN_DIR=${FIRECROWN_DIR}
+# The command above does not immediately define the environment variables.
+# They are made available on every fresh activation of the environment.
+# So we have to deactivate and then reactivate...
+conda deactivate
+conda activate forecasting
+# Now we can finish building the CosmoSIS Standard Library.
+source ${CONDA_PREFIX}/bin/cosmosis-configure
+# We want to put the CSL into the same directory as conda environment upon which it depends
+cd ${CONDA_PREFIX}
+cosmosis-build-standard-library
+# Now change directory into the Augur repository
+cd ${AUGUR_DIR}
+# And finally make an editable (developer) installation of firecrown into the conda environment
+python -m pip install --no-deps --editable ${PWD}
+```
 
 ## Usage
 
@@ -100,10 +141,19 @@ The user can create configuration files to fit their specific purposes following
 
 ```
 from augur.generate import generate
-lk = generate('./examples/config_test.yml', return_all_outputs=False, force_read=False)
+lk = generate('./examples/config_test.yml', return_all_outputs=False)
 ```
 
 This likelihood object can then be used by `cosmosis`, `cobaya` or `NumCosmo`. For more details follow the examples in the [`firecrown`](https://github.com/LSSTDESC/firecrown) repository.
+
+Additionally, we can compute the Fisher matrix and Fisher biases via numerical derivatives using the following commands:
+
+```
+from augur.analyze import Analyze
+ao = Analyze('./examples/config_test.yml')
+ao.get_fisher_bias()  # This command computes the derivates+Fisher matrices+fisher bias
+print(ao.Fij, ao.bi)  # These are the values of the Fisher matrix, Fij, and Fisher biases bi
+```
 
 ## Example run for SRD v1
 We also include example configuration files for `cosmosis` and `cobaya` to reproduce the results from the [LSST DESC Science Requirements Document](https://arxiv.org/pdf/1809.01669.pdf).

@@ -5,7 +5,6 @@ cosmo:
     Omega_b : 0.0491685
     h : 0.6727
     n_s : 0.9645
-    #A_s : 2.105e-9
     sigma8 : 0.831
     extra_parameters :
         camb :
@@ -13,27 +12,15 @@ cosmo:
     # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
     # If the transfer function is not specified, it defaults to using CAMB
 
-ccl_accuracy:  # Example of a couple of parameters to modify.
-    spline_params:  # You can change here any pyccl.spline_params
-        K_MAX_SPLINE : 100
-    gsl_params:  # You can change here any pyccl.gsl_params
-        INTEGRATION_EPSREL: 1e-6
-
 sources:  # Sources
     nbins : 5
     ndens : 10  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
     ellipticity_error : 0.26
-    
-    # Nz_type : 'SourceSRD2018'  # For now, this is the assumed N(z) for sources -- check SRD 2018
-    # Nz_kwargs :  # keyword arguments for SourceSRD2018 class -- can allow easy generalizations for the future
-       # Nz_alpha : 0.78
-       # Nz_z0 : 0.13
-       # Nz_sigmaz : 0.05
-    Nz_type : 'ZDistFromFile'
-    Nz_kwargs : 
-        input_file : 'data/srd_source_bins_y1.txt'
-        format : 'ascii'
-        # input_file : 'data/srd_source_bins_year_1.npy'
+    Nz_type : 'SourceSRD2018'  # For now, this is the assumed N(z) for sources -- check SRD 2018
+    Nz_kwargs :  # keyword arguments for SourceSRD2018 class -- can allow easy generalizations for the future
+        Nz_alpha : 0.78
+        Nz_z0 : 0.13
+        Nz_sigmaz : 0.05
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
@@ -45,22 +32,17 @@ sources:  # Sources
 lenses :  # Lenses
     nbins : 5
     ndens : 18  # in arcmin^-2, same convention as for sources
+    Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
     delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
-    Nz_type : 'ZDistFromFile'
-    Nz_kwargs : 
-        input_file : 'data/srd_lens_bins_y1.txt'
-        format : 'ascii'
-        # input_file : 'data/srd_lens_bins_year_1.npy'
-    # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
-    # Nz_kwargs :  # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
-    #     Nz_width : 0.2  # Photo-z bin-width
-    #     Nz_center : np.arange(1, 6)*0.2 + 0.1  # Photo-z bin centers (it can be a list of values or some np array)
-    #     Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
-    #     Nz_alpha : 0.94  # N(z) alpha parameter
-    #     Nz_z0 : 0.26  # N(z) z-pivot
-    # bias_type : 'inverse_growth'  # Inverse growth bias or custom
-    # bias_kwargs : 
-    #     b0 : 1.33  # Reverse engineeering the bias values from the SRD
+    Nz_kwargs :  # keyword arguments for LensSRD2018 class -- can allow easy generalizations for the future
+        Nz_width : 0.2  # Photo-z bin-width
+        Nz_center : np.arange(1, 6)*0.2 + 0.1  # Photo-z bin centers (it can be a list of values or some np array)
+        Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
+        Nz_alpha : 0.94  # N(z) alpha parameter
+        Nz_z0 : 0.26  # N(z) z-pivot
+    #bias_type : 'inverse_growth'  # Inverse growth bias or custom
+    #bias_kwargs : 
+    #    b0 : 1.33  # Reverse engineeering the bias values from the SRD
     # Another option is to use the `custom` bias type, but it requires a value per bin
     bias_type : 'custom'
     bias_kwargs :
@@ -109,16 +91,15 @@ fisher:
                'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
     # parameters:  # TODO: For now priors are ignored
     #     Omega_c: [0.1, 0.26, 0.9]
-    #     A_s: [1e-9, 4e-9]
-    #     #sigma8: [0.4, 0.81, 1.2]
+    #     sigma8: [0.4, 0.81, 1.2]
     #     w0: [-1.8, -1.0, -0.2]
     #     wa: [-4, 0.0, 0.5]
     #     h: [0.5, 0.6727, 0.8]
     #     n_s: [0.9, 0.9645, 1.0]
     #     #mult_bias: [-0.1 0.0 0.1]
     step: 1e-2
-    output: 'output/fisher.dat'
-    fid_output: 'output/fiducials.dat'
+    output: 'fisher.dat'
+    fid_output: 'pars.dat'
     fisher_bias:
         biased_dv: ''  # Path to file containing modified data vector with the systematic shift to probe
                     # If the file is provided it should be a FITS or ASCII file with the  same binning as the
@@ -129,12 +110,4 @@ fisher:
             lens0_delta_z: 0.01
             src3_delta_z: 0.005
         
-postprocess:
-  latex_table: output/latex_table.tex
-  triangle_plot: output/triangle_plot.pdf
-  facecolor: blue
-  pairplots: [(w0, wa), (omega_c, sigma8)]
-  outdir: 'output/'
-  CL: 
-    - 0.68
-    - 0.95
+

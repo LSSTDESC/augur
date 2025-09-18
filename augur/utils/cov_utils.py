@@ -89,15 +89,17 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     cov_all = np.zeros((len(S.data), len(S.data)))
     # Loop over statistic in the likelihood (assuming 3x2pt so far)
     for i, myst1 in enumerate(lk.statistics):
+        myst1 = myst1.statistic
         tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
         tr2 = myst1.source1.tracers[0].ccl_tracer
-        ell12 = myst1._ell_or_theta
+        ell12 = myst1.ells
         # Loop over upper-triangle and fill lower-triangle by symmetry
         for j in range(i, len(lk.statistics)):
             myst2 = lk.statistics[j]
+            myst2 = myst2.statistic
             tr3 = myst2.source0.tracers[0].ccl_tracer
             tr4 = myst2.source1.tracers[0].ccl_tracer
-            ell34 = myst2._ell_or_theta
+            ell34 = myst2.ells
             # Assuming that everything has the same ell-edges and we are just changing the length
             # TODO update this for a more general case
             if len(ell34) < len(ell12):
