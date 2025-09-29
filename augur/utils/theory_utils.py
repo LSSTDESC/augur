@@ -83,7 +83,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
         if cf is None:
             if camb_baryon:
                 cf = CCLFactory(
-                    **extra_dict, 
+                    **extra_dict,
                     require_nonlinear_pk=True,
                     use_camb_hm_sampling=True,
                     creation_mode=CCLCreationMode.PURE_CCL_MODE
