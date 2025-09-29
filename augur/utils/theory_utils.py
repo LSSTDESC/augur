@@ -50,7 +50,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             return f_out
 
     else:
-        from firecrown.ccl_factory import CCLFactory
+        from firecrown.ccl_factory import CCLFactory, CCLCreationMode
         dict_all = {**_sys_pars, **_pars}
         extra_dict = {}
         if dict_all['A_s'] is None:
@@ -82,9 +82,18 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
                 dict_all.pop(key)
         if cf is None:
             if camb_baryon:
-                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True, use_camb_hm_sampling=True)
+                cf = CCLFactory(
+                    **extra_dict, 
+                    require_nonlinear_pk=True,
+                    use_camb_hm_sampling=True,
+                    creation_mode=CCLCreationMode.PURE_CCL_MODE
+                    )
             else:
-                cf = CCLFactory(**extra_dict, require_nonlinear_pk=True)
+                cf = CCLFactory(
+                    **extra_dict,
+                    require_nonlinear_pk=True,
+                    creation_mode=CCLCreationMode.PURE_CCL_MODE
+                    )
             if tools.pt_calculator is not None:
                 ptc = tools.get_pt_calculator()
                 tools = firecrown.modeling_tools.ModelingTools(pt_calculator=ptc, ccl_factory=cf)
