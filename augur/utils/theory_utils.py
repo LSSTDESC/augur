@@ -50,14 +50,14 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             return f_out
 
     else:
-        from firecrown.ccl_factory import CCLFactory
+        from firecrown.ccl_factory import CCLFactory, PoweSpecAmplitudeParameter
         dict_all = {**_sys_pars, **_pars}
         extra_dict = {}
         if dict_all['A_s'] is None:
-            extra_dict['amplitude_parameter'] = 'sigma8'
+            extra_dict['amplitude_parameter'] = PoweSpecAmplitudeParameter.SIGMA8
             dict_all.pop('A_s')
         else:
-            extra_dict['amplitude_parameter'] = 'As'
+            extra_dict['amplitude_parameter'] = PoweSpecAmplitudeParameter.AS
             dict_all.pop('sigma8')
 
         extra_dict['mass_split'] = dict_all['mass_split']
