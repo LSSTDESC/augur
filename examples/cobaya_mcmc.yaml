@@ -4,12 +4,10 @@ theory:
     extra_args:
       num_massive_neutrinos: 1
       halofit_version: mead
-  fcc_ccl:
-    external: !!python/name:firecrown.connector.cobaya.ccl.CCLConnector ''
-    input_style: CAMB
 likelihood:
   srd_y1_3x2_like:
     external: !!python/name:firecrown.connector.cobaya.likelihood.LikelihoodConnector ''
+    input_style: CAMB
     firecrownIni: srd_y1_3x2_like.py
     derived_parameters: 
     - TwoPoint__NumberCountsScale_lens0
