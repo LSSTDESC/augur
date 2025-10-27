@@ -50,11 +50,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             return f_out
 
     else:
-<<<<<<< HEAD
         from firecrown.ccl_factory import CCLFactory, CCLCreationMode, PoweSpecAmplitudeParameter
-=======
-        from firecrown.ccl_factory import CCLFactory, CCLCreationMode
->>>>>>> upstream/master
         dict_all = {**_sys_pars, **_pars}
         extra_dict = {}
         if dict_all['A_s'] is None:
