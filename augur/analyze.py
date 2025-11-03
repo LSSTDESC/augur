@@ -309,7 +309,7 @@ class Analyze(object):
 
         return self.J
 
-    def f(self, x, labels, pars_fid, sys_fid, donorm=False):
+    def f(self, x, labels, pars_fid, sys_fid, donorm=False, cf=None):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
         Labels are the name of the parameters x (with the same length and order)
@@ -328,11 +328,15 @@ class Analyze(object):
             for the likelihood.
         norm: bool
             If `True` it normalizes the input parameters vector (useful for derivatives).
+        cf : firecrown.CCLFactory,
+            If passed, CCLFactory object to use.
         Returns:
         --------
         f_out : np.ndarray
                 Theory vector computed at x.
         """
+        if cf is None:
+            cf = self.cf
         if len(labels) != len(x):
             raise ValueError('The labels should have the same length as the parameters!')
         else:
@@ -358,7 +362,7 @@ class Analyze(object):
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
-                f_out = self.compute_new_theory_vector(_sys_pars, _pars)
+                f_out = self.compute_new_theory_vector(_sys_pars, _pars, cf=cf)
 
             elif x.ndim == 2:
                 f_out = []
@@ -373,10 +377,10 @@ class Analyze(object):
                             update_params(_sys_pars, {labels[j]: xi[j]})
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
-                    f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
+                    f_out.append(self.compute_new_theory_vector(_sys_pars, _pars, cf=cf))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil', step=None):
+    def get_derivatives(self, force=False, method='5pt_stencil', step=None, cf=None, **kwargs):
         """
         Auxiliary function to compute numerical derivatives of the helper function `f`
 
@@ -389,6 +393,9 @@ class Analyze(object):
             are allowed.
         step : float
             Step size for numerical differentiation
+        cf : firecrown.CCLFactory,
+            If passed, CCLFactory object to use.
+        **kwargs : keyword arguments to pass down to the selected derivative method.
         """
 
         if step is None:
@@ -402,7 +409,8 @@ class Analyze(object):
                 else:
                     x_here = self.x
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
-                                                   self.req_params, donorm=self.norm_step),
+                                                   self.req_params, donorm=self.norm_step,
+                                                   cf=cf),
                                                    x_here, h=step)
             elif 'numdifftools' in method:
                 import numdifftools as nd
@@ -417,10 +425,35 @@ class Analyze(object):
                     x_here = self.x
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                              self.req_params,
-                                                             donorm=self.norm_step),
+                                                             donorm=self.norm_step,
+                                                             cf=cf),
                                             step=step,
                                             **ndkwargs)
                 self.derivatives = jacobian_calc(x_here).T
+            elif 'derivkit' in method:
+                from derivkit.calculus import build_jacobian
+                if self.norm_step:
+                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
+                        * 1/self.norm
+                else:
+                    x_here = self.x
+
+                if kwargs is None:
+                    kwargs = dict()
+                if 'derivkit_method' in kwargs.keys():
+                    method_here = kwargs['derivkit_method']
+                    kwargs.pop('derivkit_method')
+                else:
+                    method_here = 'adaptive'
+                self.derivatives = build_jacobian(function=lambda y: self.f(y, self.var_pars,
+                                                  self.pars_fid,
+                                                  self.req_params,
+                                                  donorm=self.norm_step,
+                                                  cf=cf),
+                                                  theta0=x_here,
+                                                  method=method_here,
+                                                  **kwargs).T
+
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
@@ -628,7 +661,7 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".theory_vector_biased", self.biased_cls)
             return self.bi
 
-    def compute_new_theory_vector(self, _sys_pars, _pars):
+    def compute_new_theory_vector(self, _sys_pars, _pars, cf=None):
         """
         Utility function to update the likelihood and modeling tool objects to use a new
         set of parameters and compute a new theory prediction
@@ -639,12 +672,14 @@ class Analyze(object):
             Dictionary containing the "systematic" modeling parameters.
         _pars : dict,
             Dictionary containing the cosmological parameters
+        cf : firecrown.CCLFactory,
+            If passed, CCLFactory object to use.
 
         Returns:
         --------
         f_out : ndarray,
             Predicted data vector for the given input parameters _sys_pars, _pars.
         """
-        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars)
+        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars, cf=cf)
 
         return f_out
