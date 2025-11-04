@@ -35,6 +35,7 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     nz_all['src'] = []
     nz_all['lens'] = []
     for tr in S.tracers:
+        print(tr)
         trobj = S.get_tracer(tr)
         nz_all[tr[:-1]].append(trobj.nz)  # This assumes 10 or less bins
     nz_all['src'] = np.array(nz_all['src'])
@@ -44,9 +45,10 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
     if 'src' in tracer_name:
         ndens = config['sources']['ndens']
+        ndens *= norm['src'][int(tracer_name[-1])]
     elif 'lens' in tracer_name:
         ndens = config['lenses']['ndens']
-    ndens *= norm['src'][int(tracer_name[-1])]
+        ndens *= norm['lens'][int(tracer_name[-1])]
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
     if 'src' in tracer_name:
         noise_power = config['sources']['ellipticity_error'] ** 2 / nbar
@@ -166,7 +168,7 @@ def get_SRD_cov(config, S):
                       ('lens1', 'src1'), ('lens1', 'src2'), ('lens1', 'src3'), ('lens1', 'src4'),
                       ('lens2', 'src2'), ('lens2', 'src3'), ('lens2', 'src4'),
                       ('lens3', 'src2'), ('lens3', 'src3'), ('lens3', 'src4'),
-                      ('lens4', 'src2'), ('lens4', 'src4'),
+                      ('lens4', 'src2'), ('lens4', 'src3'), ('lens4', 'src4'),
                       ('lens5', 'src3'), ('lens5', 'src4'),
                       ('lens6', 'src3'), ('lens6', 'src4'),
                       ('lens7', 'src3'), ('lens7', 'src4'),

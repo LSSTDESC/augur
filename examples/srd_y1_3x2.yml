@@ -1,6 +1,6 @@
 general:
     ignore_scale_cuts : False # If True ignore any values of kmax
-
+    bandpower_windows : None #TopHat, None
 cosmo:
     Omega_c : 0.2664  # = 0.3156 - 0.0492
     Omega_b : 0.0492
@@ -11,19 +11,17 @@ cosmo:
     w0: -1.0
     wa: 0.0
     Omega_k: 0.0
-    extra_parameters :
-        camb :
-            dark_energy_model : 'ppf'
-    # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
+    #extra_parameters :
+    #    camb :
+    #        halofit_version: 'mead2020'
+    #        dark_energy_model : 'ppf'
+    transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
+    matter_power_spectrum: 'halofit'
     # If the transfer function is not specified, it defaults to using CAMB
 
 ccl_accuracy:  # Example of a couple of parameters to modify.
     spline_params:  # You can change here any pyccl.spline_params
         K_MAX_SPLINE : 100
-    gsl_params:  # You can change here any pyccl.gsl_params
-        INTEGRATION_EPSREL: 1e-6
-        INTEGRATION_LIMBER_EPSREL: 1e-2
-
 
 sources:  # Sources
     nbins : 5
@@ -44,7 +42,7 @@ sources:  # Sources
     mult_bias : [0.0,0.0,0.0,0.0,0.0]  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0.0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 2.4  # ia-bias 
+    ia_bias : 6.13  # ia-bias 
     alphaz : -0.47 # not modeling Luminosity-dependent ampltiude - discrepancy from SRD
     z_piv : 0.3
     ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics

@@ -274,11 +274,13 @@ def generate_sacc_and_stats(config):
     stat_cfg = config['statistics']
     stats = []
     ignore_sc = config['general'].get('ignore_scale_cuts', False)
+    Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
         kmax = stat_cfg[key]['kmax']
         ell_edges = eval(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
+        print(ell_edges)
         for comb in tracer_combs:
             tr1, tr2 = _get_tracers(key, comb)
             if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
@@ -287,18 +289,24 @@ def generate_sacc_and_stats(config):
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
                 ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
                 ells_here = ells[ells < ell_max]
+                print('ell_max', ell_max)
             else:
                 ells_here = ells
-            # Trying to add bandpower windows
-            ells_aux = np.arange(0, np.max(ells_here)+1)
-            wgt = np.zeros((len(ells_aux), len(ells_here)))
-            for i in range(len(ells_here)):
-                in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
-                wgt[in_win, i] = 1.0
-            win = sacc.BandpowerWindow(ells_aux, wgt)
-            print(win.nv, win.nell, len(ells_here))
-            S.add_ell_cl(key, tr1, tr2,
-                         ells_here, np.zeros(len(ells_here)), window=win)
+            # add bandpower windows
+            if Bandpower == 'TopHat':
+                ells_aux = np.arange(0, np.max(ells_here)+1)
+                wgt = np.zeros((len(ells_aux), len(ells_here)))
+                for i in range(len(ells_here)):
+                    in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
+                    wgt[in_win, i] = 1.0
+                win = sacc.BandpowerWindow(ells_aux, wgt)
+                print(win.nv, win.nell, len(ells_here))
+                S.add_ell_cl(key, tr1, tr2,
+                             ells_here, np.zeros(len(ells_here)), window=win)
+
+            else:
+                S.add_ell_cl(key, tr1, tr2,
+                             ells_here, np.zeros(len(ells_here)))                
 
             # Now create TwoPoint objects for firecrown
             _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],

@@ -18,6 +18,7 @@ ccl_accuracy:  # Example of a couple of parameters to modify.
         K_MAX_SPLINE : 100
     gsl_params:  # You can change here any pyccl.gsl_params
         INTEGRATION_EPSREL: 1e-6
+        INTEGRATION_LIMBER_EPSREL: 1e-2
 
 sources:  # Sources
     nbins : 5
@@ -37,8 +38,8 @@ sources:  # Sources
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
     delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 0.  # ia-bias 
-    alphaz : 0.
+    ia_bias : 5.  # ia-bias 
+    alphaz : 1.
     z_piv : 1.0
     ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
 

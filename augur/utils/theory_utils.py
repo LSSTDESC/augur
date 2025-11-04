@@ -2,7 +2,7 @@ from packaging.version import Version
 import pyccl as ccl
 import firecrown
 from firecrown.parameters import ParamsMap
-from firecrown.ccl_factory import CCLCreationMode
+
 
 
 def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=False):
@@ -51,7 +51,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             return f_out
 
     else:
-        from firecrown.ccl_factory import CCLFactory
+        from firecrown.ccl_factory import CCLFactory, CCLCreationMode, CAMBExtraParams, CCLPureModeTransferFunction
         dict_all = {**_sys_pars, **_pars}
         extra_dict = {}
         if dict_all['A_s'] is None:
@@ -66,13 +66,15 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
         camb_baryon = False
         if 'extra_parameters' in dict_all.keys():
             if 'camb' in dict_all['extra_parameters'].keys():
-                extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
+                extra_dict['camb_extra_params'] = CAMBExtraParams(**dict_all['extra_parameters']['camb'])
                 if 'kmin' in dict_all['extra_parameters']['camb'].keys():
                     extra_dict['camb_extra_params'].pop('kmin')
                 if 'halofit_version' in dict_all['extra_parameters']['camb'].keys():
                     halofit_version = dict_all['extra_parameters']['camb']['halofit_version']
-                    if halofit_version == ('mead2020_feedback'
-                                           or 'mead' or 'mead2015' or 'mead2016'):
+                    # Use membership test rather than chained `or` which evaluates
+                    # to the first truthy string; the original check was wrong and
+                    # only compared to the first value.
+                    if halofit_version in ('mead2020_feedback', 'mead', 'mead2015', 'mead2016'):
                         camb_baryon = True
             dict_all.pop('extra_parameters')
         keys = list(dict_all.keys())
@@ -85,11 +87,13 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             if camb_baryon:
                 cf = CCLFactory(**extra_dict, require_nonlinear_pk=True,
                                 use_camb_hm_sampling=True,
-                                creation_mode=CCLCreationMode.PURE_CCL_MODE
+                                creation_mode=CCLCreationMode.PURE_CCL_MODE,
+                                pure_ccl_transfer_function=CCLPureModeTransferFunction.BOLTZMANN_CAMB
                                 )
             else:
                 cf = CCLFactory(**extra_dict, require_nonlinear_pk=True,
-                                creation_mode=CCLCreationMode.PURE_CCL_MODE
+                                creation_mode=CCLCreationMode.PURE_CCL_MODE,
+                                pure_ccl_transfer_function=CCLPureModeTransferFunction.BOLTZMANN_CAMB
                                 )
             if tools.pt_calculator is not None:
                 ptc = tools.get_pt_calculator()
@@ -97,12 +101,14 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             else:
                 tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
             tools.reset()
+        #print(dict_all)
         pmap = ParamsMap(dict_all)
-        cf.update(pmap)
+        #cf.update(pmap)
         tools.update(pmap)
         tools.prepare()
         lk.update(pmap)
         f_out = lk.compute_theory_vector(tools)
+        print(lk.compute_loglike(tools))
         if return_all:
             return f_out, lk, tools
         else:

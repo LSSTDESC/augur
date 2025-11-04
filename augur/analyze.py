@@ -330,12 +330,12 @@ class Analyze(object):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
                     elif labels[i] in sys_fid.keys():
-                        _sys_pars.update({labels[i]: x[i]})
+                        _sys_pars[labels[i]] =  x[i]
                     elif 'extra_parameters' in pars_fid.keys():
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                _sys_pars.update({labels[i]: x[i]})
+                                _sys_pars[labels[i]] =  x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
@@ -345,13 +345,14 @@ class Analyze(object):
                 f_out = []
                 for i in range(len(labels)):
                     _pars = pars_fid.copy()
-                    _sys_pars = sys_fid.copy()
+                    _sys_pars = sys_fid.copy() #sys_fid is a ParamsMap object
                     xi = x[i]
                     for j in range(len(labels)):
                         if labels[j] in pars_fid.keys():
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
-                            _sys_pars.update({labels[j]: xi[j]})
+                            #_sys_pars.update({labels[j]: xi[j]})
+                            _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
@@ -502,6 +503,7 @@ class Analyze(object):
                 tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
                 fid = self.f(self.x, self.var_pars, self.pars_fid, self.req_params)
                 np.savetxt(self.config['output']+".theory_vector", fid)
+                np.savetxt(self.config['output']+".derivatives", self.derivatives)
         if self.gprior_pars is not None:
             print('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
