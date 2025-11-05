@@ -93,7 +93,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
             else:
                 cf = CCLFactory(**extra_dict, require_nonlinear_pk=True,
                                 creation_mode=CCLCreationMode.PURE_CCL_MODE,
-                                pure_ccl_transfer_function=CCLPureModeTransferFunction.BOLTZMANN_CAMB
+                                pure_ccl_transfer_function=CCLPureModeTransferFunction.EISENSTEIN_HU
                                 )
             if tools.pt_calculator is not None:
                 ptc = tools.get_pt_calculator()
