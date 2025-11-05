@@ -541,14 +541,38 @@ class Analyze(object):
         return self.Fij
 
     def get_fisher_bias(self, force=False, method='5pt_stencil', save_txt=True, use_fid=False):
-        # Compute Fisher bias following the generalized Amara formalism
-        # More details in Bianca's thesis and the note here:
-        # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
+        
+	"""
+	Compute Fisher bias following the generalized Amara formalism.
+	Check the Augur note in this repository for more details.
 
-        # Allowing to provide externally calculated "systematics"
-        # They should have the same ells as the original data-vector
-        # and the same length
-        import os
+	This function allows for the user to
+        provide externally calculated "systematics" angular 
+	power spectrum vector, which should have been calculated
+	at the same ells as the original data-vector
+        and this have the same length.
+
+	Parameters:
+        -----------
+	force: bool
+            If `True` force recalculation of the derivatives.
+
+	method: string
+	    Method to determine the derivatives. Fiducial: 5pt stencil.
+
+	save_txt: bool
+	    Option to save the output to a text file. True by default.
+
+	use_fid: bool
+	    If `False`, it takes user-specified systematics as input, read from a txt file.
+
+	Returns:
+        -----------
+	A numpy vector with the Fisher bias.
+
+       	"""
+
+	import os
 
         if self.derivatives is None:
             self.get_derivatives(force=force, method=method)
