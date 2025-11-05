@@ -492,8 +492,21 @@ class Analyze(object):
         return self.Fij_with_gprior
 
     def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
-        # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
-        if self.derivatives is None:
+        
+	"""
+	Compute Fisher matrix assuming Gaussian likelihood (around self.x)
+	and the specified derivative computation method (default is 5pt stencil).
+
+        Parameters:
+        -----------
+	method : string
+	    Method to estimate the derivatives.
+        save_txt : bool
+            Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
+        """
+
+        
+	if self.derivatives is None:
             self.get_derivatives(method=method)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
