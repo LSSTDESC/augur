@@ -492,7 +492,7 @@ class Analyze(object):
 
         return self.Fij_with_gprior
 
-    def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):    
+    def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
         """
         Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         and the specified derivative computation method (default is 5pt stencil).
@@ -508,9 +508,9 @@ class Analyze(object):
         -----------
             Fij: np.ndarray,
                 Output Fisher matrix
-    
+
         """
-        
+
         if self.derivatives is None:
             self.get_derivatives(method=method)
         if self.Fij is None:
@@ -545,7 +545,7 @@ class Analyze(object):
 
         return self.Fij
 
-    def get_fisher_bias(self, force=False, method='5pt_stencil', save_txt=True, use_fid=False):   
+    def get_fisher_bias(self, force=False, method='5pt_stencil', save_txt=True, use_fid=False):
         """
         Compute Fisher bias following the generalized Amara formalism.
         Check the Augur note in this repository for more details.
