@@ -12,6 +12,11 @@ cosmo:
             dark_energy_model : 'ppf'
     # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
     # If the transfer function is not specified, it defaults to using CAMB
+ccl_factory_options:
+    require_nonlinear : True
+    use_camb_hm_sampling: False
+    creation_mode : CCLCreationMode.PURE_CCL_MODE
+    pure_ccl_transfer_function : CCLPureModeTransferFunction.EISENSTEIN_HU
 
 ccl_accuracy:  # Example of a couple of parameters to modify.
     spline_params:  # You can change here any pyccl.spline_params
@@ -31,7 +36,7 @@ sources:  # Sources
        # Nz_sigmaz : 0.05
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_source_bins_y1.txt'
+        input_file : /Users/jsanchez/Software/augur/data/srd_source_bins_y1.txt
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
@@ -48,7 +53,7 @@ lenses :  # Lenses
     delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_lens_bins_y1.txt'
+        input_file : /Users/jsanchez/Software/augur/data/srd_lens_bins_y1.txt
         format : 'ascii'
         # input_file : 'data/srd_lens_bins_year_1.npy'
     # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
@@ -93,7 +98,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : /Users/jsanchez/Software/augur/data/Y1_3x2_SRD_cov.npy
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0

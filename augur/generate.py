@@ -17,16 +17,15 @@ from augur.utils.theory_utils import compute_new_theory_vector
 from packaging.version import Version
 import firecrown
 
-if Version(firecrown.__version__) >= Version('1.8.0a'):
+if Version(firecrown.__version__) <= Version('1.8.0a'):
+    raise ImportError('Firecrown version >=1.8.0a is required.')
+else:
     import firecrown.likelihood.weak_lensing as wl
     import firecrown.likelihood.number_counts as nc
     from firecrown.likelihood.two_point import TwoPoint
     from firecrown.likelihood.gaussian import ConstGaussian
-elif Version(firecrown.__version__) >= Version('1.7.4'):
-    import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
-    import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
-    from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
-    from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
+    from firecrown.ccl_factory import CCLFactory, CCLCreationMode, CCLPureModeTransferFunction
+
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 
@@ -351,9 +350,16 @@ def generate(config, return_all_outputs=False, write_sacc=True):
 
     cosmo.compute_nonlin_power()
     _pars = cosmo.__dict__['_params_init_kwargs']
+    
+    # Create CCLFactory
+    ccl_factory_options = {}
+    for key in ccl_factory_options.keys():
+        ccl_factory_options[key] = eval(config['ccl_factory_options'][key])
+    ccl_factory = CCLFactory(**ccl_factory_options)
     # Populate ModelingTools and likelihood
-    tools = firecrown.modeling_tools.ModelingTools()
-    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
+    tools = firecrown.modeling_tools.ModelingTools(ccl_factory=ccl_factory)
+    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars,
+                                             return_all=True, cf=ccl_factory)
 
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
@@ -440,8 +446,8 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     if write_sacc:
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
-    # Update covariance and inverse -- TODO need to update cholesky!!
+    
     lk = ConstGaussian(statistics=stats)
     lk.read(S)
     if return_all_outputs:
-        return lk, S, tools, sys_params
+        return lk, S, tools, sys_params, ccl_factory
