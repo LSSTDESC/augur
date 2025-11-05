@@ -431,7 +431,7 @@ class Analyze(object):
                                             **ndkwargs)
                 self.derivatives = jacobian_calc(x_here).T
             elif 'derivkit' in method:
-                from derivkit.calculus import build_jacobian
+                from derivkit.calculus_kit import CalculusKit
                 if self.norm_step:
                     x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                         * 1/self.norm
@@ -445,14 +445,21 @@ class Analyze(object):
                     kwargs.pop('derivkit_method')
                 else:
                     method_here = 'adaptive'
-                self.derivatives = build_jacobian(function=lambda y: self.f(y, self.var_pars,
-                                                  self.pars_fid,
-                                                  self.req_params,
-                                                  donorm=self.norm_step,
-                                                  cf=cf),
-                                                  theta0=x_here,
-                                                  method=method_here,
-                                                  **kwargs).T
+                if 'n_workers' in kwargs.keys():
+                    n_workers = kwargs['n_workers']
+                    kwargs.pop('n_workers')
+                else:
+                    n_workers = 1
+
+                calc_kit = CalculusKit(function=lambda y: self.f(y, self.var_pars,
+                                       self.pars_fid,
+                                       self.req_params,
+                                       donorm=self.norm_step,
+                                       cf=cf),
+                                       x0=x_here)
+                self.derivatives = calc_kit.jacobian(method=method_here,
+                                                     n_workers=n_workers,
+                                                     **{'dk_kwargs': kwargs}).T
 
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
