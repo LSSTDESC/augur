@@ -52,7 +52,7 @@ class Analyze(object):
 
         Returns:
         --------
-        fisher: np.ndarray
+        fisher: np.ndarray,
         Output Fisher matrix
         """
 
@@ -499,11 +499,17 @@ class Analyze(object):
 
         Parameters:
         -----------
-	method : string
+	method : string,
 	    Method to estimate the derivatives.
-        save_txt : bool
+        save_txt : bool,
             Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
-        """
+
+	Returns:
+	-----------
+        Fij: np.ndarray,
+            Output Fisher matrix
+  
+	"""
 
         
 	if self.derivatives is None:
@@ -554,21 +560,22 @@ class Analyze(object):
 
 	Parameters:
         -----------
-	force: bool
+	force: bool,
             If `True` force recalculation of the derivatives.
 
-	method: string
+	method: string,
 	    Method to determine the derivatives. Fiducial: 5pt stencil.
 
-	save_txt: bool
+	save_txt: bool,
 	    Option to save the output to a text file. True by default.
 
-	use_fid: bool
+	use_fid: bool,
 	    If `False`, it takes user-specified systematics as input, read from a txt file.
 
 	Returns:
         -----------
-	A numpy vector with the Fisher bias.
+	bi : np.array,
+    	    A numpy vector with the Fisher bias.
 
        	"""
 
