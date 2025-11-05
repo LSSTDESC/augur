@@ -551,7 +551,7 @@ class Analyze(object):
         Check the Augur note in this repository for more details.
 
         This function allows for the user to
-            provide externally calculated "systematics" angular 
+            provide externally calculated "systematics" angular
         power spectrum vector, which should have been calculated
         at the same ells as the original data-vector
             and this have the same length.
