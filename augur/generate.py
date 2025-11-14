@@ -17,7 +17,11 @@ from augur.utils.theory_utils import compute_new_theory_vector
 from packaging.version import Version
 import firecrown
 
-if Version(firecrown.__version__) >= Version('1.8.0a'):
+if Version(firecrown.__version__) >= Version('1.15.a'):
+    import firecrown.likelihood.weak_lensing as wl
+    import firecrown.likelihood.number_counts as nc
+    from firecrown.likelihood import TwoPoint, ConstGaussian
+elif Version(firecrown.__version__) >= Version('1.8.0a'):
     import firecrown.likelihood.weak_lensing as wl
     import firecrown.likelihood.number_counts as nc
     from firecrown.likelihood.two_point import TwoPoint
