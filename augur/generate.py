@@ -285,6 +285,8 @@ def create_dummy_sacc(config):
     S = sacc.Sacc()
     S = add_nz(config, tracer_name, S)
 
+    #TODO: add coavariance!
+
     # this will add n(z)'s, the specific tracer combos, etc.
     # and get it ready to be used by the firecrown factory
 
@@ -296,7 +298,47 @@ def create_firecrown_factory(config, S, tools):
     # structure of setting up TwoPointFactory, TwoPointExperiment, etc.
     # this will create a DUMMY likelihood that will compute the initial datavector
 
-    return None
+    factory_cfg = config.get("Firecrown_Factory", None)
+    lk = None
+    for key in factory_cfg.keys():
+        # parse each factory type
+        if key=='TwoPointFactory':
+            tpf_cfg = factory_cfg[key]
+            nc_factory = []
+            wl_factory = []
+            if 'WeakLensingFactory' in tpf_cfg.keys():
+                wl_factory_cfg = tpf_cfg['WeakLensingFactory']
+                wl_factory = [base_model_from_yaml(WeakLensingFactory, wl_factory_cfg)]
+            elif 'NumberCountsFactory' in tpf_cfg.keys():
+                nc_factory_cfg = tpf_cfg['NumberCountsFactory']
+                nc_factory = [base_model_from_yaml(NumberCountsFactory, nc_factory_cfg)]
+            else:
+                raise NotImplementedError('Only WeakLensingFactory and NumberCountsFactory are implemented so far.')
+
+            tp_factory = TwoPointFactory(eval(tpf_cfg['correlation_space']),
+                                         weak_lensing_factories=wl_factory,
+                                         number_counts_factories=nc_factory,
+                                         )
+            
+            two_point_experiment = TwoPointExperiment(
+                two_point_factory=tp_factory,
+                ccl_factory=tools.ccl_factory,
+                data_source=DataSourceSacc(
+                sacc_data_file=S,
+                ),
+            )
+            
+            lk = two_point_experiment.make_likelihood()
+        elif key=='Fiducial':
+            pass
+        else:
+            raise NotImplementedError(f'Factory type {key} not implemented yet.')
+
+    if lk is not None:
+        return lk
+    else:
+        raise ValueError('No valid Firecrown factory found in configuration.')
+    return lk
 
 def overwrite_sacc(dummy_S, dummy_lk, cosmo, tools):
     # NOW compute the theory vector, copy sacc and overwrite data
