@@ -17,19 +17,20 @@ from augur.utils.theory_utils import compute_new_theory_vector
 from packaging.version import Version
 import firecrown
 
-if Version(firecrown.__version__) >= Version('1.8.0a'):
-    import firecrown.likelihood.weak_lensing as wl
-    import firecrown.likelihood.number_counts as nc
-    from firecrown.likelihood.two_point import TwoPoint
-    from firecrown.likelihood.gaussian import ConstGaussian
-elif Version(firecrown.__version__) >= Version('1.7.4'):
-    import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
-    import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
-    from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
-    from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
+import firecrown.likelihood.weak_lensing as wl
+import firecrown.likelihood.number_counts as nc
+from firecrown.likelihood.two_point import TwoPoint
+from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
-
+from firecrown.ccl_factory import (
+    CCLFactory,
+    CCLCreationMode,
+    CCLPureModeTransferFunction,
+    CCLCalculatorArgs,
+    CAMBExtraParams,
+    PoweSpecAmplitudeParameter, 
+)
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
@@ -51,6 +52,279 @@ def _get_tracers(statistic, comb):
     else:
         return NotImplementedError('Only C_ls available')
     return tr1, tr2
+
+
+def create_ccl_factory(config):
+    """
+    Build and return (ccl_factory, ccl_cosmo) using entries in the
+    'cosmo' and optional 'ccl_accuracy' sections of the config.
+
+    Assumptions:
+      - Pure CCL mode (optional CAMB nonlinear sampling extras).
+      - Transfer function chosen via config['cosmo']['transfer_function'].
+      - Optional accuracy tweaks in config['ccl_accuracy'].
+    """
+    # Copy to avoid mutating original
+    cosmo_cfg = dict(config['cosmo'])
+    camb_extra=None
+    # get vs. pop is to allow passing the rest of the cosmo_cfg to ccl.Cosmology
+    # Transfer function selection
+    tf_name = cosmo_cfg.pop("transfer_function", "boltzmann_camb").lower()
+    tf_map = {
+        "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
+        "boltzmann_class": CCLPureModeTransferFunction.BOLTZMANN_CLASS,
+        "eisenstein_hu": CCLPureModeTransferFunction.EH,
+        "eh": CCLPureModeTransferFunction.EH,
+        "bbks": CCLPureModeTransferFunction.BBKS,
+    }
+    tf_enum = tf_map.get(tf_name, CCLPureModeTransferFunction.BOLTZMANN_CAMB)
+
+    # Handle extra parameters for CAMB matter power spectrum
+
+    # TODO: need to check if there are hmcode parameters set in cosmo_cfg
+    # and relevant matter power spectrum set here
+    if tf_name=='boltzmann_camb':
+        extra_params = cosmo_cfg.pop("extra_parameters", None) 
+        if extra_params is not None:
+            extra_params_camb = extra_params.get("camb", None)
+            if extra_params_camb is not None:
+                camb_extra = CAMBExtraParams(**extra_params_camb)
+            
+
+    # Optional flag to require nonlinear P(k)
+    require_nl = bool(cosmo_cfg.pop("require_nonlinear_pk", True))
+    amplitude = None
+    if cosmo_cfg.get("A_s", None) is not None:
+        amplitude = PoweSpecAmplitudeParameter.AS
+    elif cosmo_cfg.get("sigma8", None) is not None:
+        amplitude = PoweSpecAmplitudeParameter.SIGMA8
+    else:
+        # TODO: raise error
+        amplitude = PoweSpecAmplitudeParameter.AS  # Default to A_s
+
+    # Apply accuracy overrides (global pyccl settings) before building cosmology
+    acc_cfg = config.get("ccl_accuracy", {})
+    for k, v in acc_cfg.get("spline_params", {}).items():
+        if hasattr(ccl.spline_params, k):
+            ccl.spline_params[k] = type(getattr(ccl.spline_params, k))(v)
+    for k, v in acc_cfg.get("gsl_params", {}).items():
+        if hasattr(ccl.gsl_params, k):
+            ccl.gsl_params[k] = type(getattr(ccl.gsl_params, k))(v)
+
+    # Build cosmology
+    cosmo = ccl.Cosmology(**cosmo_cfg)
+
+    # Calculator args placeholder (extend if you need custom settings later)
+    calc_args = CCLCalculatorArgs()
+
+
+    # TODO: need to build factory with cosmology inserted
+    factory = CCLFactory(
+        creation_mode=CCLCreationMode.PURE_CCL_MODE,
+        pure_ccl_transfer_function=tf_enum,
+        require_nonlinear_pk=require_nl,
+        calculator_args=calc_args,
+        camb_extra_params=camb_extra,
+    )
+    return factory, cosmo
+
+
+def create_pt_calculator(config, cosmo):
+    """
+    Build and return a pyccl EulerianPTCalculator using entries in the
+    'pt_calculator' section of the config.
+
+    Assumptions:
+      - with_NC and with_IA flags set via config['pt_calculator'].
+    """
+    pt_cfg = config.get("pt_calculator", None)
+    if pt_cfg is None:
+        return None
+    # TODO: make sure this is a dictionary!
+    with_NC = bool(pt_cfg.get("with_NC", False))
+    with_IA = bool(pt_cfg.get("with_IA", True))
+
+    # TODO: parse all options, add to calculator
+    # TODO: add more calculator types as user input option
+
+    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
+        with_NC=with_NC,
+        with_IA=with_IA,
+        cosmo=cosmo,
+    )
+    return pt_calculator
+
+
+# NOT IMPLEMENTED YET
+def create_hm_calculator(config, cosmo):
+    """
+    Build and return a pyccl HaloModelCalculator using entries in the
+    'hm_calculator' section of the config.
+
+    Assumptions:
+      - with_NC and with_IA flags set via config['hm_calculator'].
+    """
+    hm_cfg = config.get("hm_calculator", None)
+    if hm_cfg is None:
+        return None
+
+
+# NOT IMPLEMENTED YET
+def create_cM_relation(config):
+    """
+    Build and return a pyccl ConcentrationMassRelation using entries in the
+    'cM_relation' section of the config.
+
+    Assumptions:
+      - type of cM relation set via config['cM_relation']['type'].
+    """
+
+    return None
+
+
+# NOT IMPLEMENTED YET, probably should not?
+def create_pk_modifiers(config):
+    """
+    Build and return a list of pyccl PowerSpectrumModifier using entries in the
+    'pk_modifiers' section of the config.
+
+    Assumptions:
+      - type of pk_modifier set via config['pk_modifiers'][i]['type'].
+    """
+
+    return None
+
+
+# NOT IMPLEMENTED YET, probably should not?
+def create_powerspectra(config):
+    """
+    Build and return a list of pyccl PowerSpectrumCalculator using entries in the
+    'powerspectra' section of the config.
+
+    Assumptions:
+      - type of power spectrum set via config['powerspectra'][i]['type'].
+    """
+
+    return None
+
+
+# NOT IMPLEMENTED YET
+def create_cluster_abundance(config, cosmo):
+    """
+    Build and return a pyccl ClusterAbundance using entries in the
+    'cluster_abundance' section of the config.
+
+    Assumptions:
+      - mass definition and halo mass function set via
+        config['cluster_abundance'].
+    """
+
+    return None
+
+
+# NOT IMPLEMENTED YET
+def create_clusterlensing(config, cosmo):
+    """
+    Build and return a pyccl ClusterLensing using entries in the
+    'cluster_lensing' section of the config.
+
+    Assumptions:
+      - mass definition and halo mass function set via
+        config['cluster_lensing'].
+    """
+
+    return None
+
+
+#TODO: not correct, check this later
+def add_nz(config, tracer_name, S):
+    """
+    Auxiliary function to get the n(z) distribution for a given tracer
+    in the configuration file.
+    """
+    src_cfg = config[tracer_name]
+    nbins = src_cfg['nbins']
+    if 'src' in tracer_name:
+        Nz_ibin = int(tracer_name.replace('src', ''))
+    elif 'lens' in tracer_name:
+        Nz_ibin = int(tracer_name.replace('lens', ''))
+    else:
+        raise ValueError('Tracer name not recognized')
+    if eval(src_cfg['Nz_type']) in implemented_nzs:
+        if 'ZDistFromFile' in src_cfg['Nz_type']:
+            dndz = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=Nz_ibin)
+        else:
+            z = np.linspace(0.0, 4.0, 1000)
+            dndz = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins,
+                                           Nz_ibin=Nz_ibin,
+                                           **src_cfg['Nz_kwargs'])
+        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
+
+    else:
+        raise NotImplementedError('The selected N(z) is yet not implemented')
+    return dndz
+
+
+def create_modeling_tools(config):
+
+    factory, cosmo = create_ccl_factory(config)
+    pt_calculator = create_pt_calculator(config, cosmo)
+    hm_calculator = create_hm_calculator(config, cosmo)
+    cluster_abundance = create_cluster_abundance(config, cosmo)
+    cluster_lensing = create_clusterlensing(config, cosmo)
+
+    tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf,
+                                                   pt_calculator=pt_calculator,
+                                                   hm_calculator=hm_calculator,
+                                                   cluster_abundance=cluster_abundance,
+                                                   cluster_lensing=cluster_lensing,
+                                                   )
+    return tools, cosmo
+
+def create_dummy_sacc(config):
+    S = sacc.Sacc()
+    S = add_nz(config, tracer_name, S)
+
+    # this will add n(z)'s, the specific tracer combos, etc.
+    # and get it ready to be used by the firecrown factory
+
+    return S
+
+
+def create_firecrown_factory(config, S, tools):
+    # read in factories from config and follow general_y1_likelihood
+    # structure of setting up TwoPointFactory, TwoPointExperiment, etc.
+    # this will create a DUMMY likelihood that will compute the initial datavector
+
+    return None
+
+def overwrite_sacc(dummy_S, dummy_lk, cosmo, tools):
+    # NOW compute the theory vector, copy sacc and overwrite data
+
+    return None
+
+def generate_sacc_and_stats_refactored(config):
+
+    config = parse_config(config)
+    tools, cosmo = create_modeling_tools(config)
+    dummy_S = create_dummy_sacc(config)
+
+    dummy_lk = create_firecrown_factory(config, dummy_S, tools)
+
+    S = overwrite_sacc(dummy_S, dummy_lk, cosmo, tools)
+
+    lk = create_firecrown_factory(config, S, tools)
+
+    return S, cosmo, lk, tools
+
+    # read in factories from config and follow general_y1_likelihood
+    # structure of setting up TwoPointFactory, TwoPointExperiment, etc.
+    # this will create a DUMMY likelihood that will compute the initial datavector
+
+    # NOW ccompute the theory vector, copy sacc and overwrite data
+
+    #return final sacc, cosmo, lk, ccl_factory, tools, etc.
+
 
 
 def generate_sacc_and_stats(config):
@@ -124,6 +398,12 @@ def generate_sacc_and_stats(config):
     # TODO add real-space
 
     S = sacc.Sacc()
+
+    # I think there is no reason to set systematic parameters directly through the sacc framework here
+    # Instead, I believe we can make a "template" sacc file with the relevant n(z) distributions, 
+    # compute a theory datavector with the firecrown likelihood machinery, 
+    # and utilize that in the final sacc returned to the user. 
+
 
     # Read sources from config file
     src_cfg = config['sources']
