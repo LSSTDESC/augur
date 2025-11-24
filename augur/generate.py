@@ -83,14 +83,23 @@ def create_ccl_factory(config):
 
     # TODO: need to check if there are hmcode parameters set in cosmo_cfg
     # and relevant matter power spectrum set here
+    camb_baryon = False
     if tf_name=='boltzmann_camb':
-        extra_params = cosmo_cfg.pop("extra_parameters", None) 
+        extra_params = cosmo_cfg.get("extra_parameters", None) 
         if extra_params is not None:
             extra_params_camb = extra_params.get("camb", None)
             if extra_params_camb is not None:
                 camb_extra = CAMBExtraParams(**extra_params_camb)
-            
-
+                if 'halofit_version' in extra_params_camb.keys():
+                    halofit_version = extra_params_camb['halofit_version']
+                    if halofit_version in ('mead2020_feedback',
+                                        'mead',
+                                        'mead2015',
+                                        'mead2016'):
+                        camb_baryon = True
+                else:
+                    raise ValueError('When using CAMB transfer function, \
+                                     halofit_version must be specified in extra_parameters.camb.')
     # Optional flag to require nonlinear P(k)
     require_nl = bool(cosmo_cfg.pop("require_nonlinear_pk", True))
     amplitude = None
@@ -99,8 +108,8 @@ def create_ccl_factory(config):
     elif cosmo_cfg.get("sigma8", None) is not None:
         amplitude = PoweSpecAmplitudeParameter.SIGMA8
     else:
-        # TODO: raise error
-        amplitude = PoweSpecAmplitudeParameter.AS  # Default to A_s
+        # TODO: raise warning
+        amplitude = PoweSpecAmplitudeParameter.SIGMA8  # Default to sigma8
 
     # Apply accuracy overrides (global pyccl settings) before building cosmology
     acc_cfg = config.get("ccl_accuracy", {})
@@ -120,6 +129,7 @@ def create_ccl_factory(config):
         pure_ccl_transfer_function=tf_enum,
         require_nonlinear_pk=require_nl,
         camb_extra_params=camb_extra,
+        use_camb_hm_sampling=camb_baryon,
     )
     factory.cosmo = cosmo
     return factory, cosmo
@@ -680,7 +690,7 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     _pars = cosmo.__dict__['_params_init_kwargs']
     # Populate ModelingTools and likelihood
     # tools = firecrown.modeling_tools.ModelingTools()
-    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, cf = tools.ccl_factory, return_all=True)
+    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
