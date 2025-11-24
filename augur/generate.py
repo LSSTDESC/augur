@@ -73,8 +73,8 @@ def create_ccl_factory(config):
     tf_map = {
         "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
         "boltzmann_class": CCLPureModeTransferFunction.BOLTZMANN_CLASS,
-        "eisenstein_hu": CCLPureModeTransferFunction.EH,
-        "eh": CCLPureModeTransferFunction.EH,
+        "eisenstein_hu": CCLPureModeTransferFunction.EISENSTEIN_HU,
+        "eh": CCLPureModeTransferFunction.EISENSTEIN_HU,
         "bbks": CCLPureModeTransferFunction.BBKS,
     }
     tf_enum = tf_map.get(tf_name, CCLPureModeTransferFunction.BOLTZMANN_CAMB)
@@ -114,18 +114,14 @@ def create_ccl_factory(config):
     # Build cosmology
     cosmo = ccl.Cosmology(**cosmo_cfg)
 
-    # Calculator args placeholder (extend if you need custom settings later)
-    calc_args = CCLCalculatorArgs()
-
-
     # TODO: need to build factory with cosmology inserted
     factory = CCLFactory(
         creation_mode=CCLCreationMode.PURE_CCL_MODE,
         pure_ccl_transfer_function=tf_enum,
         require_nonlinear_pk=require_nl,
-        calculator_args=calc_args,
         camb_extra_params=camb_extra,
     )
+    factory.cosmo = cosmo
     return factory, cosmo
 
 
@@ -223,14 +219,14 @@ def create_cluster_abundance(config, cosmo):
 
 
 # NOT IMPLEMENTED YET
-def create_clusterlensing(config, cosmo):
+def create_clusterdeltasigma(config, cosmo):
     """
-    Build and return a pyccl ClusterLensing using entries in the
-    'cluster_lensing' section of the config.
+    Build and return a pyccl ClusterDeltaSigma using entries in the
+    'cluster_deltasigma' section of the config.
 
     Assumptions:
       - mass definition and halo mass function set via
-        config['cluster_lensing'].
+        config['cluster_deltasigma'].
     """
 
     return None
@@ -271,13 +267,13 @@ def create_modeling_tools(config):
     pt_calculator = create_pt_calculator(config, cosmo)
     hm_calculator = create_hm_calculator(config, cosmo)
     cluster_abundance = create_cluster_abundance(config, cosmo)
-    cluster_lensing = create_clusterlensing(config, cosmo)
+    cluster_deltasigma = create_clusterdeltasigma(config, cosmo)
 
-    tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf,
+    tools = firecrown.modeling_tools.ModelingTools(ccl_factory=factory,
                                                    pt_calculator=pt_calculator,
                                                    hm_calculator=hm_calculator,
                                                    cluster_abundance=cluster_abundance,
-                                                   cluster_lensing=cluster_lensing,
+                                                   cluster_deltasigma=cluster_deltasigma,
                                                    )
     return tools, cosmo
 
@@ -678,12 +674,13 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
+    tools, cosmo = create_modeling_tools(config)
 
     cosmo.compute_nonlin_power()
     _pars = cosmo.__dict__['_params_init_kwargs']
     # Populate ModelingTools and likelihood
-    tools = firecrown.modeling_tools.ModelingTools()
-    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
+    # tools = firecrown.modeling_tools.ModelingTools()
+    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, cf = tools.ccl_factory, return_all=True)
 
     # Get all bandpower windows before erasing the placeholder sacc
     win_dict = {}
