@@ -27,12 +27,31 @@ from firecrown.ccl_factory import (
     CCLFactory,
     CCLCreationMode,
     CCLPureModeTransferFunction,
-    CCLCalculatorArgs,
     CAMBExtraParams,
     PoweSpecAmplitudeParameter, 
 )
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
+TRANSFER_FUNCTION_REGISTRY = {
+    "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
+    "boltzmann_class": CCLPureModeTransferFunction.BOLTZMANN_CLASS,
+    "eisenstein_hu": CCLPureModeTransferFunction.EISENSTEIN_HU,
+    "eh": CCLPureModeTransferFunction.EISENSTEIN_HU,
+    "bbks": CCLPureModeTransferFunction.BBKS,
+}
+
+PT_CALCULATOR_REGISTRY = {
+    "eulerian_pt_calculator": ccl.nl_pt.EulerianPTCalculator,
+    "lagrangian_pt_calculator": ccl.nl_pt.LagrangianPTCalculator,
+    "bacco_lbias_calculator": ccl.nl_pt.BaccoLbiasCalculator,
+}
+
+BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead','mead2015','mead2016']
+
+CORRELATION_SPACE_MAP = {
+    "harmonic": firecrown.likelihood.factories.TwoPointCorrelationSpace.HARMONIC,
+    "configuration": firecrown.likelihood.factories.TwoPointCorrelationSpace.CONFIGURATION,
+}
 
 
 def _get_tracers(statistic, comb):
@@ -53,8 +72,15 @@ def _get_tracers(statistic, comb):
         return NotImplementedError('Only C_ls available')
     return tr1, tr2
 
+def _get_correlation_space(name: str):
+    key = (name or "harmonic").lower()
+    cs = CORRELATION_SPACE_MAP.get(key)
+    if cs is None:
+        raise ValueError(f"Unsupported correlation_space '{name}'")
+    return cs
 
-def create_ccl_factory(config):
+# docs: https://firecrown.readthedocs.io/en/latest/autoapi/firecrown/ccl_factory/index.html#firecrown.ccl_factory.CCLFactory
+def _create_ccl_factory(config):
     """
     Build and return (ccl_factory, ccl_cosmo) using entries in the
     'cosmo' and optional 'ccl_accuracy' sections of the config.
@@ -62,7 +88,7 @@ def create_ccl_factory(config):
     Assumptions:
       - Pure CCL mode (optional CAMB nonlinear sampling extras).
       - Transfer function chosen via config['cosmo']['transfer_function'].
-      - Optional accuracy tweaks in config['ccl_accuracy'].
+      - Optional accuracy tweaks in config['ccl_accuracy'], applied directly to ccl.
     """
     # Copy to avoid mutating original
     cosmo_cfg = dict(config['cosmo'])
@@ -70,19 +96,12 @@ def create_ccl_factory(config):
     # get vs. pop is to allow passing the rest of the cosmo_cfg to ccl.Cosmology
     # Transfer function selection
     tf_name = cosmo_cfg.pop("transfer_function", "boltzmann_camb").lower()
-    tf_map = {
-        "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
-        "boltzmann_class": CCLPureModeTransferFunction.BOLTZMANN_CLASS,
-        "eisenstein_hu": CCLPureModeTransferFunction.EISENSTEIN_HU,
-        "eh": CCLPureModeTransferFunction.EISENSTEIN_HU,
-        "bbks": CCLPureModeTransferFunction.BBKS,
-    }
-    tf_enum = tf_map.get(tf_name, CCLPureModeTransferFunction.BOLTZMANN_CAMB)
+    tf_enum = TRANSFER_FUNCTION_REGISTRY.get(tf_name, CCLPureModeTransferFunction.BOLTZMANN_CAMB)
+
+    # Optional flag to require nonlinear P(k)
+    require_nl = bool(cosmo_cfg.pop("require_nonlinear_pk", True))
 
     # Handle extra parameters for CAMB matter power spectrum
-
-    # TODO: need to check if there are hmcode parameters set in cosmo_cfg
-    # and relevant matter power spectrum set here
     camb_baryon = False
     if tf_name=='boltzmann_camb':
         extra_params = cosmo_cfg.get("extra_parameters", None) 
@@ -90,29 +109,25 @@ def create_ccl_factory(config):
             extra_params_camb = extra_params.get("camb", None)
             if extra_params_camb is not None:
                 camb_extra = CAMBExtraParams(**extra_params_camb)
-                if 'halofit_version' in extra_params_camb.keys():
+                if 'halofit_version' in extra_params_camb.keys() and require_nl:
                     halofit_version = extra_params_camb['halofit_version']
-                    if halofit_version in ('mead2020_feedback',
-                                        'mead',
-                                        'mead2015',
-                                        'mead2016'):
+                    if halofit_version in BARYON_HM_REGISTRY:
                         camb_baryon = True
                 else:
                     raise ValueError('When using CAMB transfer function, \
-                                     halofit_version must be specified in extra_parameters.camb.')
-    # Optional flag to require nonlinear P(k)
-    require_nl = bool(cosmo_cfg.pop("require_nonlinear_pk", True))
+                                     halofit_version must be specified \
+                                     in extra_parameters.camb.')
+
     amplitude = None
     if cosmo_cfg.get("A_s", None) is not None:
         amplitude = PoweSpecAmplitudeParameter.AS
     elif cosmo_cfg.get("sigma8", None) is not None:
         amplitude = PoweSpecAmplitudeParameter.SIGMA8
     else:
-        # TODO: raise warning
-        amplitude = PoweSpecAmplitudeParameter.SIGMA8  # Default to sigma8
+        raise ValueError("Either A_s or sigma8 must be specified in cosmology config")
 
     # Apply accuracy overrides (global pyccl settings) before building cosmology
-    acc_cfg = config.get("ccl_accuracy", {})
+    acc_cfg = config.pop("ccl_accuracy", {})
     for k, v in acc_cfg.get("spline_params", {}).items():
         if hasattr(ccl.spline_params, k):
             ccl.spline_params[k] = type(getattr(ccl.spline_params, k))(v)
@@ -123,7 +138,6 @@ def create_ccl_factory(config):
     # Build cosmology
     cosmo = ccl.Cosmology(**cosmo_cfg)
 
-    # TODO: need to build factory with cosmology inserted
     factory = CCLFactory(
         creation_mode=CCLCreationMode.PURE_CCL_MODE,
         pure_ccl_transfer_function=tf_enum,
@@ -134,110 +148,117 @@ def create_ccl_factory(config):
     factory.cosmo = cosmo
     return factory, cosmo
 
-
-def create_pt_calculator(config, cosmo):
+# docs: https://ccl.readthedocs.io/en/latest/_modules/pyccl/nl_pt/tracers.html
+def _create_pt_calculator(config, cosmo):
     """
-    Build and return a pyccl EulerianPTCalculator using entries in the
+    Build and return a pyccl PTCalculator using entries in the
     'pt_calculator' section of the config.
 
     Assumptions:
-      - with_NC and with_IA flags set via config['pt_calculator'].
+      - no nested parameter settings in config.
     """
-    pt_cfg = config.get("pt_calculator", None)
-    if pt_cfg is None:
+    # I think we should generally pop these to avoid passing them again
+    pt_cfg = config.pop("pt_calculator", None)
+    if pt_cfg is None or pt_cfg == {}:
         return None
-    # TODO: make sure this is a dictionary!
-    with_NC = bool(pt_cfg.get("with_NC", False))
-    with_IA = bool(pt_cfg.get("with_IA", True))
 
-    # TODO: parse all options, add to calculator
-    # TODO: add more calculator types as user input option
-
-    pt_calculator = ccl.nl_pt.EulerianPTCalculator(
-        with_NC=with_NC,
-        with_IA=with_IA,
-        cosmo=cosmo,
-    )
-    return pt_calculator
+    cfg = dict(pt_cfg)  # shallow copy
+    calc_type = cfg.pop("type", "eulerian_pt_calculator").lower()
+    cls = PT_CALCULATOR_REGISTRY.get(calc_type)
+    if cls is None:
+        raise ValueError(f"Unknown PT calculator type '{calc_type}'")
+    try:
+        return cls(cosmo=cosmo, **cfg)
+    except TypeError as e:
+        raise ValueError(f"Invalid PT calculator parameters for '{calc_type}': {e}")
 
 
-# NOT IMPLEMENTED YET
-def create_hm_calculator(config, cosmo):
+def _create_hm_calculator(config, cosmo):
     """
     Build and return a pyccl HaloModelCalculator using entries in the
     'hm_calculator' section of the config.
 
     Assumptions:
-      - with_NC and with_IA flags set via config['hm_calculator'].
+      - no nested parameter settings in config.
     """
-    hm_cfg = config.get("hm_calculator", None)
-    if hm_cfg is None:
+    # I think we should generally pop these to avoid passing them again
+    hm_cfg = config.pop("hm_calculator", None)
+    if hm_cfg is None or hm_cfg == {}:
         return None
+    
+    cfg = dict(hm_cfg)  # shallow copy
+    try:
+        hm_calculator = ccl.hm.HaloModelCalculator(cosmo=cosmo, **cfg)
+        return hm_calculator
+    except TypeError as e:
+        raise ValueError(f"Invalid Halo Model calculator parameters: {e}")
 
 
-# NOT IMPLEMENTED YET
-def create_cM_relation(config):
+def _create_cM_relation(config):
     """
-    Build and return a pyccl ConcentrationMassRelation using entries in the
-    'cM_relation' section of the config.
+    Add 'cM_relation' section of the config to be parsed by firecrown.
 
     Assumptions:
       - type of cM relation set via config['cM_relation']['type'].
     """
 
-    return None
+    # I think we should generally pop these to avoid passing them again
+    cm_cfg = config.pop("cM_relation", None)
+    if cm_cfg is None or cm_cfg == {}:
+        return None
+    if type(cm_cfg) is not str:
+        raise ValueError("cM_relation config must be a string specifying the type")
+    return cm_cfg
 
 
 # NOT IMPLEMENTED YET, probably should not?
-def create_pk_modifiers(config):
+def _create_pk_modifiers(config):
     """
     Build and return a list of pyccl PowerSpectrumModifier using entries in the
     'pk_modifiers' section of the config.
-
-    Assumptions:
-      - type of pk_modifier set via config['pk_modifiers'][i]['type'].
     """
+    raise NotImplementedError("PowerSpectrumModifier is not yet implemented in Augur")
 
     return None
 
 
 # NOT IMPLEMENTED YET, probably should not?
-def create_powerspectra(config):
+def _create_powerspectra(config):
     """
     Build and return a list of pyccl PowerSpectrumCalculator using entries in the
     'powerspectra' section of the config.
-
-    Assumptions:
-      - type of power spectrum set via config['powerspectra'][i]['type'].
     """
+    raise NotImplementedError("PowerSpectrumCalculator is not yet implemented in Augur")
 
     return None
 
 
 # NOT IMPLEMENTED YET
-def create_cluster_abundance(config, cosmo):
+def _create_cluster_abundance(config, cosmo):
     """
-    Build and return a pyccl ClusterAbundance using entries in the
+    Build and return a firecrown ClusterAbundance using entries in the
     'cluster_abundance' section of the config.
 
     Assumptions:
       - mass definition and halo mass function set via
         config['cluster_abundance'].
     """
+    raise NotImplementedError("ClusterAbundance is not yet implemented in Augur")
 
     return None
 
 
 # NOT IMPLEMENTED YET
-def create_clusterdeltasigma(config, cosmo):
+def _create_clusterdeltasigma(config, cosmo):
     """
-    Build and return a pyccl ClusterDeltaSigma using entries in the
+    Build and return a firecrown ClusterDeltaSigma using entries in the
     'cluster_deltasigma' section of the config.
 
     Assumptions:
       - mass definition and halo mass function set via
         config['cluster_deltasigma'].
     """
+    raise NotImplementedError("ClusterDeltaSigma is not yet implemented in Augur")
 
     return None
 
@@ -271,14 +292,13 @@ def add_nz(config, tracer_name, S):
     return dndz
 
 
-def create_modeling_tools(config):
+def _create_modeling_tools(config):
 
-    factory, cosmo = create_ccl_factory(config)
-    pt_calculator = create_pt_calculator(config, cosmo)
-    hm_calculator = create_hm_calculator(config, cosmo)
-    cluster_abundance = create_cluster_abundance(config, cosmo)
-    cluster_deltasigma = create_clusterdeltasigma(config, cosmo)
-
+    factory, cosmo = _create_ccl_factory(config)
+    pt_calculator = _create_pt_calculator(config, cosmo)
+    hm_calculator = _create_hm_calculator(config, cosmo)
+    cluster_abundance = _create_cluster_abundance(config, cosmo)
+    cluster_deltasigma = _create_clusterdeltasigma(config, cosmo)
     tools = firecrown.modeling_tools.ModelingTools(ccl_factory=factory,
                                                    pt_calculator=pt_calculator,
                                                    hm_calculator=hm_calculator,
@@ -684,7 +704,7 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     lk = ConstGaussian(statistics=stats)
     # Pass the correct binning/tracers
     lk.read(S)
-    tools, cosmo = create_modeling_tools(config)
+    tools, cosmo = _create_modeling_tools(config)
 
     cosmo.compute_nonlin_power()
     _pars = cosmo.__dict__['_params_init_kwargs']
