@@ -451,7 +451,7 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params
 
 
-def generate(config, return_all_outputs=False, write_sacc=True):
+def generate(config, return_all_outputs=False, write_sacc=True, lk=None, tools=None):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -466,6 +466,10 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
+    lk : firecrown.likelihood.Likelihood
+        If provided, it uses this likelihood object instead of generating a new one.
+    tools : firecrown.modeling.ModelingTools
+        If provided, it uses this modeling tools object instead of generating a new one.
 
     Returns:
     -------
@@ -490,11 +494,16 @@ def generate(config, return_all_outputs=False, write_sacc=True):
     # alternatively, can pass likelihood and tools objects at input paramters.
     # choose objects to take precedence. 
     # Generate likelihood object
-    lk = ConstGaussian(statistics=stats)
-    # Pass the correct binning/tracers
+    if lk is None:
+        if "Firecrown_Factory" in config.keys():
+            from augur.utils.firecrown_interface import load_likelihood_from_yaml
+            lk = load_likelihood_from_yaml(config)
+        else:
+            lk = ConstGaussian(statistics=stats)
     lk.read(S)
-    tools, cosmo = create_modeling_tools(config)
 
+    if tools is None:
+        tools, cosmo = create_modeling_tools(config)
     cosmo.compute_nonlin_power()
     _pars = cosmo.__dict__['_params_init_kwargs']
     # Populate ModelingTools and likelihood
@@ -526,6 +535,9 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         S.add_ell_cl(st.sacc_data_type, tr1, tr2,
                      ell_dict[(tr1, tr2)], st.get_theory_vector(),  # Only valid for harmonic space
                      window=win_dict[(tr1, tr2)])
+    
+    # Now generate covariance matrix
+    # move to a separate file/function?
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)

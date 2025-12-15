@@ -3,7 +3,12 @@ import pyccl as ccl
 
 from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
-
+from firecrown.likelihood.factories import (
+    DataSourceSacc,
+    TwoPointCorrelationSpace,
+    TwoPointExperiment,
+    TwoPointFactory,
+)
 
 from firecrown.ccl_factory import (
     CCLFactory,
@@ -234,3 +239,27 @@ def create_modeling_tools(config):
                         cluster_deltasigma=cluster_deltasigma,
                         )
     return tools, cosmo
+
+
+# Leave possibility open for multi-probe
+FC_FACTORY_REGISTRY={'TwoPointFactory': TwoPointFactory}
+
+
+def load_likelihood_from_yaml(config):
+    lk_config = config.pop("Firecrown_Factory", None)
+    
+    if lk_config is None or lk_config == {}:
+        raise ValueError("Firecrown_Factory must have contents to produce a Firecrown Likelihood")
+    keys = lk_config.keys()
+    
+    if len(keys)!=1:
+        raise ValueErrorError("Augur can only support one Factory definition.")
+    keys = list(keys)
+    like_dict = lk_config[keys[0]]
+    probes = FC_FACTORY_REGISTRY.get(keys[0])
+    if probes is None:
+        raise NameError(str(keys[0])+" is not a valid Firecrown Factory")
+    
+    lk = probes.model_validate(like_dict)
+    
+    return lk
