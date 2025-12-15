@@ -63,122 +63,50 @@ def _get_correlation_space(name: str):
 '''
 
 #TODO: not correct, check this later
-def add_nz(config, tracer_name, S):
+def _add_nz(cfg, nbins, src_root, S, dndz):
     """
     Auxiliary function to get the n(z) distribution for a given tracer
     in the configuration file.
     """
-    src_cfg = config[tracer_name]
-    nbins = src_cfg['nbins']
-    if 'src' in tracer_name:
-        Nz_ibin = int(tracer_name.replace('src', ''))
-    elif 'lens' in tracer_name:
-        Nz_ibin = int(tracer_name.replace('lens', ''))
-    else:
-        raise ValueError('Tracer name not recognized')
-    if eval(src_cfg['Nz_type']) in implemented_nzs:
-        if 'ZDistFromFile' in src_cfg['Nz_type']:
-            dndz = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=Nz_ibin)
-        else:
-            z = np.linspace(0.0, 4.0, 1000)
-            dndz = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins,
-                                           Nz_ibin=Nz_ibin,
-                                           **src_cfg['Nz_kwargs'])
-        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
+    if 'Nz_center' in cfg['Nz_kwargs'].keys():
+        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+        cfg['Nz_kwargs'].pop('Nz_center')
 
-    else:
-        raise NotImplementedError('The selected N(z) is yet not implemented')
+        if np.isscalar(Nz_centers):
+            Nz_centers = [Nz_centers]
+            if nbins != 1:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+        else:
+            if len(Nz_centers) != nbins:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+    for i in range(nbins):
+        sacc_tracer = f'{src_root}{i}'        
+        if isinstance(cfg['Nz_type'], list):
+            if eval(cfg['Nz_type'][i]) in implemented_nzs:
+                if 'ZDistFromFile' not in cfg['Nz_type'][i]:
+                    dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
+                                                                    Nz_center=Nz_centers[i],
+                                                                    Nz_nbins=nbins,
+                                                                    **cfg['Nz_kwargs'])
+                else:
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+            else:
+                raise NotImplementedError('The selected N(z) is yet not implemented')
+        else:
+            if eval(cfg['Nz_type']) in implemented_nzs:
+                if 'ZDistFromFile' not in cfg['Nz_type']:
+                    dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
+                                                                    Nz_center=Nz_centers[i],
+                                                                    Nz_nbins=nbins,
+                                                                    **lns_cfg['Nz_kwargs'])
+                else:
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+            else:
+                raise NotImplementedError('The selected N(z) is yet not implemented')
+        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
     return dndz
 
 
-'''
-def create_dummy_sacc(config):
-    S = sacc.Sacc()
-    S = add_nz(config, tracer_name, S)
-
-    #TODO: add coavariance!
-
-    # this will add n(z)'s, the specific tracer combos, etc.
-    # and get it ready to be used by the firecrown factory
-
-    return S
-
-
-def create_firecrown_factory(config, S, tools):
-    # read in factories from config and follow general_y1_likelihood
-    # structure of setting up TwoPointFactory, TwoPointExperiment, etc.
-    # this will create a DUMMY likelihood that will compute the initial datavector
-
-    factory_cfg = config.get("Firecrown_Factory", None)
-    lk = None
-    for key in factory_cfg.keys():
-        # parse each factory type
-        if key=='TwoPointFactory':
-            tpf_cfg = factory_cfg[key]
-            nc_factory = []
-            wl_factory = []
-            if 'WeakLensingFactory' in tpf_cfg.keys():
-                wl_factory_cfg = tpf_cfg['WeakLensingFactory']
-                wl_factory = [base_model_from_yaml(WeakLensingFactory, wl_factory_cfg)]
-            elif 'NumberCountsFactory' in tpf_cfg.keys():
-                nc_factory_cfg = tpf_cfg['NumberCountsFactory']
-                nc_factory = [base_model_from_yaml(NumberCountsFactory, nc_factory_cfg)]
-            else:
-                raise NotImplementedError('Only WeakLensingFactory and NumberCountsFactory are implemented so far.')
-
-            tp_factory = TwoPointFactory(eval(tpf_cfg['correlation_space']),
-                                         weak_lensing_factories=wl_factory,
-                                         number_counts_factories=nc_factory,
-                                         )
-            
-            two_point_experiment = TwoPointExperiment(
-                two_point_factory=tp_factory,
-                ccl_factory=tools.ccl_factory,
-                data_source=DataSourceSacc(
-                sacc_data_file=S,
-                ),
-            )
-            
-            lk = two_point_experiment.make_likelihood()
-        elif key=='Fiducial':
-            pass
-        else:
-            raise NotImplementedError(f'Factory type {key} not implemented yet.')
-
-    if lk is not None:
-        return lk
-    else:
-        raise ValueError('No valid Firecrown factory found in configuration.')
-    return lk
-
-def overwrite_sacc(dummy_S, dummy_lk, cosmo, tools):
-    # NOW compute the theory vector, copy sacc and overwrite data
-
-    return None
-
-
-def generate_sacc_and_stats_refactored(config):
-
-    config = parse_config(config)
-    tools, cosmo = create_modeling_tools(config)
-    dummy_S = create_dummy_sacc(config)
-
-    dummy_lk = create_firecrown_factory(config, dummy_S, tools)
-
-    S = overwrite_sacc(dummy_S, dummy_lk, cosmo, tools)
-
-    lk = create_firecrown_factory(config, S, tools)
-
-    return S, cosmo, lk, tools
-
-    # read in factories from config and follow general_y1_likelihood
-    # structure of setting up TwoPointFactory, TwoPointExperiment, etc.
-    # this will create a DUMMY likelihood that will compute the initial datavector
-
-    # NOW ccompute the theory vector, copy sacc and overwrite data
-
-    #return final sacc, cosmo, lk, ccl_factory, tools, etc.
-'''
 def generate_sacc_and_stats_refactored(config):
     """
     Routine to generate a placeholder SACC file containing the data-vector
@@ -258,7 +186,6 @@ def generate_sacc_and_stats_refactored(config):
 
 
     # Read sources from config file
-    src_cfg = config['sources']
     sources = {}
     dndz = {}
     # These are to match the N(z)s from the fits file in the firecrown repo
@@ -267,33 +194,15 @@ def generate_sacc_and_stats_refactored(config):
     sys_params = config['systematics'] if 'systematics' in config.keys() else {}
 
     if 'sources' in config.keys():
+        src_cfg = config['sources']
+
         nbins = src_cfg['nbins']  # Number of bins for shear sources
         src_root = 'src'  # Root of sacc tracer name
 
         # Loop over bins
+        dndz = _add_nz(src_cfg, nbins, src_root, S, dndz)
         for i in range(nbins):
             sacc_tracer = f'{src_root}{i}'
-            if isinstance(src_cfg['Nz_type'], list):
-                if eval(src_cfg['Nz_type'][i]) in implemented_nzs:
-                    if 'ZDistFromFile' not in src_cfg['Nz_type'][i]:
-                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins,
-                                                                        Nz_ibin=i,
-                                                                        **src_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            else:
-                if eval(src_cfg['Nz_type']) in implemented_nzs:
-                    if 'ZDistFromFile' not in src_cfg['Nz_type']:
-                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins,
-                                                                     Nz_ibin=i,
-                                                                     **src_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
             sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer)
 
     # Read lenses from config file
@@ -301,44 +210,15 @@ def generate_sacc_and_stats_refactored(config):
         lns_cfg = config['lenses']
         nbins = lns_cfg['nbins']
         lns_root = 'lens'
-        if 'Nz_center' in lns_cfg['Nz_kwargs'].keys():
-            Nz_centers = eval(lns_cfg['Nz_kwargs']['Nz_center'])
-            lns_cfg['Nz_kwargs'].pop('Nz_center')
 
-            if np.isscalar(Nz_centers):
-                Nz_centers = [Nz_centers]
-                if nbins != 1:
-                    raise ValueError('Nz_centers should have the same length as the number of bins')
-            else:
-                if len(Nz_centers) != nbins:
-                    raise ValueError('Nz_centers should have the same length as the number of bins')
-
+        dndz = _add_nz(lns_cfg, nbins, lns_root, S, dndz)
         for i in range(nbins):
             sacc_tracer = f'{lns_root}{i}'
-            if isinstance(lns_cfg['Nz_type'], list):
-                if eval(lns_cfg['Nz_type'][i]) in implemented_nzs:
-                    if 'ZDistFromFile' not in lns_cfg['Nz_type'][i]:
-                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z,
-                                                                        Nz_center=Nz_centers[i],
-                                                                        Nz_nbins=nbins,
-                                                                        **lns_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            else:
-                if eval(lns_cfg['Nz_type']) in implemented_nzs:
-                    if 'ZDistFromFile' not in lns_cfg['Nz_type']:
-                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z,
-                                                                     Nz_center=Nz_centers[i],
-                                                                     Nz_nbins=nbins,
-                                                                     **lns_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
             sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, derived_scale=True)
+
+    if 'cmb_lensing' in config.keys():
+        raise NotImplementedError("CMB lensing not yet implemented in Augur generation.")
+
     # Read data vector combinations
     if 'statistics' not in config.keys():
         raise ValueError('statistics key is required in config file')
