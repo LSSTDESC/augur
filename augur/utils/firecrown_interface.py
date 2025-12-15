@@ -17,7 +17,7 @@ from firecrown.ccl_factory import (
     CAMBExtraParams,
     PoweSpecAmplitudeParameter, 
 )
-
+import warnings
 
 TRANSFER_FUNCTION_REGISTRY = {
     "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
@@ -180,7 +180,9 @@ def _create_pk_modifiers(config):
     Build and return a list of pyccl PowerSpectrumModifier using entries in the
     'pk_modifiers' section of the config.
     """
-    raise Warning("PowerSpectrumModifier is not yet implemented in Augur")
+    pkm_cfg = config.pop("pk_modifiers", None)
+    if pkm_cfg is not None:
+        warnings.warn("PowerSpectrumModifier is not yet implemented in Augur")
 
     return None
 
@@ -191,7 +193,9 @@ def _create_powerspectra(config):
     Build and return a list of pyccl PowerSpectrumCalculator using entries in the
     'powerspectra' section of the config.
     """
-    raise Warning("PowerSpectrumCalculator is not yet implemented in Augur")
+    ps_cfg = config.pop("powerspectra", None)
+    if ps_cfg is not None:
+        warnings.warn("PowerSpectrumCalculator is not yet implemented in Augur")
 
     return None
 
@@ -206,7 +210,9 @@ def _create_cluster_abundance(config, cosmo):
       - mass definition and halo mass function set via
         config['cluster_abundance'].
     """
-    raise Warning("ClusterAbundance is not yet implemented in Augur")
+    cab_cfg = config.pop("cluster_abundance", None)
+    if cab_cfg is not None:
+        warnings.warn("ClusterAbundance is not yet implemented in Augur")
 
     return None
 
@@ -221,7 +227,9 @@ def _create_clusterdeltasigma(config, cosmo):
       - mass definition and halo mass function set via
         config['cluster_deltasigma'].
     """
-    raise Warning("ClusterDeltaSigma is not yet implemented in Augur")
+    cds_cfg = config.pop("cluster_deltasigma", None)
+    if cds_cfg is not None:
+        warnings.warn("ClusterDeltaSigma is not yet implemented in Augur")
 
     return None
 
@@ -245,7 +253,7 @@ def create_modeling_tools(config):
 FC_FACTORY_REGISTRY={'TwoPointFactory': TwoPointFactory}
 
 
-def load_likelihood_from_yaml(config):
+def load_likelihood_from_yaml(config, ccl_factory, S):
     lk_config = config.pop("Firecrown_Factory", None)
     
     if lk_config is None or lk_config == {}:
@@ -260,6 +268,15 @@ def load_likelihood_from_yaml(config):
     if probes is None:
         raise NameError(str(keys[0])+" is not a valid Firecrown Factory")
     
-    lk = probes.model_validate(like_dict)
-    
+    tpf = probes.model_validate(like_dict)
+
+    two_point_experiment = TwoPointExperiment(
+                                two_point_factory=tpf,
+                                ccl_factory=ccl_factory,
+                                data_source=DataSourceSacc(
+                                    sacc_data_file=S,
+                                    ),
+                                )
+    lk = two_point_experiment.make_likelihood()
+
     return lk
