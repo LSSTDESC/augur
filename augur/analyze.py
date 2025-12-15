@@ -2,10 +2,12 @@ import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
-from augur.utils.config_io import parse_config
+from augur.utils.config_io import parse_config, read_fisher_from_file
 from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
+import derivkit
+import pandas as pd
 
 
 class Analyze(object):
@@ -39,6 +41,9 @@ class Analyze(object):
 
         config = parse_config(config)  # Load full config
 
+        # config needs to specify likelihood yaml.
+        # alternatively, can pass likelihood and tools objects at input paramters.
+        # choose objects to take precedence.     
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
@@ -93,16 +98,15 @@ class Analyze(object):
         self.derivatives = None
         self.Fij = None
         self.Fij_with_gprior = None
-        self.bi = None
-        self.biased_cls = None
+        self.Fij_df = None
+        self.Fij_with_gprior_df = None
+        self.biased_cls, self.bi = None, None
         self.par_bounds = []
         self.norm = None
         self.gpriors = []
         self.gprior_pars = None
-        self.transform_Omega_m = False
-        self.transform_S8 = False
-        self.Om = None
-        self.S8 = None
+        self.transform_Omega_m, self.Om = False, None
+        self.transform_S8, self.S8 = False, None
         self.J = None
         if 'transform_S8' in self.config.keys():
             if type(self.config['transform_S8']) is not bool:
@@ -240,25 +244,26 @@ class Analyze(object):
                     raise ValueError('Require Omega_c to be specified \
                                      when transforming the Fisher matrix to Omega_m')
                 J[ind_c][ind_c] = 1.0
+                
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
-                    J[ind_b][ind_c] = 1.0
+                    J[ind_c][ind_b] = -1.0
 
                 if 'm_nu' in self.var_pars:
                     mnu = self.pars_fid['m_nu']
                     h = self.pars_fid['h']
-                    dOm_dmnu = 1.0/(h*h*93.14)
                     ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_nu][ind_c] = 1.0/dOm_dmnu
+                    J[ind_c][ind_nu] = -1.0/(h*h*93.14)
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        dOm_dh = -2.0*mnu/(h*h*h*93.14)
-                        J[ind_h][ind_c] = 1.0/dOm_dh
+                        J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*93.14)
+                
                 print('Replaced Omega_c with Omega_m in Jacobian')
 
             if self.transform_S8:
                 S8 = self.get_S8()
                 Om = self.get_Om()
+                print(Om, S8)
                 ind_sigma8 = None
                 if 'sigma8' in self.var_pars:
                     ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
@@ -267,24 +272,25 @@ class Analyze(object):
                                      when transforming the Fisher matrix to S8')
                 J[ind_sigma8][ind_sigma8] = 1.0/(np.sqrt(Om/0.3))
                 sigma_8 = self.pars_fid['sigma8']
+
+                # have not yet changed to Omega_m basis in dictionaries,
+                # consistent in either scenario
                 if 'Omega_c' in self.var_pars:
                     ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                    dOc_dS8 = 2 * 0.3 * S8/sigma_8**2
-                    J[ind_c][ind_sigma8] = dOc_dS8
-                if 'Omega_b' in self.var_pars:
-                    ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
-                    dOb_dS8 = 2 * 0.3 * S8/sigma_8**2
-                    J[ind_b][ind_sigma8] = dOb_dS8
-                if 'm_nu' in self.var_pars:
-                    mnu = self.pars_fid['m_nu']
-                    h = self.pars_fid['h']
-                    dmnu_dS8 = 2 * 0.3 * h**2 * 93.14 * S8/sigma_8**2
-                    ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_nu][ind_sigma8] = dmnu_dS8
-                    if 'h' in self.var_pars:
-                        ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        dh_dS8 = -0.5 * h**3 * (93.14 / mnu) * (2 * 0.3 * S8 / sigma_8**2)
-                        J[ind_h][ind_sigma8] = dh_dS8
+                    J[ind_sigma8][ind_c] = -0.5 * sigma_8 / Om
+
+                if not self.transform_Omega_m:
+                    if 'Omega_b' in self.var_pars:
+                        ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
+                        J[ind_sigma8][ind_b] = -0.5 * sigma_8 / Om 
+                    if 'm_nu' in self.var_pars:
+                        mnu = self.pars_fid['m_nu']
+                        h = self.pars_fid['h']
+                        ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
+                        J[ind_sigma8][ind_nu] = -0.5 * sigma_8 / Om * (1.0/(h*h*93.14))
+                        if 'h' in self.var_pars:
+                            ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
+                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 *93.14)                 
                 print("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
@@ -358,7 +364,7 @@ class Analyze(object):
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil', step=None):
+    def get_derivatives(self, force=False, method='5pt_stencil', step=None, **kwargs):
         """
         Auxiliary function to compute numerical derivatives of the helper function `f`
 
@@ -403,6 +409,35 @@ class Analyze(object):
                                             step=step,
                                             **ndkwargs)
                 self.derivatives = jacobian_calc(x_here).T
+            elif 'derivkit' in method:
+                from derivkit.calculus_kit import CalculusKit
+                if self.norm_step:
+                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
+                        * 1/self.norm
+                else:
+                    x_here = self.x
+                kwargs = {'n_points':27, 'spacing':'1%', 'base_abs':1.e-3, 'ridge':1.e-8}
+                if kwargs is None:
+                    kwargs = dict()
+                if 'derivkit_method' in kwargs.keys():
+                    method_here = kwargs['derivkit_method']
+                    kwargs.pop('derivkit_method')
+                else:
+                    method_here = 'adaptive'
+                if 'n_workers' in kwargs.keys():
+                    n_workers = kwargs['n_workers']
+                    kwargs.pop('n_workers')
+                else:
+                    n_workers = 1
+
+                calc_kit = CalculusKit(function=lambda y: self.f(y, self.var_pars,
+                                       self.pars_fid,
+                                       self.req_params,
+                                       donorm=self.norm_step),
+                                       x0=x_here)
+                self.derivatives = calc_kit.jacobian(method=method_here,
+                                                     n_workers=n_workers,
+                                                     **{'dk_kwargs': kwargs}).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil or numdifftools.')
@@ -471,7 +506,24 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".priors_only", gprior_only)
                 np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
 
+        # Build a pandas DataFrame indexed by varied parameters (rows and columns)
+        try:
+            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior, index=self.var_pars, columns=self.var_pars)
+        except Exception:
+            # Fallback in case var_pars is None or sizes mismatch
+            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior)
         return self.Fij_with_gprior
+
+    def add_external_fisher(self, external_fisher, method='5pt_stencil', save_txt=True):
+        if self.Fij is None:
+            self.get_fisher_matrix(method=method, save_txt=save_txt)
+
+        # external fisher is a path to an augur-like setup or a pandas datafram
+        # if it is a dataframe, then we read it in and add it directly
+        # if not, we need a helper to read in the text files into a dataframe object to then sum.
+        
+        F_ext, fid_ext = read_fisher_from_file(external_fisher)
+
 
     def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
@@ -482,6 +534,13 @@ class Analyze(object):
 
             J = self.Jacobian_transform()
             self.Fij = J.T @ self.Fij @ J
+
+            # Build a pandas DataFrame indexed by varied parameters (rows and columns)
+            try:
+                self.Fij_df = pd.DataFrame(self.Fij, index=self.var_pars, columns=self.var_pars)
+            except Exception:
+                # Fallback in case var_pars is None or sizes mismatch
+                self.Fij_df = pd.DataFrame(self.Fij)
 
             save_vals = np.copy(self.x.T)
             save_names = np.copy(self.var_pars)
@@ -630,6 +689,6 @@ class Analyze(object):
         f_out : ndarray,
             Predicted data vector for the given input parameters _sys_pars, _pars.
         """
-        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars, cf=self.cf)
+        f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars)
 
         return f_out
