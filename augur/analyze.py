@@ -9,6 +9,7 @@ import warnings
 import derivkit
 import pandas as pd
 
+mnu_norm = 93.14  # eV
 
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
@@ -87,6 +88,7 @@ class Analyze(object):
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
         # CCL Factory placeholder (for newer firecrown)
+        # self.sys_fid = 
         self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
@@ -108,6 +110,9 @@ class Analyze(object):
         self.transform_Omega_m, self.Om = False, None
         self.transform_S8, self.S8 = False, None
         self.J = None
+        self.derivative_method = None
+        self.derivative_args = {}
+        self.step_size = None
         if 'transform_S8' in self.config.keys():
             if type(self.config['transform_S8']) is not bool:
                 warnings.warn('transform_S8 not a boolean, therefore \
@@ -142,6 +147,8 @@ class Analyze(object):
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
         elif 'var_pars' in self.config.keys():
+            if norm_step:
+                    raise ValueError('norm_step=True not supported for parameters without defined uniform priors.')
             self.var_pars = self.config['var_pars']
             for var in self.var_pars:
                 if var in self.pars_fid.keys():
@@ -168,6 +175,14 @@ class Analyze(object):
             for var in self.gprior_pars:
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
+        # derivative method
+        if 'derivative_method' in self.config.keys():
+            self.derivative_method =  self.config.get('derivative_method', '5pt_stencil')
+            if self.derivative_method == 'derivkit':
+                self.derivative_args = self.config.get('derivative_args', {})
+        # step size
+        if 'step' in self.config.keys():
+            self.step_size = float(self.config.get('step', 0.01))
 
     def get_Om(self):
         """
@@ -194,7 +209,7 @@ class Analyze(object):
                         raise ValueError('Require h to be specified \
                                          when transforming the Fisher matrix to Omega_m with m_nu')
                     h = self.pars_fid['h']
-                    Om += m_nu/h/h/93.14
+                    Om += m_nu/h/h/mnu_norm
             self.Om = Om
         return self.Om
 
@@ -253,17 +268,15 @@ class Analyze(object):
                     mnu = self.pars_fid['m_nu']
                     h = self.pars_fid['h']
                     ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_c][ind_nu] = -1.0/(h*h*93.14)
+                    J[ind_c][ind_nu] = -1.0/(h*h*mnu_norm)
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*93.14)
+                        J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*mnu_norm)
                 
                 print('Replaced Omega_c with Omega_m in Jacobian')
 
             if self.transform_S8:
-                S8 = self.get_S8()
-                Om = self.get_Om()
-                print(Om, S8)
+                S8, Om = self.get_S8(), self.get_Om()
                 ind_sigma8 = None
                 if 'sigma8' in self.var_pars:
                     ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
@@ -287,10 +300,10 @@ class Analyze(object):
                         mnu = self.pars_fid['m_nu']
                         h = self.pars_fid['h']
                         ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                        J[ind_sigma8][ind_nu] = -0.5 * sigma_8 / Om * (1.0/(h*h*93.14))
+                        J[ind_sigma8][ind_nu] = -0.5 * sigma_8 / Om * (1.0/(h*h*mnu_norm))
                         if 'h' in self.var_pars:
                             ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 *93.14)                 
+                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 *mnu_norm)                 
                 print("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
@@ -364,7 +377,7 @@ class Analyze(object):
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil', step=None, **kwargs):
+    def get_derivatives(self, force=False, method=None, step=None, **kwargs):
         """
         Auxiliary function to compute numerical derivatives of the helper function `f`
 
@@ -380,56 +393,49 @@ class Analyze(object):
         """
 
         if step is None:
-            step = float(self.config['step'])
+            step = self.step_size
+        if method is None:
+            method = self.derivative_method
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
+            if self.norm_step:
+                x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
+                    * 1/self.norm
+            else:
+                x_here = self.x
+            
             if '5pt_stencil' in method:
-                if self.norm_step:
-                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                        * 1/self.norm
-                else:
-                    x_here = self.x
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params, donorm=self.norm_step),
                                                    x_here, h=step)
             elif 'numdifftools' in method:
                 import numdifftools as nd
-                if 'numdifftools_kwargs' in self.config.keys():
-                    ndkwargs = self.config['numdifftools_kwargs']
+                if kwargs != {}:
+                    print('Overwriting config-specified numdifftools kwargs')
+                    kwargs = kwargs
                 else:
-                    ndkwargs = {}
-                if self.norm_step:
-                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                        * 1/self.norm
-                else:
-                    x_here = self.x
+                    kwargs = self.derivative_args
+
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                              self.req_params,
                                                              donorm=self.norm_step),
                                             step=step,
-                                            **ndkwargs)
+                                            **kwargs)
                 self.derivatives = jacobian_calc(x_here).T
             elif 'derivkit' in method:
                 from derivkit.calculus_kit import CalculusKit
-                if self.norm_step:
-                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                        * 1/self.norm
+                if kwargs != {}:
+                    print('Overwriting config-specified derivkit kwargs')
+                    kwargs = kwargs
+                elif self.derivative_args != {}:
+                    kwargs = self.derivative_args
                 else:
-                    x_here = self.x
-                kwargs = {'n_points':27, 'spacing':'1%', 'base_abs':1.e-3, 'ridge':1.e-8}
-                if kwargs is None:
-                    kwargs = dict()
-                if 'derivkit_method' in kwargs.keys():
-                    method_here = kwargs['derivkit_method']
-                    kwargs.pop('derivkit_method')
-                else:
+                    print('Using default Augur derivkit kwargs')
+                    kwargs = {'method':'adaptive', 'n_workers':1, 'n_points':27, 'spacing':'1%', 'base_abs':1.e-3, 'ridge':1.e-8}
                     method_here = 'adaptive'
-                if 'n_workers' in kwargs.keys():
-                    n_workers = kwargs['n_workers']
-                    kwargs.pop('n_workers')
-                else:
-                    n_workers = 1
 
+                method_here = kwargs.pop('method', 'adaptive')
+                n_workers = kwargs.pop('n_workers', 1)
                 calc_kit = CalculusKit(function=lambda y: self.f(y, self.var_pars,
                                        self.pars_fid,
                                        self.req_params,
@@ -440,7 +446,7 @@ class Analyze(object):
                                                      **{'dk_kwargs': kwargs}).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
-                                 Please select 5pt_stencil or numdifftools.')
+                                 Please select 5pt_stencil, numdifftools, or derivkit.')
             if self.norm is not None:
                 self.derivatives /= self.norm[:, None]
             return self.derivatives
@@ -470,6 +476,7 @@ class Analyze(object):
             ind_c = None
             ind_m = None
             ind_S8 = None
+            #TODO: check logic here to make sure transformed parameters handled correctly
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
@@ -484,12 +491,12 @@ class Analyze(object):
                     if 'sigma8' in self.gprior_pars:
                         raise ValueError('Cannot set priors for both sigma8 and S8')
                 else:
-                    raise ValueError(f'The requested prior `{gvar}` is not recognized. \
+                    warnings.warn(f'The requested prior `{gvar}` is not recognized. \
                                        Please make sure that it is part of your model.')
 
             self.Fij_with_gprior = np.copy(self.Fij)
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
-            for i in range(len(self.gpriors)):
+            for i in range(len(indices)):
                 j = indices[i]
                 gprior_only[j][j] += 1.0/self.gpriors[i]**2
 
@@ -514,18 +521,18 @@ class Analyze(object):
             self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior)
         return self.Fij_with_gprior
 
-    def add_external_fisher(self, external_fisher, method='5pt_stencil', save_txt=True):
+    def add_external_fisher(self, external_fisher, method=None, save_txt=True):
         if self.Fij is None:
             self.get_fisher_matrix(method=method, save_txt=save_txt)
 
         # external fisher is a path to an augur-like setup or a pandas datafram
         # if it is a dataframe, then we read it in and add it directly
         # if not, we need a helper to read in the text files into a dataframe object to then sum.
-        
-        F_ext, fid_ext = read_fisher_from_file(external_fisher)
+        raise NotImplementedError("External fisher addition not yet implemented.")
+        # F_ext, fid_ext = read_fisher_from_file(external_fisher)
 
 
-    def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
+    def get_fisher_matrix(self, method=None, save_txt=True):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
             self.get_derivatives(method=method)
@@ -569,7 +576,7 @@ class Analyze(object):
 
         return self.Fij
 
-    def get_fisher_bias(self, force=False, method='5pt_stencil', save_txt=True, use_fid=False):
+    def get_fisher_bias(self, force=False, method=None, save_txt=True, use_fid=False):
         # Compute Fisher bias following the generalized Amara formalism
         # More details in Bianca's thesis and the note here:
         # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex

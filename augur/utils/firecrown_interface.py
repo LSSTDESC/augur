@@ -17,6 +17,9 @@ from firecrown.ccl_factory import (
     CAMBExtraParams,
     PoweSpecAmplitudeParameter, 
 )
+from firecrown.metadata_types import Galaxies
+from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFilter
+
 import warnings
 
 TRANSFER_FUNCTION_REGISTRY = {
@@ -253,7 +256,7 @@ def create_modeling_tools(config):
 FC_FACTORY_REGISTRY={'TwoPointFactory': TwoPointFactory}
 
 
-def load_likelihood_from_yaml(config, ccl_factory, S):
+def load_likelihood_from_yaml(config, ccl_factory, S, filters=[]):
     lk_config = config.pop("Firecrown_Factory", None)
     
     if lk_config is None or lk_config == {}:
@@ -270,13 +273,40 @@ def load_likelihood_from_yaml(config, ccl_factory, S):
     
     tpf = probes.model_validate(like_dict)
 
+    tpbfc = TwoPointBinFilterCollection(
+            require_filter_for_all=False,
+            allow_empty=True,
+            filters=filters,  
+        )
+
     two_point_experiment = TwoPointExperiment(
                                 two_point_factory=tpf,
                                 ccl_factory=ccl_factory,
                                 data_source=DataSourceSacc(
                                     sacc_data_file=S,
+                                    filters=tpbfc,
                                     ),
                                 )
     lk = two_point_experiment.make_likelihood()
 
     return lk
+
+TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
+                    'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
+                    'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
+                    }
+
+def create_twopoint_filter(combo_name, tr1, tr2, cut_low, cut_high):
+    info = TP_FILTER_REGISTRY.get(combo_name, None)
+    if info is None:    
+        raise ValueError(f"Unknown two point combination '{combo_name}'")
+    m1, m2 = info[0]
+    filter = TwoPointBinFilter.from_args(
+                name1=tr1,
+                name2=tr2,
+                measurement1=m1,
+                measurement2=m2,
+                lower=cut_low,
+                upper=cut_high,
+            )
+    return filter

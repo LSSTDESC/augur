@@ -6,7 +6,10 @@ from scipy.stats import norm, chi2
 from augur.utils.config_io import parse_config
 import os
 
+# prostprocess does not know about transformations, it just reads fisher file and 
+# assumes var_pars is maintained. Look for pandas df?
 
+# needs to be updated
 def postprocess(config):
     """
     Generates postprocessing plots and Figure

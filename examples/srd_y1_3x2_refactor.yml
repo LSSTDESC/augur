@@ -1,5 +1,8 @@
+fiducial_sacc_path : test_test_test_all.sacc
+
 general:
     ignore_scale_cuts : True # If True ignore any values of kmax
+    ignore_scale_cuts_likelihood: False # If True ignore any values of kmax when building the likelihood
     bandpower_windows : None #TopHat, None
 
 #TODO: also read in cosmological-model parameters as ParamsMap
@@ -171,7 +174,6 @@ statistics:
         kmax : 0.202  # scale cut (in Mpc^-1), 0.3 h/Mpc in SRD
         # kmax : None
 
-fiducial_sacc_path : test_test_test.sacc
 cov_options:
     # Several options implemented -- Gaussian internal
     #cov_type : 'gaus_internal'
@@ -188,12 +190,12 @@ cov_options:
     #    ell_edges : np.geomspace(20, 15000, 21, endpoint=True).astype(np.int32)
 
 fisher:
-    var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias', 
-               'lens2_bias', 'lens3_bias', 'lens4_bias', 'ia_bias', 'alphaz',
-               'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
+    var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias'] 
+               #'lens2_bias', 'lens3_bias', 'lens4_bias', 'ia_bias', 'alphaz',
+               #'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
                #'lens0_sigma_z', 'lens1_sigma_z', 'lens2_sigma_z', 'lens3_sigma_z', 'lens4_sigma_z',
-               'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
-               'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
+               #'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
+               #'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
     # parameters:  # These uniform "priors" are useful for defining normalized step sizes 
     #     Omega_c: [0.1, 0.26, 0.9]
     #     A_s: [1e-9, 4e-9]
@@ -208,6 +210,16 @@ fisher:
     fid_output: 'output/fiducials.dat'
     #transform_Omega_m: True
     #transform_S8: True
+    derivative_method: '5pt_stencil'
+    #derivative_method: 'derivkit'
+    #derivative_args: # args for derivkit
+    #  method: 'finite'
+    #  n_workers: 1
+    #  n_points: 27
+    #  spacing: '1%'
+    #  base_abs: 1.e-3
+    #  ridge: 1.e-8
+
     gaussian_priors:
        lens0_bias: 0.9 #SRD p50
        lens1_bias: 0.9

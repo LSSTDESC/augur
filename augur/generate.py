@@ -24,7 +24,7 @@ from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.modeling_tools import ModelingTools
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
-from augur.utils.firecrown_interface import create_modeling_tools
+from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 from firecrown.ccl_factory import (
     CCLFactory,
     CCLCreationMode,
@@ -53,20 +53,25 @@ def _get_tracers(statistic, comb):
     else:
         return NotImplementedError('Only C_ls available')
     return tr1, tr2
-'''
-def _get_correlation_space(name: str):
-    key = (name or "harmonic").lower()
-    cs = CORRELATION_SPACE_MAP.get(key)
-    if cs is None:
-        raise ValueError(f"Unsupported correlation_space '{name}'")
-    return cs
-'''
 
-#TODO: not correct, check this later
+
 def _add_nz(cfg, nbins, src_root, S, dndz):
     """
     Auxiliary function to get the n(z) distribution for a given tracer
     in the configuration file.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary for the tracer
+    nbins : int
+        Number of redshift bins
+    src_root : str
+        Root name for the source tracer
+    S : sacc.Sacc
+        SACC object to which the n(z) will be added
+    dndz : dict
+        Dictionary to store the n(z) objects
     """
     if 'Nz_center' in cfg['Nz_kwargs'].keys():
         Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
@@ -106,6 +111,43 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
         S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
     return dndz
 
+def _get_scale_cuts(stat_cfg, comb):
+    """
+    Auxiliary function to get the scale cuts in ell for a given tracer
+    combination in the configuration file.
+    Parameters
+    Parameters
+    ----------
+    stat_cfg : dict
+        Configuration dictionary for the statistic
+    comb : tuple
+        Tracer combination
+    Returns
+    -------
+    lmax : int or float or None
+        Maximum ell for the tracer combination
+    kmax : int or float or None
+        Maximum k for the tracer combination
+    """
+
+    tracer_combs = stat_cfg.get('tracer_combs', [])
+    if 'kmax' in stat_cfg.keys() and 'lmax' in stat_cfg.keys():
+        raise ValueError('Cannot specify both lmax and kmax for scale cuts.')
+    lmax = stat_cfg.get('lmax', None)
+    if isinstance(lmax, list):
+        if len(lmax) != len(tracer_combs):
+            raise ValueError('If lmax is a list, it must have the same length as tracer_combs')
+        lmax = lmax[tracer_combs.index(comb)]
+    elif isinstance(lmax, (int, float)) or lmax is None or lmax =='None':
+        pass
+    else:
+        raise ValueError('lmax must be either a single number or a list of numbers')
+    
+    kmax = stat_cfg.get('kmax', None)
+    if kmax is not None and not isinstance(kmax, (int, float)) and kmax!='None':
+        raise ValueError('kmax must be a single number')
+    return lmax, kmax
+
 
 def generate_sacc_and_stats_refactored(config):
     """
@@ -130,6 +172,8 @@ def generate_sacc_and_stats_refactored(config):
          Fiducial cosmology
     stats : firecrown.likelihood.gauss_family.statistic.two_point.TwoPoint
          List of TwoPoint statistics that will enter the likelihood
+    tp_filters : list
+         List of TwoPoint filters that will be applied to the statistics
     """
 
     config = parse_config(config)
@@ -225,22 +269,40 @@ def generate_sacc_and_stats_refactored(config):
     stat_cfg = config['statistics']
     stats = []
     ignore_sc = config['general'].get('ignore_scale_cuts', False)
+    ignore_sc_likelihood = config['general'].get('ignore_scale_cuts_likelihood', False)
+    if not ignore_sc and ignore_sc_likelihood:
+        raise ValueError("Cannot ignore scale cuts in likelihood while applying them to the data vector.")
+    tp_filters = []
+
     Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
-        kmax = stat_cfg[key]['kmax']
         ell_edges = eval(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
-        print(ell_edges)
+        # TODO: add scale cuts to likelihood, not just cutting datavector
         for comb in tracer_combs:
+            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
             tr1, tr2 = _get_tracers(key, comb)
-            if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
+            if (kmax is not None) and (kmax != 'None'):
                 zmean1 = dndz[tr1].zav
                 zmean2 = dndz[tr2].zav
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
-                ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                ells_here = ells[ells < ell_max]
-                print('ell_max', ell_max)
+                lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
+                # ells_here = ells[ells < lmax]
+                # print('ell_max', lmax)
+            elif (lmax is not None) and (lmax != 'None'):
+                ells_here = ells[ells < lmax]
+            else:
+                ells_here = ells
+                lmax = ells_here[-1]
+
+            if not ignore_sc_likelihood:
+               tp_filters.append(create_twopoint_filter(key, tr1, tr2,
+                                    cut_low=ells_here[0],
+                                    cut_high=lmax))
+               
+            if  not ignore_sc:
+                ells_here = ells[ells < lmax]
             else:
                 ells_here = ells
             # add bandpower windows
@@ -251,10 +313,12 @@ def generate_sacc_and_stats_refactored(config):
                     in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
                     wgt[in_win, i] = 1.0
                 win = sacc.BandpowerWindow(ells_aux, wgt)
-                print(win.nv, win.nell, len(ells_here))
+                # print(win.nv, win.nell, len(ells_here))
                 S.add_ell_cl(key, tr1, tr2,
                              ells_here, np.zeros(len(ells_here)), window=win)
 
+            elif Bandpower == 'NaMaster':
+                raise NotImplementedError("NaMaster bandpower windows not yet implemented in Augur generation.")
             else:
                 S.add_ell_cl(key, tr1, tr2,
                              ells_here, np.zeros(len(ells_here)))                
@@ -267,7 +331,9 @@ def generate_sacc_and_stats_refactored(config):
     ndata = len(S.mean)
     S.add_covariance(np.eye(ndata))
     sys_params = ParamsMap(sys_params)
-    return S, cosmo, stats, sys_params
+
+    # needs to return two point filter collection that represents scale cuts
+    return S, cosmo, stats, sys_params, tp_filters
 
 
 
@@ -541,7 +607,7 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params
 
 
-def generate(config, return_all_outputs=False, write_sacc=True, lk=None, tools=None):
+def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=None):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -576,11 +642,11 @@ def generate(config, return_all_outputs=False, write_sacc=True, lk=None, tools=N
 
     """
 
-    config = parse_config(config)
+    config = parse_config(configs)
     # Generate placeholders
     # S, cosmo, stats, sys_params = generate_sacc_and_stats(config)
 
-    S, cosmo, stats, sys_params = generate_sacc_and_stats_refactored(config)
+    S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats_refactored(config)
     # S.save_fits('placeholder_sacc.fits', overwrite=True )
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
@@ -705,7 +771,16 @@ def generate(config, return_all_outputs=False, write_sacc=True, lk=None, tools=N
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
-    lk = ConstGaussian(statistics=stats)
-    lk.read(S)
+    
+    # add two-point filters here to the likelihood, in case of scale cuts
+    if tp_filters != []:
+        print('loading filters')
+        config = parse_config(configs)
+        from augur.utils.firecrown_interface import load_likelihood_from_yaml
+        lk = load_likelihood_from_yaml(config, tools.ccl_factory, config['fiducial_sacc_path'], filters=tp_filters)
+    else:
+        lk = ConstGaussian(statistics=stats)
+        lk.read(S)
+
     if return_all_outputs:
         return lk, S, tools, sys_params
