@@ -443,7 +443,7 @@ class Analyze(object):
                                        x0=x_here)
                 self.derivatives = calc_kit.jacobian(method=method_here,
                                                      n_workers=n_workers,
-                                                     **{'dk_kwargs': kwargs}).T
+                                                     **kwargs).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil, numdifftools, or derivkit.')
@@ -532,10 +532,10 @@ class Analyze(object):
         # F_ext, fid_ext = read_fisher_from_file(external_fisher)
 
 
-    def get_fisher_matrix(self, method=None, save_txt=True):
+    def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
-            self.get_derivatives(method=method)
+            self.get_derivatives(method=method, **kwargs)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
 
