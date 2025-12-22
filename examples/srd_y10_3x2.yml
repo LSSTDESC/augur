@@ -1,7 +1,11 @@
+fiducial_sacc_path : test_test_test_all_y10.sacc
+
 general:
-    ignore_scale_cuts : False # If True ignore any values of kmax
+    ignore_scale_cuts : True # If True ignore any values of kmax
+    ignore_scale_cuts_likelihood: False # If True ignore any values of kmax when building the likelihood
     bandpower_windows : None #TopHat, None
 
+#TODO: also read in cosmological-model parameters as ParamsMap
 cosmo:
     Omega_c : 0.2664  # = 0.3156 - 0.0492
     Omega_b : 0.0492
@@ -23,13 +27,135 @@ cosmo:
 ccl_accuracy:  # Example of a couple of parameters to modify.
     spline_params:  # You can change here any pyccl.spline_params
         K_MAX_SPLINE : 100
-    gsl_params:  # You can change here any pyccl.gsl_params
-        INTEGRATION_EPSREL: 1e-6
-        INTEGRATION_LIMBER_EPSREL: 1e-2
+    #gsl_params:  # You can change here any pyccl.gsl_params
+    #    #INTEGRATION_EPSREL: 1e-4
+    #    INTEGRATION_LIMBER_EPSREL: 1e-3
+
+# pt_calculator:
+#     type: eulerian_pt_calculator
+#     with_NC: False
+#     with_IA: True
+#     log10k_min: -4
+#     log10k_max: 2
+#     nk_per_decade: 80
+#     with_matter_1loop: False
+
+#for generating the fiducial data veector in generate.py
+systematics:
+    src0_mult_bias: 0.0
+    src1_mult_bias: 0.0
+    src2_mult_bias: 0.0
+    src3_mult_bias: 0.0
+    src4_mult_bias: 0.0
+    # Photo-z shifts for sources
+    src0_delta_z: 0.0
+    src1_delta_z: 0.0
+    src2_delta_z: 0.0
+    src3_delta_z: 0.0
+    src4_delta_z: 0.0 
+    # IA parameters for sources
+    # ia_a_1: 5.717
+    # ia_alphaz_1: -0.47
+    # ia_zpiv_1: 0.3
+    # ia_a_2: 0.0
+    # ia_alphaz_2: 0.0
+    # ia_zpiv_2: 0.62
+    # ia_a_d: 0.0
+    # ia_alphaz_d: 0.0
+    # ia_zpiv_d: 0.62   
+    ia_bias: 5.717
+    alphaz: -0.47
+    z_piv: 0.3         
+
+    # Linear Bias for lenses
+    lens0_bias: 1.376695
+    lens1_bias: 1.451179
+    lens2_bias: 1.528404
+    lens3_bias: 1.607983
+    lens4_bias: 1.689579
+    lens5_bias: 1.772899
+    lens6_bias: 1.857700
+    lens7_bias: 1.943754
+    lens8_bias: 2.030887
+    lens9_bias: 2.118943
+    lens0_alphaz: 0.0
+    lens1_alphaz: 0.0
+    lens2_alphaz: 0.0
+    lens3_alphaz: 0.0
+    lens4_alphaz: 0.0
+    lens5_alphaz: 0.0
+    lens6_alphaz: 0.0
+    lens7_alphaz: 0.0
+    lens8_alphaz: 0.0
+    lens9_alphaz: 0.0
+    lens0_z_piv: 0.0
+    lens1_z_piv: 0.0
+    lens2_z_piv: 0.0
+    lens3_z_piv: 0.0
+    lens4_z_piv: 0.0
+    lens5_z_piv: 0.0
+    lens6_z_piv: 0.0
+    lens7_z_piv: 0.0
+    lens8_z_piv: 0.0
+    lens9_z_piv: 0.0
+    lens0_alphag: 0.0
+    lens1_alphag: 0.0
+    lens2_alphag: 0.0
+    lens3_alphag: 0.0
+    lens4_alphag: 0.0
+    lens5_alphag: 0.0
+    lens6_alphag: 0.0
+    lens7_alphag: 0.0
+    lens8_alphag: 0.0
+    lens9_alphag: 0.0
+    # Photo-z shifts and stretches for lenses
+    lens0_delta_z: 0.0
+    lens1_delta_z: 0.0
+    lens2_delta_z: 0.0
+    lens3_delta_z: 0.0
+    lens4_delta_z: 0.0
+    lens5_delta_z: 0.0
+    lens6_delta_z: 0.0
+    lens7_delta_z: 0.0
+    lens8_delta_z: 0.0
+    lens9_delta_z: 0.0
+    lens0_sigma_z: 1.0
+    lens1_sigma_z: 1.0
+    lens2_sigma_z: 1.0
+    lens3_sigma_z: 1.0
+    lens4_sigma_z: 1.0
+    lens5_sigma_z: 1.0
+    lens6_sigma_z: 1.0
+    lens7_sigma_z: 1.0
+    lens8_sigma_z: 1.0
+    lens9_sigma_z: 1.0
+
+# which systematics to include in the Firecrown (factory) likelihoods
+Firecrown_Factory:
+    TwoPointFactory:
+        correlation_space: harmonic
+        number_counts_factories:
+            - type_source: default
+              global_systematics: []
+              include_rsd: false
+              per_bin_systematics:
+                -  {type: PhotoZShiftandStretchFactory}
+                -  {type: LinearBiasSystematicFactory}
+        weak_lensing_factories:
+            - type_source: default
+              global_systematics:
+                - {type: LinearAlignmentSystematicFactory, alphag: 1}
+              per_bin_systematics:
+                - {type: MultiplicativeShearBiasFactory}
+                - {type: PhotoZShiftFactory}
+        cmb_factories: []
+        int_options: null
+                
+# - {type: TattAlignmentSystematicFactory, include_z_dependence: true}
 
 sources:  # Sources
     nbins : 5
-    ndens : 27  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's) p54
+    ndens : 27  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
     ellipticity_error : 0.26
     
     # Nz_type : 'SourceSRD2018'  # For now, this is the assumed N(z) for sources -- check SRD 2018
@@ -42,19 +168,10 @@ sources:  # Sources
         input_file : 'data/srd_source_bins_y10.txt'
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
-    # mult_bias: https://github.com/CosmoLike/DESC_SRD/blob/f3b44070e40cbdc1a459e07a1a8eb31d2608af6f/like_fourier.c#L825
-    mult_bias : [0.0, 0.0, 0.0, 0.0, 0.0]  # Scalar or list (if list, then it's a value per bin)
-    delta_z : 0.0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
-    ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 5.92  # ia-bias 
-    alphaz : -0.47 # not modeling Luminosity-dependent ampltiude - discrepancy from SRD
-    z_piv : 0.3
-    ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
 
 lenses :  # Lenses
     nbins : 10
-    ndens : 48  # in arcmin^-2, same convention as for sources p48
-    delta_z : 0.0  # Photo-z shift for lenses (if ommited it assumes no shift)
+    ndens : 48  # in arcmin^-2, same convention as for sources
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
         input_file : 'data/srd_lens_bins_y10.txt'
@@ -67,21 +184,8 @@ lenses :  # Lenses
     #     Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
     #     Nz_alpha : 0.94  # N(z) alpha parameter
     #     Nz_z0 : 0.26  # N(z) z-pivot
-    # bias_type : 'inverse_growth'  # Inverse growth bias or custom
-    # bias_kwargs : 
-    #     b0 : 1.33  # Reverse engineeering the bias values from the SRD
-    # Another option is to use the `custom` bias type, but it requires a value per bin
-    bias_type : 'custom'
-    bias_kwargs :
-        b : [1.376695, 1.451179, 1.528404, 1.607983, 1.689579, 1.772899, 1.857700, 1.943754, 2.030887, 2.118943]  # Values from SRD p48
 
 statistics:
-    galaxy_density_cl :  # The statistics are supposed to be SACC statistics
-        tracer_combs : [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4],
-                     [5, 5], [6, 6], [7, 7], [8, 8], [9, 9]]  # These need to be lists for now
-        ell_edges : np.geomspace(20, 15000, 21, endpoint=True)  # bandpower edges
-        kmax : 0.201  # scale cut (in Mpc^-1), 0.3 h/Mpc in SRD
-        #kmax : None
     galaxy_shear_cl_ee : 
         tracer_combs :  [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], 
                   [1, 1], [1, 2], [1, 3], [1, 4],
@@ -98,8 +202,13 @@ statistics:
         ell_edges : np.geomspace(20, 15000, 21, endpoint=True)
         kmax : 0.201
         #kmax : None
+    galaxy_density_cl :  # The statistics are supposed to be SACC statistics
+        tracer_combs : [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4],
+                     [5, 5], [6, 6], [7, 7], [8, 8], [9, 9]]  # These need to be lists for now
+        ell_edges : np.geomspace(20, 15000, 21, endpoint=True)  # bandpower edges
+        kmax : 0.201  # scale cut (in Mpc^-1), 0.3 h/Mpc in SRD
+        #kmax : None
 
-fiducial_sacc_path : test_sacc_srd_y10_3x2.sacc
 cov_options:
     # Several options implemented -- Gaussian internal
     #cov_type : 'gaus_internal'
@@ -107,44 +216,21 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : './data/Y10_3x2_SRD_cov.npy'
+    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
-    #fsky: 0.42
+    #fsky: 0.3
     #binning_info : 
     #    ell_edges : np.geomspace(20, 15000, 21, endpoint=True).astype(np.int32)
-    # Survey params:
-    # 10 lens bins
-    #Ngal_lens0: 2.25
-    #Ngal_lens1: 3.098
-    #Ngal_lens2: 3.071
-    #Ngal_lens3: 2.595
-    #Ngal_lens4: 1.998
-    #Ngal_lens5: 1.998
-    #Ngal_lens6: 1.998
-    #Ngal_lens7: 1.998
-    #Ngal_lens8: 1.998
-    #Ngal_lens9: 1.998
-
-    # 5 source bins
-    #Ngal_src0: 2.036
-    #Ngal_src1: 1.964
-    #Ngal_src2: 1.973
-    #Ngal_src3: 1.987
-    #Ngal_src4: 2.023
-
 
 fisher:
-    var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias', 
-               'lens2_bias', 'lens3_bias', 'lens4_bias', 'lens5_bias', 'lens6_bias',
-               'lens7_bias', 'lens8_bias', 'lens9_bias', 'ia_bias', 'alphaz',
-               'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
-               'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
-               'lens5_delta_z', 'lens6_delta_z', 'lens7_delta_z', 'lens8_delta_z', 'lens9_delta_z',
+    var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias'] 
+               #'lens2_bias', 'lens3_bias', 'lens4_bias', 'ia_bias', 'alphaz',
+               #'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
                #'lens0_sigma_z', 'lens1_sigma_z', 'lens2_sigma_z', 'lens3_sigma_z', 'lens4_sigma_z',
-               #'lens5_sigma_z', 'lens6_sigma_z', 'lens7_sigma_z', 'lens8_sigma_z', 'lens9_sigma_z',
-               'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
+               #'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
+               #'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
     # parameters:  # These uniform "priors" are useful for defining normalized step sizes 
     #     Omega_c: [0.1, 0.26, 0.9]
     #     A_s: [1e-9, 4e-9]
@@ -157,8 +243,18 @@ fisher:
     step: 1e-5
     output: 'output/fisher.dat'
     fid_output: 'output/fiducials.dat'
-    transform_Omega_m: True
-    transform_S8: True
+    #transform_Omega_m: True
+    #transform_S8: True
+    derivative_method: '5pt_stencil'
+    #derivative_method: 'derivkit'
+    #derivative_args: # args for derivkit
+    #  method: 'finite'
+    #  n_workers: 1
+    #  n_points: 27
+    #  spacing: '1%'
+    #  base_abs: 1.e-3
+    #  ridge: 1.e-8
+
     gaussian_priors:
        lens0_bias: 0.9 #SRD p50
        lens1_bias: 0.9
@@ -170,39 +266,39 @@ fisher:
        lens7_bias: 0.9
        lens8_bias: 0.9
        lens9_bias: 0.9
-       lens0_delta_z: 0.003 # SRD p16
-       lens1_delta_z: 0.003
-       lens2_delta_z: 0.003
-       lens3_delta_z: 0.003
-       lens4_delta_z: 0.003
-       lens5_delta_z: 0.003
-       lens6_delta_z: 0.003
-       lens7_delta_z: 0.003
-       lens8_delta_z: 0.003
-       lens9_delta_z: 0.003
-       #lens0_sigma_z: 0.03 # SRD p17
-       #lens1_sigma_z: 0.03
-       #lens2_sigma_z: 0.03
-       #lens3_sigma_z: 0.03
-       #lens4_sigma_z: 0.03
-       #lens5_sigma_z: 0.03 
-       #lens6_sigma_z: 0.03
-       #lens7_sigma_z: 0.03
-       #lens8_sigma_z: 0.03
-       #lens9_sigma_z: 0.03
-       src0_delta_z: 0.001 #SRD p18
-       src1_delta_z: 0.001
-       src2_delta_z: 0.001
-       src3_delta_z: 0.001
-       src4_delta_z: 0.001
-       src0_mult_bias: 0.003 #SRD p19
-       src1_mult_bias: 0.003
-       src2_mult_bias: 0.003
-       src3_mult_bias: 0.003
-       src4_mult_bias: 0.003
+       lens0_delta_z: 0.005 # SRD p16
+       lens1_delta_z: 0.005
+       lens2_delta_z: 0.005
+       lens3_delta_z: 0.005
+       lens4_delta_z: 0.005
+       lens5_delta_z: 0.005
+       lens6_delta_z: 0.005
+       lens7_delta_z: 0.005
+       lens8_delta_z: 0.005
+       lens9_delta_z: 0.005
+       #lens0_sigma_z: 0.1 # SRD p17
+       #lens1_sigma_z: 0.1
+       #lens2_sigma_z: 0.1
+       #lens3_sigma_z: 0.1
+       #lens4_sigma_z: 0.1
+       #lens5_sigma_z: 0.1
+       #lens6_sigma_z: 0.1
+       #lens7_sigma_z: 0.1
+       #lens8_sigma_z: 0.1
+       #lens9_sigma_z: 0.1
+       src0_delta_z: 0.002 # SRD p18
+       src1_delta_z: 0.002
+       src2_delta_z: 0.002
+       src3_delta_z: 0.002
+       src4_delta_z: 0.002
+       src0_mult_bias: 0.013 # SRD p19
+       src1_mult_bias: 0.013
+       src2_mult_bias: 0.013
+       src3_mult_bias: 0.013
+       src4_mult_bias: 0.013
        ia_bias: 3.9 # SRD p55
        alphaz: 2.3
-       Omega_m : 0.2 # actually for Omega_m, as per SRD p43
+       Omega_c : 0.2 # actually for Omega_m, as per SRD p43
        Omega_b : 0.006 #SRD p43
        h : 0.063
        n_s : 0.08
@@ -214,7 +310,7 @@ fisher:
                     # If the file is provided it should be a FITS or ASCII file with the  same binning as the
                     # fiducial data vector and the column dv_sys
         bias_params: 
-            Omega_m: 0.27
+            Omega_c: 0.27
             lens0_bias: 1.3
             lens0_delta_z: 0.01
             src3_delta_z: 0.005
