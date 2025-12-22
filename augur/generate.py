@@ -104,14 +104,14 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                 if 'ZDistFromFile' not in cfg['Nz_type']:
                     if Nz_centers is not None:
                         dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                                Nz_center=Nz_centers[i],
-                                                                Nz_nbins=nbins,
-                                                                **cfg['Nz_kwargs'])
+                                                                 Nz_center=Nz_centers[i],
+                                                                 Nz_nbins=nbins,
+                                                                 **cfg['Nz_kwargs'])
                     else:
                         dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                                Nz_ibin=i,
-                                                                Nz_nbins=nbins,
-                                                                **cfg['Nz_kwargs'])
+                                                                 Nz_ibin=i,
+                                                                 Nz_nbins=nbins,
+                                                                 **cfg['Nz_kwargs'])
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
