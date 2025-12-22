@@ -16,8 +16,6 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
         Dictionary containing the "systematic" modeling parameters.
     _pars : dict,
         Dictionary containing the cosmological parameters
-    cf : firecrown.CCLFactory,
-        If passed, CCLFactory object to use.
     return_all : bool,
         If `False` it will just return the predicted data vector. Else,
         it will return the internal ModelingTools and Likelihood objects.

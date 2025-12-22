@@ -232,11 +232,6 @@ def generate_sacc_and_stats(config):
 
     S = sacc.Sacc()
 
-    # I think there is no reason to set systematic parameters directly through the sacc framework.
-    # Instead, I believe we can make a "template" sacc file with the relevant n(z) distributions,
-    # compute a theory datavector with the firecrown likelihood machinery,
-    # and utilize that in the final sacc returned to the user.
-
     # Read sources from config file
     sources = {}
     dndz = {}
@@ -411,7 +406,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
 
     _pars = cosmo.__dict__['_params_init_kwargs']
     # Populate ModelingTools and likelihood
-    # tools = firecrown.modeling_tools.ModelingTools()
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
     # Get all bandpower windows before erasing the placeholder sacc

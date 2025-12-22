@@ -41,7 +41,7 @@ class Analyze(object):
         """
 
         # config needs to specify likelihood yaml.
-        # alternatively, can pass likelihood and tools objects at input paramters.
+        # alternatively, can pass likelihood and tools objects at input parameters.
         # choose objects to take precedence.
         # Load the likelihood if no likelihood is passed along
 
@@ -397,12 +397,10 @@ class Analyze(object):
                 x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                     * 1/self.norm
             elif self.norm_step and 'derivkit' in method:
+                raise warnings.warning('Using derivkit with norm_step=True not recommended.\
+                                       Forcing norm_step to False and continuing computation.')
                 self.norm_step = False
-                raise warnings.warning('Derivkit does not support the Augur definition \
-                                    of normalized step sizes. \
-                                    Forcing norm_step to False and continuing computation.')
                 x_here = self.x
-
             else:
                 x_here = self.x
 
