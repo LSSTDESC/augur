@@ -1,8 +1,4 @@
-from packaging.version import Version
-import pyccl as ccl
-import firecrown
 from firecrown.parameters import ParamsMap
-
 
 
 def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):

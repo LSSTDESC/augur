@@ -1,11 +1,8 @@
-import numpy as np
 import pyccl as ccl
 
 from firecrown.modeling_tools import ModelingTools
-from firecrown.parameters import ParamsMap
 from firecrown.likelihood.factories import (
     DataSourceSacc,
-    TwoPointCorrelationSpace,
     TwoPointExperiment,
     TwoPointFactory,
 )
@@ -15,7 +12,7 @@ from firecrown.ccl_factory import (
     CCLCreationMode,
     CCLPureModeTransferFunction,
     CAMBExtraParams,
-    PoweSpecAmplitudeParameter, 
+    PoweSpecAmplitudeParameter,
 )
 from firecrown.metadata_types import Galaxies
 from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFilter
@@ -36,16 +33,14 @@ PT_CALCULATOR_REGISTRY = {
     "bacco_lbias_calculator": ccl.nl_pt.BaccoLbiasCalculator,
 }
 
-BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead','mead2015','mead2016']
+BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead', 'mead2015', 'mead2016']
 
-#CORRELATION_SPACE_MAP = {
-#    "harmonic": firecrown.likelihood.factories.TwoPointCorrelationSpace.HARMONIC,
-#    "configuration": firecrown.likelihood.factories.TwoPointCorrelationSpace.CONFIGURATION,
-#}
+TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
+                      'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
+                      'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
+                      }
 
 
-
-# docs: https://firecrown.readthedocs.io/en/latest/autoapi/firecrown/ccl_factory/index.html#firecrown.ccl_factory.CCLFactory
 def _create_ccl_factory(config):
     """
     Build and return (ccl_factory, ccl_cosmo) using entries in the
@@ -58,7 +53,7 @@ def _create_ccl_factory(config):
     """
     # Copy to avoid mutating original
     cosmo_cfg = dict(config['cosmo'])
-    camb_extra=None
+    camb_extra = None
     # get vs. pop is to allow passing the rest of the cosmo_cfg to ccl.Cosmology
     # Transfer function selection
     tf_name = cosmo_cfg.pop("transfer_function", "boltzmann_camb").lower()
@@ -69,8 +64,8 @@ def _create_ccl_factory(config):
 
     # Handle extra parameters for CAMB matter power spectrum
     camb_baryon = False
-    if tf_name=='boltzmann_camb':
-        extra_params = cosmo_cfg.get("extra_parameters", None) 
+    if tf_name == 'boltzmann_camb':
+        extra_params = cosmo_cfg.get("extra_parameters", None)
         if extra_params is not None:
             extra_params_camb = extra_params.get("camb", None)
             if extra_params_camb is not None:
@@ -110,11 +105,12 @@ def _create_ccl_factory(config):
         require_nonlinear_pk=require_nl,
         camb_extra_params=camb_extra,
         use_camb_hm_sampling=camb_baryon,
+        amplitude_parameter=amplitude,
     )
     factory.cosmo = cosmo
     return factory, cosmo
 
-# docs: https://ccl.readthedocs.io/en/latest/_modules/pyccl/nl_pt/tracers.html
+
 def _create_pt_calculator(config, cosmo):
     """
     Build and return a pyccl PTCalculator using entries in the
@@ -151,7 +147,7 @@ def _create_hm_calculator(config, cosmo):
     hm_cfg = config.pop("hm_calculator", None)
     if hm_cfg is None or hm_cfg == {}:
         return None
-    
+
     cfg = dict(hm_cfg)  # shallow copy
     try:
         hm_calculator = ccl.hm.HaloModelCalculator(cosmo=cosmo, **cfg)
@@ -236,6 +232,7 @@ def _create_clusterdeltasigma(config, cosmo):
 
     return None
 
+
 def create_modeling_tools(config):
 
     factory, cosmo = _create_ccl_factory(config)
@@ -244,39 +241,39 @@ def create_modeling_tools(config):
     cluster_abundance = _create_cluster_abundance(config, cosmo)
     cluster_deltasigma = _create_clusterdeltasigma(config, cosmo)
     tools = ModelingTools(ccl_factory=factory,
-                        pt_calculator=pt_calculator,
-                        hm_calculator=hm_calculator,
-                        cluster_abundance=cluster_abundance,
-                        cluster_deltasigma=cluster_deltasigma,
-                        )
+                          pt_calculator=pt_calculator,
+                          hm_calculator=hm_calculator,
+                          cluster_abundance=cluster_abundance,
+                          cluster_deltasigma=cluster_deltasigma,
+                          )
     return tools, cosmo
 
 
 # Leave possibility open for multi-probe
-FC_FACTORY_REGISTRY={'TwoPointFactory': TwoPointFactory}
+FC_FACTORY_REGISTRY = {'TwoPointFactory': TwoPointFactory}
 
 
 def load_likelihood_from_yaml(config, ccl_factory, S, filters=[]):
     lk_config = config.pop("Firecrown_Factory", None)
-    
+
     if lk_config is None or lk_config == {}:
         raise ValueError("Firecrown_Factory must have contents to produce a Firecrown Likelihood")
     keys = lk_config.keys()
-    
-    if len(keys)!=1:
-        raise ValueErrorError("Augur can only support one Factory definition.")
+
+    if len(keys) != 1:
+        raise ValueError("Augur can only support one Factory definition.")
     keys = list(keys)
     like_dict = lk_config[keys[0]]
     probes = FC_FACTORY_REGISTRY.get(keys[0])
     if probes is None:
         raise NameError(str(keys[0])+" is not a valid Firecrown Factory")
-    
+
     tpf = probes.model_validate(like_dict)
 
     tpbfc = TwoPointBinFilterCollection(
             require_filter_for_all=False,
             allow_empty=True,
-            filters=filters,  
+            filters=filters,
         )
 
     two_point_experiment = TwoPointExperiment(
@@ -291,14 +288,10 @@ def load_likelihood_from_yaml(config, ccl_factory, S, filters=[]):
 
     return lk
 
-TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
-                    'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
-                    'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
-                    }
 
 def create_twopoint_filter(combo_name, tr1, tr2, cut_low, cut_high):
     info = TP_FILTER_REGISTRY.get(combo_name, None)
-    if info is None:    
+    if info is None:
         raise ValueError(f"Unknown two point combination '{combo_name}'")
     m1, m2 = info[0]
     filter = TwoPointBinFilter.from_args(

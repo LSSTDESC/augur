@@ -2,14 +2,14 @@ import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
-from augur.utils.config_io import parse_config, read_fisher_from_file
+from augur.utils.config_io import parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
-import derivkit
 import pandas as pd
 
 mnu_norm = 93.14  # eV
+
 
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
@@ -44,7 +44,7 @@ class Analyze(object):
 
         # config needs to specify likelihood yaml.
         # alternatively, can pass likelihood and tools objects at input paramters.
-        # choose objects to take precedence.     
+        # choose objects to take precedence.
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
@@ -87,8 +87,6 @@ class Analyze(object):
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
-        # CCL Factory placeholder (for newer firecrown)
-        # self.sys_fid = 
         self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
@@ -147,8 +145,9 @@ class Analyze(object):
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
         elif 'var_pars' in self.config.keys():
-            if norm_step:
-                    raise ValueError('norm_step=True not supported for parameters without defined uniform priors.')
+            if self.norm_step:
+                raise ValueError('norm_step=True not supported for parameters \
+                                 without defined uniform priors.')
             self.var_pars = self.config['var_pars']
             for var in self.var_pars:
                 if var in self.pars_fid.keys():
@@ -177,7 +176,7 @@ class Analyze(object):
                 self.gpriors.append(_val)
         # derivative method
         if 'derivative_method' in self.config.keys():
-            self.derivative_method =  self.config.get('derivative_method', '5pt_stencil')
+            self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
             if self.derivative_method == 'derivkit':
                 self.derivative_args = self.config.get('derivative_args', {})
         # step size
@@ -259,7 +258,7 @@ class Analyze(object):
                     raise ValueError('Require Omega_c to be specified \
                                      when transforming the Fisher matrix to Omega_m')
                 J[ind_c][ind_c] = 1.0
-                
+
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
                     J[ind_c][ind_b] = -1.0
@@ -272,11 +271,11 @@ class Analyze(object):
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                         J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*mnu_norm)
-                
+
                 print('Replaced Omega_c with Omega_m in Jacobian')
 
             if self.transform_S8:
-                S8, Om = self.get_S8(), self.get_Om()
+                Om = self.get_Om()
                 ind_sigma8 = None
                 if 'sigma8' in self.var_pars:
                     ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
@@ -295,7 +294,7 @@ class Analyze(object):
                 if not self.transform_Omega_m:
                     if 'Omega_b' in self.var_pars:
                         ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
-                        J[ind_sigma8][ind_b] = -0.5 * sigma_8 / Om 
+                        J[ind_sigma8][ind_b] = -0.5 * sigma_8 / Om
                     if 'm_nu' in self.var_pars:
                         mnu = self.pars_fid['m_nu']
                         h = self.pars_fid['h']
@@ -303,7 +302,7 @@ class Analyze(object):
                         J[ind_sigma8][ind_nu] = -0.5 * sigma_8 / Om * (1.0/(h*h*mnu_norm))
                         if 'h' in self.var_pars:
                             ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 *mnu_norm)                 
+                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 * mnu_norm)
                 print("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
@@ -349,12 +348,12 @@ class Analyze(object):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
                     elif labels[i] in sys_fid.keys():
-                        _sys_pars[labels[i]] =  x[i]
+                        _sys_pars[labels[i]] = x[i]
                     elif 'extra_parameters' in pars_fid.keys():
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                _sys_pars[labels[i]] =  x[i]
+                                _sys_pars[labels[i]] = x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
@@ -364,13 +363,13 @@ class Analyze(object):
                 f_out = []
                 for i in range(len(labels)):
                     _pars = pars_fid.copy()
-                    _sys_pars = sys_fid.copy() #sys_fid is a ParamsMap object
+                    # sys_fid is a ParamsMap object
+                    _sys_pars = sys_fid.copy()
                     xi = x[i]
                     for j in range(len(labels)):
                         if labels[j] in pars_fid.keys():
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
-                            #_sys_pars.update({labels[j]: xi[j]})
                             _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
@@ -398,12 +397,19 @@ class Analyze(object):
             method = self.derivative_method
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
-            if self.norm_step:
+            if self.norm_step and 'derivkit' not in method:
                 x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                     * 1/self.norm
+            elif self.norm_step and 'derivkit' in method:
+                self.norm_step = False
+                raise warnings.warning('Derivkit does not support the Augur definition \
+                                    of normalized step sizes. \
+                                    Forcing norm_step to False and continuing computation.')
+                x_here = self.x
+
             else:
                 x_here = self.x
-            
+
             if '5pt_stencil' in method:
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params, donorm=self.norm_step),
@@ -431,7 +437,13 @@ class Analyze(object):
                     kwargs = self.derivative_args
                 else:
                     print('Using default Augur derivkit kwargs')
-                    kwargs = {'method':'adaptive', 'n_workers':1, 'n_points':27, 'spacing':'1%', 'base_abs':1.e-3, 'ridge':1.e-8}
+                    kwargs = {'method': 'adaptive',
+                              'n_workers': 1,
+                              'n_points': 27,
+                              'spacing': '1%',
+                              'base_abs': 1.e-3,
+                              'ridge': 1.e-8
+                              }
                     method_here = 'adaptive'
 
                 method_here = kwargs.pop('method', 'adaptive')
@@ -476,7 +488,7 @@ class Analyze(object):
             ind_c = None
             ind_m = None
             ind_S8 = None
-            #TODO: check logic here to make sure transformed parameters handled correctly
+            # TODO: check logic here to make sure transformed parameters handled correctly
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
@@ -515,7 +527,10 @@ class Analyze(object):
 
         # Build a pandas DataFrame indexed by varied parameters (rows and columns)
         try:
-            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior, index=self.var_pars, columns=self.var_pars)
+            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior,
+                                                   index=self.var_pars,
+                                                   columns=self.var_pars
+                                                   )
         except Exception:
             # Fallback in case var_pars is None or sizes mismatch
             self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior)
@@ -530,7 +545,6 @@ class Analyze(object):
         # if not, we need a helper to read in the text files into a dataframe object to then sum.
         raise NotImplementedError("External fisher addition not yet implemented.")
         # F_ext, fid_ext = read_fisher_from_file(external_fisher)
-
 
     def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
         # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
