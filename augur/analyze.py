@@ -40,7 +40,6 @@ class Analyze(object):
         Output Fisher matrix
         """
 
-
         # config needs to specify likelihood yaml.
         # alternatively, can pass likelihood and tools objects at input paramters.
         # choose objects to take precedence.
