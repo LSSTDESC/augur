@@ -12,6 +12,7 @@ cosmo:
     extra_parameters :
         camb :
             dark_energy_model : 'ppf'
+            halofit_version : 'takahashi'
     # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
     # If the transfer function is not specified, it defaults to using CAMB
 

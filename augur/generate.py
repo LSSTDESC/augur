@@ -67,6 +67,7 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
     # These are to match the N(z)s from the fits file in the firecrown repo
     z = np.linspace(0.004004004004004004,
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
+    Nz_centers = None
     if 'Nz_center' in cfg['Nz_kwargs'].keys():
         Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
         cfg['Nz_kwargs'].pop('Nz_center')
@@ -83,10 +84,17 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
         if isinstance(cfg['Nz_type'], list):
             if eval(cfg['Nz_type'][i]) in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type'][i]:
-                    dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
-                                                                Nz_center=Nz_centers[i],
-                                                                Nz_nbins=nbins,
-                                                                **cfg['Nz_kwargs'])
+                    if Nz_centers is not None:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
+                                                                    Nz_center=Nz_centers[i],
+                                                                    Nz_nbins=nbins,
+                                                                    **cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
+                                                                    Nz_ibin=i,
+                                                                    Nz_nbins=nbins,
+                                                                    **cfg['Nz_kwargs'])
+
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
@@ -94,10 +102,16 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
         else:
             if eval(cfg['Nz_type']) in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type']:
-                    dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                             Nz_center=Nz_centers[i],
-                                                             Nz_nbins=nbins,
-                                                             **cfg['Nz_kwargs'])
+                    if Nz_centers is not None:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
+                                                                Nz_center=Nz_centers[i],
+                                                                Nz_nbins=nbins,
+                                                                **cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
+                                                                Nz_ibin=i,
+                                                                Nz_nbins=nbins,
+                                                                **cfg['Nz_kwargs'])
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
@@ -281,7 +295,7 @@ def generate_sacc_and_stats(config):
                 zmean2 = dndz[tr2].zav
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
                 lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                # ells_here = ells[ells < lmax]
+                ells_here = ells[ells < lmax]
                 # print('ell_max', lmax)
             elif (lmax is not None) and (lmax != 'None'):
                 ells_here = ells[ells < lmax]
