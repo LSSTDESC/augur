@@ -13,7 +13,7 @@ def test_analyze():
     fish.get_derivatives(method='numdifftools', force=True)
     try:
         import derivkit
+        derivkit.__version__
         fish.get_derivatives(method='derivkit', force=True)
     except ImportError:
         print("derivkit not installed, skipping...")
-    

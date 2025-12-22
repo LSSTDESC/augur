@@ -44,7 +44,7 @@ class Analyze(object):
         # alternatively, can pass likelihood and tools objects at input paramters.
         # choose objects to take precedence.
         # Load the likelihood if no likelihood is passed along
-        
+
         config = parse_config(config)  # Load full config
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
