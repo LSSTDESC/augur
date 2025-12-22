@@ -44,6 +44,8 @@ class Analyze(object):
         # alternatively, can pass likelihood and tools objects at input paramters.
         # choose objects to take precedence.
         # Load the likelihood if no likelihood is passed along
+        
+        config = parse_config(config)  # Load full config
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
         config = parse_config(config)  # Load full config
@@ -144,9 +146,6 @@ class Analyze(object):
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
         elif 'var_pars' in self.config.keys():
-            if self.norm_step:
-                raise ValueError('norm_step=True not supported for parameters \
-                                 without defined uniform priors.')
             self.var_pars = self.config['var_pars']
             for var in self.var_pars:
                 if var in self.pars_fid.keys():

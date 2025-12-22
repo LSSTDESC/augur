@@ -254,9 +254,8 @@ FC_FACTORY_REGISTRY = {'TwoPointFactory': TwoPointFactory}
 
 
 def load_likelihood_from_yaml(config, ccl_factory, S, filters=[]):
-    lk_config = config.pop("Firecrown_Factory", None)
-
-    if lk_config is None or lk_config == {}:
+    lk_config = config.get("Firecrown_Factory", None)
+    if (lk_config is None) or (lk_config == {}):
         raise ValueError("Firecrown_Factory must have contents to produce a Firecrown Likelihood")
     keys = lk_config.keys()
 

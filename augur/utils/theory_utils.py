@@ -70,7 +70,6 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     tools.prepare()
     lk.update(pmap)
     f_out = lk.compute_theory_vector(tools)
-    print(lk.compute_loglike(tools))
     if return_all:
         return f_out, lk, tools
     else:

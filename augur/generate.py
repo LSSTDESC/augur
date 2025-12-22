@@ -296,7 +296,6 @@ def generate_sacc_and_stats(config):
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
                 lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
                 ells_here = ells[ells < lmax]
-                # print('ell_max', lmax)
             elif (lmax is not None) and (lmax != 'None'):
                 ells_here = ells[ells < lmax]
             else:
