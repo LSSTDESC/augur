@@ -1,5 +1,8 @@
 general:
     ignore_scale_cuts : False # If True ignore any values of kmax
+    ignore_scale_cuts_likelihood: False # If True ignore any values of kmax when building the likelihood
+    bandpower_windows : None #TopHat, None
+
 cosmo:
     Omega_c : 0.2664315
     Omega_b : 0.0491685
@@ -12,6 +15,86 @@ cosmo:
     # transfer_function : 'eisenstein_hu'  # If you want to specify the transfer function you can do so here
     # If the transfer function is not specified, it defaults to using CAMB
 
+Firecrown_Factory:
+    TwoPointFactory:
+        correlation_space: harmonic
+        number_counts_factories:
+            - type_source: default
+              global_systematics: []
+              include_rsd: false
+              per_bin_systematics:
+                -  {type: PhotoZShiftandStretchFactory}
+                -  {type: LinearBiasSystematicFactory}
+        weak_lensing_factories:
+            - type_source: default
+              global_systematics:
+                - {type: LinearAlignmentSystematicFactory, alphag: 1}
+              per_bin_systematics:
+                - {type: MultiplicativeShearBiasFactory}
+                - {type: PhotoZShiftFactory}
+        cmb_factories: []
+        int_options: null
+
+#for generating the fiducial data veector in generate.py
+systematics:
+    src0_mult_bias: 0.0
+    src1_mult_bias: 0.0
+    src2_mult_bias: 0.0
+    src3_mult_bias: 0.0
+    src4_mult_bias: 0.0
+    # Photo-z shifts for sources
+    src0_delta_z: 0.0
+    src1_delta_z: 0.0
+    src2_delta_z: 0.0
+    src3_delta_z: 0.0
+    src4_delta_z: 0.0 
+    # IA parameters for sources
+    # ia_a_1: 5.717
+    # ia_alphaz_1: -0.47
+    # ia_zpiv_1: 0.3
+    # ia_a_2: 0.0
+    # ia_alphaz_2: 0.0
+    # ia_zpiv_2: 0.62
+    # ia_a_d: 0.0
+    # ia_alphaz_d: 0.0
+    # ia_zpiv_d: 0.62   
+    ia_bias: 0.0
+    alphaz: 0.0
+    z_piv: 1.0      
+
+    # Linear Bias for lenses
+    lens0_bias: 1.562362
+    lens1_bias: 1.732963
+    lens2_bias: 1.913252
+    lens3_bias: 2.100644
+    lens4_bias: 2.293210
+    lens0_alphaz: 0.0
+    lens1_alphaz: 0.0
+    lens2_alphaz: 0.0
+    lens3_alphaz: 0.0
+    lens4_alphaz: 0.0
+    lens0_z_piv: 0.0
+    lens1_z_piv: 0.0
+    lens2_z_piv: 0.0
+    lens3_z_piv: 0.0
+    lens4_z_piv: 0.0
+    lens0_alphag: 0.0
+    lens1_alphag: 0.0
+    lens2_alphag: 0.0
+    lens3_alphag: 0.0
+    lens4_alphag: 0.0
+    # Photo-z shifts and stretches for lenses
+    lens0_delta_z: 0.0
+    lens1_delta_z: 0.0
+    lens2_delta_z: 0.0
+    lens3_delta_z: 0.0
+    lens4_delta_z: 0.0
+    lens0_sigma_z: 1.0
+    lens1_sigma_z: 1.0
+    lens2_sigma_z: 1.0
+    lens3_sigma_z: 1.0
+    lens4_sigma_z: 1.0
+
 sources:  # Sources
     nbins : 5
     ndens : 10  # in arcmin^-2 (it should be a scalar with the total number density or a list with each bin's)
@@ -21,13 +104,6 @@ sources:  # Sources
         Nz_alpha : 0.78
         Nz_z0 : 0.13
         Nz_sigmaz : 0.05
-    mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
-    delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
-    ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 0.  # ia-bias 
-    alphaz : 0.
-    z_piv : 1.0
-    ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
 
 lenses :  # Lenses
     nbins : 5
@@ -40,13 +116,6 @@ lenses :  # Lenses
         Nz_sigmaz : 0.03  # Sigma of photo-z Gaussian smearing
         Nz_alpha : 0.94  # N(z) alpha parameter
         Nz_z0 : 0.26  # N(z) z-pivot
-    #bias_type : 'inverse_growth'  # Inverse growth bias or custom
-    #bias_kwargs : 
-    #    b0 : 1.33  # Reverse engineeering the bias values from the SRD
-    # Another option is to use the `custom` bias type, but it requires a value per bin
-    bias_type : 'custom'
-    bias_kwargs :
-        b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD
 
 statistics:
     galaxy_density_cl :  # The statistics are supposed to be SACC statistics
