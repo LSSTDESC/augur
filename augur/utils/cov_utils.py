@@ -35,7 +35,6 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     nz_all['src'] = []
     nz_all['lens'] = []
     for tr in S.tracers:
-        print(tr)
         trobj = S.get_tracer(tr)
         nz_all[tr[:-1]].append(trobj.nz)  # This assumes 10 or less bins
     nz_all['src'] = np.array(nz_all['src'])

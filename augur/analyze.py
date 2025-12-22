@@ -40,7 +40,6 @@ class Analyze(object):
         Output Fisher matrix
         """
 
-        config = parse_config(config)  # Load full config
 
         # config needs to specify likelihood yaml.
         # alternatively, can pass likelihood and tools objects at input paramters.
@@ -49,6 +48,8 @@ class Analyze(object):
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
         else:
+            config = parse_config(config)  # Load full config
+
             if (tools is None) or (req_params is None):
                 raise ValueError('If a likelihood is passed tools and req_params are required! \
                                 Please, remove the likelihood or add tools and req_params.')
