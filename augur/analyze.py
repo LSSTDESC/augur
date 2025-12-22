@@ -13,7 +13,7 @@ mnu_norm = 93.14  # eV
 
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
-                 norm_step=True):
+                 norm_step=False):
         """
         Run numerical derivatives of a likelihood to obtain a Fisher matrix estimate.
 
@@ -46,39 +46,38 @@ class Analyze(object):
         # Load the likelihood if no likelihood is passed along
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
-        else:
-            config = parse_config(config)  # Load full config
+        config = parse_config(config)  # Load full config
 
-            if (tools is None) or (req_params is None):
-                raise ValueError('If a likelihood is passed tools and req_params are required! \
-                                Please, remove the likelihood or add tools and req_params.')
-            else:
-                # Load the ccl accuracy parameters if `generate` is not run
-                if 'ccl_accuracy' in config.keys():
-                    # Pass along spline control parameters
-                    if 'spline_params' in config['ccl_accuracy'].keys():
-                        for key in config['ccl_accuracy']['spline_params'].keys():
-                            try:
-                                type_here = type(ccl.spline_params[key])
-                                value = config['ccl_accuracy']['spline_params'][key]
-                                ccl.spline_params[key] = type_here(value)
-                            except KeyError:
-                                print(f'The selected spline keyword `{key}` is not recognized.')
-                            except ValueError:
-                                print(f'The selected value `{value}` could not be casted to \
-                                      `{type_here}`.')
-                    # Pass along GSL control parameters
-                    if 'gsl_params' in config['ccl_accuracy'].keys():
-                        for key in config['ccl_accuracy']['gsl_params'].keys():
-                            try:
-                                type_here = type(ccl.gsl_params[key])
-                                value = config['ccl_accuracy']['gsl_params'][key]
-                                ccl.gsl_params[key] = type_here(value)
-                            except KeyError:
-                                print(f'The selected GSL keyword `{key}` is not recognized.')
-                            except ValueError:
-                                print(f'The selected value `{value}` could not be casted to \
-                                      `{type_here}`.')
+        if (tools is None) or (req_params is None):
+            raise ValueError('If a likelihood is passed tools and req_params are required! \
+                            Please, remove the likelihood or add tools and req_params.')
+        else:
+            # Load the ccl accuracy parameters if `generate` is not run
+            if 'ccl_accuracy' in config.keys():
+                # Pass along spline control parameters
+                if 'spline_params' in config['ccl_accuracy'].keys():
+                    for key in config['ccl_accuracy']['spline_params'].keys():
+                        try:
+                            type_here = type(ccl.spline_params[key])
+                            value = config['ccl_accuracy']['spline_params'][key]
+                            ccl.spline_params[key] = type_here(value)
+                        except KeyError:
+                            print(f'The selected spline keyword `{key}` is not recognized.')
+                        except ValueError:
+                            print(f'The selected value `{value}` could not be casted to \
+                                    `{type_here}`.')
+                # Pass along GSL control parameters
+                if 'gsl_params' in config['ccl_accuracy'].keys():
+                    for key in config['ccl_accuracy']['gsl_params'].keys():
+                        try:
+                            type_here = type(ccl.gsl_params[key])
+                            value = config['ccl_accuracy']['gsl_params'][key]
+                            ccl.gsl_params[key] = type_here(value)
+                        except KeyError:
+                            print(f'The selected GSL keyword `{key}` is not recognized.')
+                        except ValueError:
+                            print(f'The selected value `{value}` could not be casted to \
+                                    `{type_here}`.')
 
         self.lk = likelihood  # Just to save some typing
         self.tools = tools
@@ -175,13 +174,11 @@ class Analyze(object):
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
         # derivative method
-        if 'derivative_method' in self.config.keys():
-            self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
-            if self.derivative_method == 'derivkit':
-                self.derivative_args = self.config.get('derivative_args', {})
+        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        if self.derivative_method == 'derivkit':
+            self.derivative_args = self.config.get('derivative_args', {})
         # step size
-        if 'step' in self.config.keys():
-            self.step_size = float(self.config.get('step', 0.01))
+        self.step_size = float(self.config.get('step', 0.01))
 
     def get_Om(self):
         """
