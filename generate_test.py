@@ -9,4 +9,4 @@ print(req_params.items())
 ao = Analyze(cf, lk, tools=tools, req_params=req_params, norm_step=False)
 fisher = ao.get_fisher_matrix(method='5pt_stencil')
 
-# postprocess(cf)
+postprocess(cf)
