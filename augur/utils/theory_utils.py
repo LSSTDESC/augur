@@ -1,10 +1,7 @@
-from packaging.version import Version
-import pyccl as ccl
-import firecrown
 from firecrown.parameters import ParamsMap
 
 
-def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=False):
+def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     """
     Utility function to update the likelihood and modeling tool objects to use a new
     set of parameters and compute a new theory prediction
@@ -19,8 +16,6 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
         Dictionary containing the "systematic" modeling parameters.
     _pars : dict,
         Dictionary containing the cosmological parameters
-    cf : firecrown.CCLFactory,
-        If passed, CCLFactory object to use.
     return_all : bool,
         If `False` it will just return the predicted data vector. Else,
         it will return the internal ModelingTools and Likelihood objects.
@@ -36,77 +31,44 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, cf=None, return_all=F
     """
     lk.reset()
     tools.reset()
-    # Firecrown without CCLFactory
-    if Version(firecrown.__version__) < Version('1.8.0a'):
-        pmap = ParamsMap(_sys_pars)
-        cosmo = ccl.Cosmology(**_pars)
-        lk.update(pmap)
-        tools.update(pmap)
-        tools.prepare(cosmo)
-        f_out = lk.compute_theory_vector(tools)
-        if return_all:
-            return f_out, lk, tools
-        else:
-            return f_out
-
+    dict_all = {**_sys_pars, **_pars}
+    extra_dict = {}
+    if dict_all['A_s'] is None:
+        extra_dict['amplitude_parameter'] = 'sigma8'
+        dict_all.pop('A_s')
     else:
-        from firecrown.ccl_factory import CCLFactory, CCLCreationMode, PoweSpecAmplitudeParameter
-        dict_all = {**_sys_pars, **_pars}
-        extra_dict = {}
-        if dict_all['A_s'] is None:
-            extra_dict['amplitude_parameter'] = PoweSpecAmplitudeParameter.SIGMA8
-            dict_all.pop('A_s')
-        else:
-            extra_dict['amplitude_parameter'] = PoweSpecAmplitudeParameter.AS
-            dict_all.pop('sigma8')
+        extra_dict['amplitude_parameter'] = 'as'
+        dict_all.pop('sigma8')
 
-        extra_dict['mass_split'] = dict_all['mass_split']
-        dict_all.pop('mass_split')
-        camb_baryon = False
-        if 'extra_parameters' in dict_all.keys():
-            if 'camb' in dict_all['extra_parameters'].keys():
-                extra_dict['camb_extra_params'] = dict_all['extra_parameters']['camb']
-                if 'kmin' in dict_all['extra_parameters']['camb'].keys():
-                    extra_dict['camb_extra_params'].pop('kmin')
-                if 'halofit_version' in dict_all['extra_parameters']['camb'].keys():
-                    halofit_version = dict_all['extra_parameters']['camb']['halofit_version']
-                    if halofit_version == ('mead2020_feedback'
-                                           or 'mead' or 'mead2015' or 'mead2016'):
-                        camb_baryon = True
-            dict_all.pop('extra_parameters')
-        keys = list(dict_all.keys())
+    extra_dict['mass_split'] = dict_all['mass_split']
+    dict_all.pop('mass_split')
 
-        # Remove None values
-        for key in keys:
-            if (dict_all[key] is None) or (dict_all[key] == 'None'):
-                dict_all.pop(key)
-        if cf is None:
-            if camb_baryon:
-                cf = CCLFactory(
-                    **extra_dict,
-                    require_nonlinear_pk=True,
-                    use_camb_hm_sampling=True,
-                    creation_mode=CCLCreationMode.PURE_CCL_MODE
-                    )
-            else:
-                cf = CCLFactory(
-                    **extra_dict,
-                    require_nonlinear_pk=True,
-                    creation_mode=CCLCreationMode.PURE_CCL_MODE
-                    )
-            if tools.pt_calculator is not None:
-                ptc = tools.get_pt_calculator()
-                tools = firecrown.modeling_tools.ModelingTools(pt_calculator=ptc, ccl_factory=cf)
-            else:
-                tools = firecrown.modeling_tools.ModelingTools(ccl_factory=cf)
-            tools.reset()
-        pmap = ParamsMap(dict_all)
-        cf.update(pmap)
-        tools.update(pmap)
-        tools.prepare()
-        lk.update(pmap)
-        f_out = lk.compute_theory_vector(tools)
-        if return_all:
-            return f_out, lk, tools
-        else:
-            return f_out
+    hm = dict_all.pop('extra_parameters')
+    if hm is not None and 'camb' in hm.keys():
+        hm = hm.pop('camb')
+        if hm is not None:
+            halofit_version = hm.get('halofit_version')
+            if halofit_version in ('mead2020_feedback',
+                                   'mead',
+                                   'mead2015',
+                                   'mead2016'):
+                dict_all['HMCode_logT_AGN'] = hm.get('HMCode_logT_AGN', 7.8)
+                dict_all['HMCode_eta_baryon'] = hm.get('HMCode_eta_baryon', 0.603)
+                dict_all['HMCode_A_baryon'] = hm.get('HMCode_A_baryon', 3.13)
+
+    keys = list(dict_all.keys())
+
+    # Remove None values
+    for key in keys:
+        if (dict_all[key] is None) or (dict_all[key] == 'None'):
+            dict_all.pop(key)
+
+    pmap = ParamsMap(dict_all)
+    tools.update(pmap)
+    tools.prepare()
+    lk.update(pmap)
+    f_out = lk.compute_theory_vector(tools)
+    if return_all:
+        return f_out, lk, tools
+    else:
+        return f_out

@@ -1,36 +1,19 @@
 import numpy as np
-from packaging import version
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
 from augur.utils.config_io import parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
-import firecrown.version as firecrown_version
 from astropy.table import Table
 import warnings
-import os
+import pandas as pd
 
-
-def update_params(sys_pars, new_pars):
-    """Update the parameters in the _sys_pars with the given new parameters.
-
-    Parameters
-    ----------
-    sys_pars : the parameters to be updated
-
-    new_pars : dict
-        Dictionary containing the new parameters
-
-    """
-    if version.parse(firecrown_version.__version__) < version.parse('1.12.0a0'):
-        sys_pars.update(new_pars)
-    else:
-        sys_pars.params.update(new_pars)
+mnu_norm = 93.14  # eV
 
 
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
-                 norm_step=True):
+                 norm_step=False):
         """
         Run numerical derivatives of a likelihood to obtain a Fisher matrix estimate.
 
@@ -57,42 +40,46 @@ class Analyze(object):
         Output Fisher matrix
         """
 
-        config = parse_config(config)  # Load full config
-
+        # config needs to specify likelihood yaml.
+        # alternatively, can pass likelihood and tools objects at input parameters.
+        # choose objects to take precedence.
         # Load the likelihood if no likelihood is passed along
+
+        config = parse_config(config)  # Load full config
         if likelihood is None:
             likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
+        config = parse_config(config)  # Load full config
+
+        if (tools is None) or (req_params is None):
+            raise ValueError('If a likelihood is passed tools and req_params are required! \
+                            Please, remove the likelihood or add tools and req_params.')
         else:
-            if (tools is None) or (req_params is None):
-                raise ValueError('If a likelihood is passed tools and req_params are required! \
-                                Please, remove the likelihood or add tools and req_params.')
-            else:
-                # Load the ccl accuracy parameters if `generate` is not run
-                if 'ccl_accuracy' in config.keys():
-                    # Pass along spline control parameters
-                    if 'spline_params' in config['ccl_accuracy'].keys():
-                        for key in config['ccl_accuracy']['spline_params'].keys():
-                            try:
-                                type_here = type(ccl.spline_params[key])
-                                value = config['ccl_accuracy']['spline_params'][key]
-                                ccl.spline_params[key] = type_here(value)
-                            except KeyError:
-                                print(f'The selected spline keyword `{key}` is not recognized.')
-                            except ValueError:
-                                print(f'The selected value `{value}` could not be casted to \
-                                      `{type_here}`.')
-                    # Pass along GSL control parameters
-                    if 'gsl_params' in config['ccl_accuracy'].keys():
-                        for key in config['ccl_accuracy']['gsl_params'].keys():
-                            try:
-                                type_here = type(ccl.gsl_params[key])
-                                value = config['ccl_accuracy']['gsl_params'][key]
-                                ccl.gsl_params[key] = type_here(value)
-                            except KeyError:
-                                print(f'The selected GSL keyword `{key}` is not recognized.')
-                            except ValueError:
-                                print(f'The selected value `{value}` could not be casted to \
-                                      `{type_here}`.')
+            # Load the ccl accuracy parameters if `generate` is not run
+            if 'ccl_accuracy' in config.keys():
+                # Pass along spline control parameters
+                if 'spline_params' in config['ccl_accuracy'].keys():
+                    for key in config['ccl_accuracy']['spline_params'].keys():
+                        try:
+                            type_here = type(ccl.spline_params[key])
+                            value = config['ccl_accuracy']['spline_params'][key]
+                            ccl.spline_params[key] = type_here(value)
+                        except KeyError:
+                            print(f'The selected spline keyword `{key}` is not recognized.')
+                        except ValueError:
+                            print(f'The selected value `{value}` could not be casted to \
+                                    `{type_here}`.')
+                # Pass along GSL control parameters
+                if 'gsl_params' in config['ccl_accuracy'].keys():
+                    for key in config['ccl_accuracy']['gsl_params'].keys():
+                        try:
+                            type_here = type(ccl.gsl_params[key])
+                            value = config['ccl_accuracy']['gsl_params'][key]
+                            ccl.gsl_params[key] = type_here(value)
+                        except KeyError:
+                            print(f'The selected GSL keyword `{key}` is not recognized.')
+                        except ValueError:
+                            print(f'The selected value `{value}` could not be casted to \
+                                    `{type_here}`.')
 
         self.lk = likelihood  # Just to save some typing
         self.tools = tools
@@ -101,8 +88,7 @@ class Analyze(object):
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
-        # CCL Factory placeholder (for newer firecrown)
-        self.cf = None
+        self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
         self.config = config['fisher']
@@ -113,17 +99,19 @@ class Analyze(object):
         self.derivatives = None
         self.Fij = None
         self.Fij_with_gprior = None
-        self.bi = None
-        self.biased_cls = None
+        self.Fij_df = None
+        self.Fij_with_gprior_df = None
+        self.biased_cls, self.bi = None, None
         self.par_bounds = []
         self.norm = None
         self.gpriors = []
         self.gprior_pars = None
-        self.transform_Omega_m = False
-        self.transform_S8 = False
-        self.Om = None
-        self.S8 = None
+        self.transform_Omega_m, self.Om = False, None
+        self.transform_S8, self.S8 = False, None
         self.J = None
+        self.derivative_method = None
+        self.derivative_args = {}
+        self.step_size = None
         if 'transform_S8' in self.config.keys():
             if type(self.config['transform_S8']) is not bool:
                 warnings.warn('transform_S8 not a boolean, therefore \
@@ -184,6 +172,12 @@ class Analyze(object):
             for var in self.gprior_pars:
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
+        # derivative method
+        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        if self.derivative_method == 'derivkit':
+            self.derivative_args = self.config.get('derivative_args', {})
+        # step size
+        self.step_size = float(self.config.get('step', 0.01))
 
     def get_Om(self):
         """
@@ -210,7 +204,7 @@ class Analyze(object):
                         raise ValueError('Require h to be specified \
                                          when transforming the Fisher matrix to Omega_m with m_nu')
                     h = self.pars_fid['h']
-                    Om += m_nu/h/h/93.14
+                    Om += m_nu/h/h/mnu_norm
             self.Om = Om
         return self.Om
 
@@ -260,24 +254,23 @@ class Analyze(object):
                     raise ValueError('Require Omega_c to be specified \
                                      when transforming the Fisher matrix to Omega_m')
                 J[ind_c][ind_c] = 1.0
+
                 if 'Omega_b' in self.var_pars:
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
-                    J[ind_b][ind_c] = 1.0
+                    J[ind_c][ind_b] = -1.0
 
                 if 'm_nu' in self.var_pars:
                     mnu = self.pars_fid['m_nu']
                     h = self.pars_fid['h']
-                    dOm_dmnu = 1.0/(h*h*93.14)
                     ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_nu][ind_c] = 1.0/dOm_dmnu
+                    J[ind_c][ind_nu] = -1.0/(h*h*mnu_norm)
                     if 'h' in self.var_pars:
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        dOm_dh = -2.0*mnu/(h*h*h*93.14)
-                        J[ind_h][ind_c] = 1.0/dOm_dh
+                        J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*mnu_norm)
+
                 print('Replaced Omega_c with Omega_m in Jacobian')
 
             if self.transform_S8:
-                S8 = self.get_S8()
                 Om = self.get_Om()
                 ind_sigma8 = None
                 if 'sigma8' in self.var_pars:
@@ -287,24 +280,25 @@ class Analyze(object):
                                      when transforming the Fisher matrix to S8')
                 J[ind_sigma8][ind_sigma8] = 1.0/(np.sqrt(Om/0.3))
                 sigma_8 = self.pars_fid['sigma8']
+
+                # have not yet changed to Omega_m basis in dictionaries,
+                # consistent in either scenario
                 if 'Omega_c' in self.var_pars:
                     ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                    dOc_dS8 = 2 * 0.3 * S8/sigma_8**2
-                    J[ind_c][ind_sigma8] = dOc_dS8
-                if 'Omega_b' in self.var_pars:
-                    ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
-                    dOb_dS8 = 2 * 0.3 * S8/sigma_8**2
-                    J[ind_b][ind_sigma8] = dOb_dS8
-                if 'm_nu' in self.var_pars:
-                    mnu = self.pars_fid['m_nu']
-                    h = self.pars_fid['h']
-                    dmnu_dS8 = 2 * 0.3 * h**2 * 93.14 * S8/sigma_8**2
-                    ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_nu][ind_sigma8] = dmnu_dS8
-                    if 'h' in self.var_pars:
-                        ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        dh_dS8 = -0.5 * h**3 * (93.14 / mnu) * (2 * 0.3 * S8 / sigma_8**2)
-                        J[ind_h][ind_sigma8] = dh_dS8
+                    J[ind_sigma8][ind_c] = -0.5 * sigma_8 / Om
+
+                if not self.transform_Omega_m:
+                    if 'Omega_b' in self.var_pars:
+                        ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
+                        J[ind_sigma8][ind_b] = -0.5 * sigma_8 / Om
+                    if 'm_nu' in self.var_pars:
+                        mnu = self.pars_fid['m_nu']
+                        h = self.pars_fid['h']
+                        ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
+                        J[ind_sigma8][ind_nu] = -0.5 * sigma_8 / Om * (1.0/(h*h*mnu_norm))
+                        if 'h' in self.var_pars:
+                            ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
+                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 * mnu_norm)
                 print("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
@@ -350,12 +344,12 @@ class Analyze(object):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
                     elif labels[i] in sys_fid.keys():
-                        update_params(_sys_pars, {labels[i]: x[i]})
+                        _sys_pars[labels[i]] = x[i]
                     elif 'extra_parameters' in pars_fid.keys():
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                update_params(_sys_pars, {labels[i]: x[i]})
+                                _sys_pars[labels[i]] = x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
@@ -365,19 +359,20 @@ class Analyze(object):
                 f_out = []
                 for i in range(len(labels)):
                     _pars = pars_fid.copy()
+                    # sys_fid is a ParamsMap object
                     _sys_pars = sys_fid.copy()
                     xi = x[i]
                     for j in range(len(labels)):
                         if labels[j] in pars_fid.keys():
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
-                            update_params(_sys_pars, {labels[j]: xi[j]})
+                            _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
             return np.array(f_out)
 
-    def get_derivatives(self, force=False, method='5pt_stencil', step=None):
+    def get_derivatives(self, force=False, method=None, step=None, **kwargs):
         """
         Auxiliary function to compute numerical derivatives of the helper function `f`
 
@@ -393,38 +388,71 @@ class Analyze(object):
         """
 
         if step is None:
-            step = float(self.config['step'])
+            step = self.step_size
+        if method is None:
+            method = self.derivative_method
         # Compute the derivatives with respect to the parameters in var_pars at x
         if (self.derivatives is None) or (force):
+            if self.norm_step and 'derivkit' not in method:
+                x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
+                    * 1/self.norm
+            elif self.norm_step and 'derivkit' in method:
+                raise warnings.warning('Using derivkit with norm_step=True not recommended.\
+                                       Forcing norm_step to False and continuing computation.')
+                self.norm_step = False
+                x_here = self.x
+            else:
+                x_here = self.x
+
             if '5pt_stencil' in method:
-                if self.norm_step:
-                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                        * 1/self.norm
-                else:
-                    x_here = self.x
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params, donorm=self.norm_step),
                                                    x_here, h=step)
             elif 'numdifftools' in method:
                 import numdifftools as nd
-                if 'numdifftools_kwargs' in self.config.keys():
-                    ndkwargs = self.config['numdifftools_kwargs']
+                if kwargs != {}:
+                    print('Overwriting config-specified numdifftools kwargs')
+                    kwargs = kwargs
                 else:
-                    ndkwargs = {}
-                if self.norm_step:
-                    x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
-                        * 1/self.norm
-                else:
-                    x_here = self.x
+                    kwargs = self.derivative_args
+
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                              self.req_params,
                                                              donorm=self.norm_step),
                                             step=step,
-                                            **ndkwargs)
+                                            **kwargs)
                 self.derivatives = jacobian_calc(x_here).T
+            elif 'derivkit' in method:
+                from derivkit.calculus_kit import CalculusKit
+                if kwargs != {}:
+                    print('Overwriting config-specified derivkit kwargs')
+                    kwargs = kwargs
+                elif self.derivative_args != {}:
+                    kwargs = self.derivative_args
+                else:
+                    print('Using default Augur derivkit kwargs')
+                    kwargs = {'method': 'adaptive',
+                              'n_workers': 1,
+                              'n_points': 27,
+                              'spacing': '1%',
+                              'base_abs': 1.e-3,
+                              'ridge': 1.e-8
+                              }
+                    method_here = 'adaptive'
+
+                method_here = kwargs.pop('method', 'adaptive')
+                n_workers = kwargs.pop('n_workers', 1)
+                calc_kit = CalculusKit(function=lambda y: self.f(y, self.var_pars,
+                                       self.pars_fid,
+                                       self.req_params,
+                                       donorm=self.norm_step),
+                                       x0=x_here)
+                self.derivatives = calc_kit.jacobian(method=method_here,
+                                                     n_workers=n_workers,
+                                                     **kwargs).T
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
-                                 Please select 5pt_stencil or numdifftools.')
+                                 Please select 5pt_stencil, numdifftools, or derivkit.')
             if self.norm is not None:
                 self.derivatives /= self.norm[:, None]
             return self.derivatives
@@ -454,6 +482,7 @@ class Analyze(object):
             ind_c = None
             ind_m = None
             ind_S8 = None
+            # TODO: check logic here to make sure transformed parameters handled correctly
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
@@ -468,12 +497,12 @@ class Analyze(object):
                     if 'sigma8' in self.gprior_pars:
                         raise ValueError('Cannot set priors for both sigma8 and S8')
                 else:
-                    raise ValueError(f'The requested prior `{gvar}` is not recognized. \
+                    warnings.warn(f'The requested prior `{gvar}` is not recognized. \
                                        Please make sure that it is part of your model.')
 
             self.Fij_with_gprior = np.copy(self.Fij)
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
-            for i in range(len(self.gpriors)):
+            for i in range(len(indices)):
                 j = indices[i]
                 gprior_only[j][j] += 1.0/self.gpriors[i]**2
 
@@ -490,34 +519,43 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".priors_only", gprior_only)
                 np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
 
+        # Build a pandas DataFrame indexed by varied parameters (rows and columns)
+        try:
+            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior,
+                                                   index=self.var_pars,
+                                                   columns=self.var_pars
+                                                   )
+        except Exception:
+            # Fallback in case var_pars is None or sizes mismatch
+            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior)
         return self.Fij_with_gprior
 
-    def get_fisher_matrix(self, method='5pt_stencil', save_txt=True):
-        """
-        Compute Fisher matrix assuming Gaussian likelihood (around self.x)
-        and the specified derivative computation method (default is 5pt stencil).
+    def add_external_fisher(self, external_fisher, method=None, save_txt=True):
+        if self.Fij is None:
+            self.get_fisher_matrix(method=method, save_txt=save_txt)
 
-            Parameters:
-            -----------
-        method : string,
-            Method to estimate the derivatives.
-            save_txt : bool,
-                Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
+        # external fisher is a path to an augur-like setup or a pandas datafram
+        # if it is a dataframe, then we read it in and add it directly
+        # if not, we need a helper to read in the text files into a dataframe object to then sum.
+        raise NotImplementedError("External fisher addition not yet implemented.")
+        # F_ext, fid_ext = read_fisher_from_file(external_fisher)
 
-        Returns:
-        -----------
-            Fij: np.ndarray,
-                Output Fisher matrix
-
-        """
-
+    def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
+        # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
         if self.derivatives is None:
-            self.get_derivatives(method=method)
+            self.get_derivatives(method=method, **kwargs)
         if self.Fij is None:
             self.Fij = np.einsum('il, lm, jm', self.derivatives, self.lk.inv_cov, self.derivatives)
 
             J = self.Jacobian_transform()
             self.Fij = J.T @ self.Fij @ J
+
+            # Build a pandas DataFrame indexed by varied parameters (rows and columns)
+            try:
+                self.Fij_df = pd.DataFrame(self.Fij, index=self.var_pars, columns=self.var_pars)
+            except Exception:
+                # Fallback in case var_pars is None or sizes mismatch
+                self.Fij_df = pd.DataFrame(self.Fij)
 
             save_vals = np.copy(self.x.T)
             save_names = np.copy(self.var_pars)
@@ -539,43 +577,22 @@ class Analyze(object):
                 tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
                 fid = self.f(self.x, self.var_pars, self.pars_fid, self.req_params)
                 np.savetxt(self.config['output']+".theory_vector", fid)
+                np.savetxt(self.config['output']+".derivatives", self.derivatives)
         if self.gprior_pars is not None:
             print('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
 
         return self.Fij
 
-    def get_fisher_bias(self, force=False, method='5pt_stencil', save_txt=True, use_fid=False):
-        """
-        Compute Fisher bias following the generalized Amara formalism.
-        Check the Augur note in this repository for more details.
+    def get_fisher_bias(self, force=False, method=None, save_txt=True, use_fid=False):
+        # Compute Fisher bias following the generalized Amara formalism
+        # More details in Bianca's thesis and the note here:
+        # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
 
-        This function allows for the user to
-            provide externally calculated "systematics" angular
-        power spectrum vector, which should have been calculated
-        at the same ells as the original data-vector
-            and this have the same length.
-
-        Parameters:
-            -----------
-        force: bool,
-                If `True` force recalculation of the derivatives.
-
-        method: string,
-            Method to determine the derivatives. Fiducial: 5pt stencil.
-
-        save_txt: bool,
-            Option to save the output to a text file. True by default.
-
-        use_fid: bool,
-            If `False`, it takes user-specified systematics as input, read from a txt file.
-
-        Returns:
-            -----------
-        bi : np.array,
-                A numpy vector with the Fisher bias.
-
-            """
+        # Allowing to provide externally calculated "systematics"
+        # They should have the same ells as the original data-vector
+        # and the same length
+        import os
 
         if self.derivatives is None:
             self.get_derivatives(force=force, method=method)
@@ -619,6 +636,8 @@ class Analyze(object):
             if _calculate_biased_cls:
                 _x_here = []
                 _labels_here = []
+                if self.transform_S8 or self.transform_Omega_m:
+                    raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = self.pars_fid.copy()
                     _sys_here = self.req_params.copy()

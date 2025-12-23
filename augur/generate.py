@@ -14,25 +14,14 @@ from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from augur.utils.theory_utils import compute_new_theory_vector
-from packaging.version import Version
-import firecrown
 
-if Version(firecrown.__version__) >= Version('1.15.a'):
-    import firecrown.likelihood.weak_lensing as wl
-    import firecrown.likelihood.number_counts as nc
-    from firecrown.likelihood import TwoPoint, ConstGaussian
-elif Version(firecrown.__version__) >= Version('1.8.0a'):
-    import firecrown.likelihood.weak_lensing as wl
-    import firecrown.likelihood.number_counts as nc
-    from firecrown.likelihood.two_point import TwoPoint
-    from firecrown.likelihood.gaussian import ConstGaussian
-elif Version(firecrown.__version__) >= Version('1.7.4'):
-    import firecrown.likelihood.gauss_family.statistic.source.weak_lensing as wl
-    import firecrown.likelihood.gauss_family.statistic.source.number_counts as nc
-    from firecrown.likelihood.gauss_family.statistic.two_point import TwoPoint
-    from firecrown.likelihood.gauss_family.gaussian import ConstGaussian
+import firecrown.likelihood.weak_lensing as wl
+import firecrown.likelihood.number_counts as nc
+from firecrown.likelihood.two_point import TwoPoint
+from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
+from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
@@ -55,6 +44,118 @@ def _get_tracers(statistic, comb):
     else:
         return NotImplementedError('Only C_ls available')
     return tr1, tr2
+
+
+def _add_nz(cfg, nbins, src_root, S, dndz):
+    """
+    Auxiliary function to get the n(z) distribution for a given tracer
+    in the configuration file.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary for the tracer
+    nbins : int
+        Number of redshift bins
+    src_root : str
+        Root name for the source tracer
+    S : sacc.Sacc
+        SACC object to which the n(z) will be added
+    dndz : dict
+        Dictionary to store the n(z) objects
+    """
+    # These are to match the N(z)s from the fits file in the firecrown repo
+    z = np.linspace(0.004004004004004004,
+                    4.004004004004004004, 1000)  # z to probe the dndz distribution
+    Nz_centers = None
+    if 'Nz_center' in cfg['Nz_kwargs'].keys():
+        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+        cfg['Nz_kwargs'].pop('Nz_center')
+
+        if np.isscalar(Nz_centers):
+            Nz_centers = [Nz_centers]
+            if nbins != 1:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+        else:
+            if len(Nz_centers) != nbins:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+    for i in range(nbins):
+        sacc_tracer = f'{src_root}{i}'
+        if isinstance(cfg['Nz_type'], list):
+            if eval(cfg['Nz_type'][i]) in implemented_nzs:
+                if 'ZDistFromFile' not in cfg['Nz_type'][i]:
+                    if Nz_centers is not None:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
+                                                                    Nz_center=Nz_centers[i],
+                                                                    Nz_nbins=nbins,
+                                                                    **cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
+                                                                    Nz_ibin=i,
+                                                                    Nz_nbins=nbins,
+                                                                    **cfg['Nz_kwargs'])
+
+                else:
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+            else:
+                raise NotImplementedError('The selected N(z) is yet not implemented')
+        else:
+            if eval(cfg['Nz_type']) in implemented_nzs:
+                if 'ZDistFromFile' not in cfg['Nz_type']:
+                    if Nz_centers is not None:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
+                                                                 Nz_center=Nz_centers[i],
+                                                                 Nz_nbins=nbins,
+                                                                 **cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
+                                                                 Nz_ibin=i,
+                                                                 Nz_nbins=nbins,
+                                                                 **cfg['Nz_kwargs'])
+                else:
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+            else:
+                raise NotImplementedError('The selected N(z) is yet not implemented')
+        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
+    return dndz
+
+
+def _get_scale_cuts(stat_cfg, comb):
+    """
+    Auxiliary function to get the scale cuts in ell for a given tracer
+    combination in the configuration file.
+    Parameters
+    Parameters
+    ----------
+    stat_cfg : dict
+        Configuration dictionary for the statistic
+    comb : tuple
+        Tracer combination
+    Returns
+    -------
+    lmax : int or float or None
+        Maximum ell for the tracer combination
+    kmax : int or float or None
+        Maximum k for the tracer combination
+    """
+
+    tracer_combs = stat_cfg.get('tracer_combs', [])
+    if 'kmax' in stat_cfg.keys() and 'lmax' in stat_cfg.keys():
+        raise ValueError('Cannot specify both lmax and kmax for scale cuts.')
+    lmax = stat_cfg.get('lmax', None)
+    if isinstance(lmax, list):
+        if len(lmax) != len(tracer_combs):
+            raise ValueError('If lmax is a list, it must have the same length as tracer_combs')
+        lmax = lmax[tracer_combs.index(comb)]
+    elif isinstance(lmax, (int, float)) or lmax is None or lmax == 'None':
+        pass
+    else:
+        raise ValueError('lmax must be either a single number or a list of numbers')
+
+    kmax = stat_cfg.get('kmax', None)
+    if kmax is not None and not isinstance(kmax, (int, float)) and kmax != 'None':
+        raise ValueError('kmax must be a single number')
+    return lmax, kmax
 
 
 def generate_sacc_and_stats(config):
@@ -80,6 +181,8 @@ def generate_sacc_and_stats(config):
          Fiducial cosmology
     stats : firecrown.likelihood.gauss_family.statistic.two_point.TwoPoint
          List of TwoPoint statistics that will enter the likelihood
+    tp_filters : list
+         List of TwoPoint filters that will be applied to the statistics
     """
 
     config = parse_config(config)
@@ -130,147 +233,36 @@ def generate_sacc_and_stats(config):
     S = sacc.Sacc()
 
     # Read sources from config file
-    src_cfg = config['sources']
     sources = {}
     dndz = {}
-    # These are to match the N(z)s from the fits file in the firecrown repo
-    z = np.linspace(0.004004004004004004,
-                    4.004004004004004004, 1000)  # z to probe the dndz distribution
-    sys_params = {}
-    # Set up intrinsic alignment systematics
-    if 'ia_class' in src_cfg.keys():
-        ia_sys = eval(src_cfg['ia_class'])(sacc_tracer="")
-    else:
-        ia_sys = None
-    # TODO -- fix this in subsequent releases
-    # if isinstance(ia_sys, wl.LinearAlignmentSystematic):
-    #    ia_sys = None  # the LinearAlignmentSystematic class seems to be a bit buggy
+
+    sys_params = config['systematics'] if 'systematics' in config.keys() else {}
+
     if 'sources' in config.keys():
+        src_cfg = config['sources']
+
         nbins = src_cfg['nbins']  # Number of bins for shear sources
         src_root = 'src'  # Root of sacc tracer name
 
-        # Set up multiplicative bias (if present in config)
-        if 'mult_bias' in src_cfg.keys():
-            if np.isscalar(src_cfg['mult_bias']):
-                mult_bias = np.ones(nbins)*src_cfg['mult_bias']
-            else:
-                mult_bias = src_cfg['mult_bias']
-                if len(mult_bias) != nbins:
-                    raise ValueError('Expected scalar or list of length=nbins')
-        # Set up photo-z shift (if present in config)
-        if 'delta_z' in src_cfg.keys():
-            if np.isscalar(src_cfg['delta_z']):
-                delta_z = np.ones(nbins)*src_cfg['delta_z']
-            else:
-                delta_z = src_cfg['delta_z']
-
         # Loop over bins
+        dndz = _add_nz(src_cfg, nbins, src_root, S, dndz)
         for i in range(nbins):
             sacc_tracer = f'{src_root}{i}'
-            if isinstance(src_cfg['Nz_type'], list):
-                if eval(src_cfg['Nz_type'][i]) in implemented_nzs:
-                    if 'ZDistFromFile' not in src_cfg['Nz_type'][i]:
-                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'][i])(z, Nz_nbins=nbins,
-                                                                        Nz_ibin=i,
-                                                                        **src_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            else:
-                if eval(src_cfg['Nz_type']) in implemented_nzs:
-                    if 'ZDistFromFile' not in src_cfg['Nz_type']:
-                        dndz[sacc_tracer] = eval(src_cfg['Nz_type'])(z, Nz_nbins=nbins,
-                                                                     Nz_ibin=i,
-                                                                     **src_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**src_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
-            # Set up the WeakLensing objects for firecrown
-            mbias = wl.MultiplicativeShearBias(sacc_tracer=sacc_tracer)
-            mbias.mult_bias = mult_bias[i]
-            pzshift = wl.PhotoZShift(sacc_tracer=sacc_tracer)
-            pzshift.delta_z = delta_z[i]
-            sys_list = [mbias, pzshift]
-            if ia_sys is not None:
-                sys_list.append(ia_sys)
-                sys_params['ia_bias'] = src_cfg['ia_bias']
-                sys_params['alphaz'] = src_cfg['alphaz']
-                sys_params['z_piv'] = src_cfg['z_piv']
-            sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer,
-                                                  systematics=sys_list)
-            sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
-            sys_params[f'{sacc_tracer}_mult_bias'] = mult_bias[i]
+            sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer)
 
     # Read lenses from config file
     if 'lenses' in config.keys():
         lns_cfg = config['lenses']
         nbins = lns_cfg['nbins']
         lns_root = 'lens'
-        if 'Nz_center' in lns_cfg['Nz_kwargs'].keys():
-            Nz_centers = eval(lns_cfg['Nz_kwargs']['Nz_center'])
-            lns_cfg['Nz_kwargs'].pop('Nz_center')
 
-            if np.isscalar(Nz_centers):
-                Nz_centers = [Nz_centers]
-                if nbins != 1:
-                    raise ValueError('Nz_centers should have the same length as the number of bins')
-            else:
-                if len(Nz_centers) != nbins:
-                    raise ValueError('Nz_centers should have the same length as the number of bins')
-        # Checking if there's photo-z shift systematics in the config
-        if 'delta_z' in lns_cfg.keys():
-            if np.isscalar(lns_cfg['delta_z']):
-                delta_z = np.ones(nbins)*lns_cfg['delta_z']
-            else:
-                delta_z = lns_cfg['delta_z']
-
+        dndz = _add_nz(lns_cfg, nbins, lns_root, S, dndz)
         for i in range(nbins):
             sacc_tracer = f'{lns_root}{i}'
-            if isinstance(lns_cfg['Nz_type'], list):
-                if eval(lns_cfg['Nz_type'][i]) in implemented_nzs:
-                    if 'ZDistFromFile' not in lns_cfg['Nz_type'][i]:
-                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'][i])(z,
-                                                                        Nz_center=Nz_centers[i],
-                                                                        Nz_nbins=nbins,
-                                                                        **lns_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            else:
-                if eval(lns_cfg['Nz_type']) in implemented_nzs:
-                    if 'ZDistFromFile' not in lns_cfg['Nz_type']:
-                        dndz[sacc_tracer] = eval(lns_cfg['Nz_type'])(z,
-                                                                     Nz_center=Nz_centers[i],
-                                                                     Nz_nbins=nbins,
-                                                                     **lns_cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = ZDistFromFile(**lns_cfg['Nz_kwargs'], ibin=i)
-                else:
-                    raise NotImplementedError('The selected N(z) is yet not implemented')
-            S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
-            # Set up the NumberCounts objects for firecrown
-            # Start by retrieving the bias
-            if 'inverse_growth' in lns_cfg['bias_type']:  # b(z) = b0/D+(z)
-                bias = lns_cfg['bias_kwargs']['b0'] / \
-                       ccl.growth_factor(cosmo, 1/(1+dndz[sacc_tracer].zav))
-            elif 'custom' in lns_cfg['bias_type']:  # b(z) = list of values
-                bias = lns_cfg['bias_kwargs']['b']
-                if len(bias) != nbins:
-                    raise ValueError('bias_type==custom requires a bias value per bin')
-                bias = bias[i]
-            else:
-                raise NotImplementedError('bias_type implemented are custom or inverse_growth')
-            pzshift = nc.PhotoZShift(sacc_tracer=sacc_tracer)
-            pzshift.delta_z = delta_z[i]
-            sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, systematics=[pzshift],
-                                                   derived_scale=True)
-            sources[sacc_tracer].bias = bias
-            sys_params[f'{sacc_tracer}_bias'] = bias
-            sys_params[f'{sacc_tracer}_delta_z'] = delta_z[i]
+            sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, derived_scale=True)
+
+    if 'cmb_lensing' in config.keys():
+        raise NotImplementedError("CMB lensing not yet implemented in Augur generation.")
 
     # Read data vector combinations
     if 'statistics' not in config.keys():
@@ -278,42 +270,76 @@ def generate_sacc_and_stats(config):
     stat_cfg = config['statistics']
     stats = []
     ignore_sc = config['general'].get('ignore_scale_cuts', False)
+    ignore_sc_likelihood = config['general'].get('ignore_scale_cuts_likelihood', False)
+    if not ignore_sc and ignore_sc_likelihood:
+        raise ValueError("Cannot ignore scale cuts in likelihood while \
+                         applying them to the data vector.")
+    tp_filters = []
+
+    Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
-        kmax = stat_cfg[key]['kmax']
         ell_edges = eval(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
+        # TODO: add scale cuts to likelihood, not just cutting datavector
         for comb in tracer_combs:
+            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
             tr1, tr2 = _get_tracers(key, comb)
-            if (kmax is not None) and (kmax != 'None') and (not ignore_sc):
+            if (kmax is not None) and (kmax != 'None'):
                 zmean1 = dndz[tr1].zav
                 zmean2 = dndz[tr2].zav
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
-                ell_max = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                ells_here = ells[ells < ell_max]
+                lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
+                ells_here = ells[ells < lmax]
+            elif (lmax is not None) and (lmax != 'None'):
+                ells_here = ells[ells < lmax]
             else:
                 ells_here = ells
-            # Trying to add bandpower windows
-            ells_aux = np.arange(0, np.max(ells_here)+1)
-            wgt = np.zeros((len(ells_aux), len(ells_here)))
-            for i in range(len(ells_here)):
-                in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
-                wgt[in_win, i] = 1.0
-            win = sacc.BandpowerWindow(ells_aux, wgt)
-            print(win.nv, win.nell, len(ells_here))
-            S.add_ell_cl(key, tr1, tr2,
-                         ells_here, np.zeros(len(ells_here)), window=win)
+                lmax = ells_here[-1]
+
+            if not ignore_sc_likelihood:
+                tp_filters.append(create_twopoint_filter(key, tr1, tr2,
+                                                         cut_low=ells_here[0],
+                                                         cut_high=lmax)
+                                  )
+
+            if not ignore_sc:
+                ells_here = ells[ells < lmax]
+            else:
+                ells_here = ells
+            # add bandpower windows
+            if Bandpower == 'TopHat':
+                ells_aux = np.arange(0, np.max(ells_here)+1)
+                wgt = np.zeros((len(ells_aux), len(ells_here)))
+                for i in range(len(ells_here)):
+                    in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
+                    wgt[in_win, i] = 1.0
+                win = sacc.BandpowerWindow(ells_aux, wgt)
+                # print(win.nv, win.nell, len(ells_here))
+                S.add_ell_cl(key, tr1, tr2,
+                             ells_here, np.zeros(len(ells_here)), window=win)
+
+            elif Bandpower == 'NaMaster':
+                raise NotImplementedError("NaMaster bandpower windows not yet \
+                                          implemented in Augur generation.")
+            else:
+                S.add_ell_cl(key, tr1, tr2,
+                             ells_here, np.zeros(len(ells_here)))
 
             # Now create TwoPoint objects for firecrown
             _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
                                  sacc_data_type=key)
             stats.append(_aux_stat)
-    S.add_covariance(np.ones_like(S.data))
+    # Placeholder covariance
+    ndata = len(S.mean)
+    S.add_covariance(np.eye(ndata))
     sys_params = ParamsMap(sys_params)
-    return S, cosmo, stats, sys_params
+
+    # needs to return two point filter collection that represents scale cuts
+    return S, cosmo, stats, sys_params, tp_filters
 
 
-def generate(config, return_all_outputs=False, write_sacc=True):
+def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=None):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -328,6 +354,10 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
+    lk : firecrown.likelihood.Likelihood
+        If provided, it uses this likelihood object instead of generating a new one.
+    tools : firecrown.modeling.ModelingTools
+        If provided, it uses this modeling tools object instead of generating a new one.
 
     Returns:
     -------
@@ -343,20 +373,39 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         `return_all_outputs` is True.
 
     """
-
-    config = parse_config(config)
+    config = parse_config(configs)
     # Generate placeholders
-    S, cosmo, stats, sys_params = generate_sacc_and_stats(config)
+    S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
+    # config needs to specify likelihood yaml.
+    # alternatively, can pass likelihood and tools objects at input paramters.
+    # choose objects to take precedence.
 
-    # Generate likelihood object
-    lk = ConstGaussian(statistics=stats)
-    # Pass the correct binning/tracers
-    lk.read(S)
-
+    if tools is None:
+        tools, cosmo = create_modeling_tools(config)
     cosmo.compute_nonlin_power()
+    if lk is None:
+        if "Firecrown_Factory" in config.keys():
+            # Many Firecrown YAML pipelines expect a DataSourceSacc with a file path.
+            # Save the placeholder/template SACC to a temporary FITS file, build the
+            # likelihood from YAML pointing at that file, then immediately rebind the
+            # in-memory S object to ensure we use the generated data-vector/covariance.
+            import tempfile
+            import os
+            tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
+            tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.fits")
+            S.save_fits(tmp_sacc_path, overwrite=True)
+
+            from augur.utils.firecrown_interface import load_likelihood_from_yaml
+            lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
+
+            # Bind our in-memory S after construction, overriding any file-based DataSource.
+            # lk.read(S)
+        else:
+            lk = ConstGaussian(statistics=stats)
+            lk.read(S)
+
     _pars = cosmo.__dict__['_params_init_kwargs']
     # Populate ModelingTools and likelihood
-    tools = firecrown.modeling_tools.ModelingTools()
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
     # Get all bandpower windows before erasing the placeholder sacc
@@ -384,6 +433,9 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         S.add_ell_cl(st.sacc_data_type, tr1, tr2,
                      ell_dict[(tr1, tr2)], st.get_theory_vector(),  # Only valid for harmonic space
                      window=win_dict[(tr1, tr2)])
+
+    # Now generate covariance matrix
+    # move to a separate file/function?
     if config['cov_options']['cov_type'] == 'gaus_internal':
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
@@ -413,8 +465,8 @@ def generate(config, return_all_outputs=False, write_sacc=True):
             tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
         tjpcov_config['tjpcov']['sacc_file'] = S
         tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
-        tjpcov_config['GaussianFsky'] = {}
-        tjpcov_config['GaussianFsky']['fsky'] = config['cov_options']['fsky']
+        tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
+        tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
         tjpcov_config['tjpcov']['binning_info'] = dict()
         tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
             eval(config['cov_options']['binning_info']['ell_edges'])
@@ -423,6 +475,7 @@ def generate(config, return_all_outputs=False, write_sacc=True):
             tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
             if 'src' in tr:
                 tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
+
         cov_calc = TJPCovGaus(tjpcov_config)
         if config['general']['ignore_scale_cuts']:
             cov_all = cov_calc.get_covariance()
@@ -445,7 +498,19 @@ def generate(config, return_all_outputs=False, write_sacc=True):
         print(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
-    lk = ConstGaussian(statistics=stats)
-    lk.read(S)
+
+    # add two-point filters here to the likelihood, in case of scale cuts
+    if tp_filters != []:
+        print('loading filters')
+        config = parse_config(configs)
+        from augur.utils.firecrown_interface import load_likelihood_from_yaml
+        lk = load_likelihood_from_yaml(config,
+                                       tools.ccl_factory,
+                                       config['fiducial_sacc_path'],
+                                       filters=tp_filters)
+    else:
+        lk = ConstGaussian(statistics=stats)
+        lk.read(S)
+
     if return_all_outputs:
         return lk, S, tools, sys_params

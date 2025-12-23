@@ -44,9 +44,10 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
     if 'src' in tracer_name:
         ndens = config['sources']['ndens']
+        ndens *= norm['src'][int(tracer_name[-1])]
     elif 'lens' in tracer_name:
         ndens = config['lenses']['ndens']
-    ndens *= norm['src'][int(tracer_name[-1])]
+        ndens *= norm['lens'][int(tracer_name[-1])]
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
     if 'src' in tracer_name:
         noise_power = config['sources']['ellipticity_error'] ** 2 / nbar

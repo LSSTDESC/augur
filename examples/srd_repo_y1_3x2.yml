@@ -1,12 +1,16 @@
 general:
     ignore_scale_cuts : False # If True ignore any values of kmax
+
 cosmo:
-    Omega_c : 0.2664315
-    Omega_b : 0.0491685
+    Omega_c : 0.2664  # = 0.3156 - 0.0492
+    Omega_b : 0.0492
     h : 0.6727
     n_s : 0.9645
     #A_s : 2.105e-9
     sigma8 : 0.831
+    w0: -1.0
+    wa: 0.0
+    Omega_k: 0.0
     extra_parameters :
         camb :
             dark_energy_model : 'ppf'
@@ -19,6 +23,7 @@ ccl_accuracy:  # Example of a couple of parameters to modify.
     gsl_params:  # You can change here any pyccl.gsl_params
         INTEGRATION_EPSREL: 1e-6
         INTEGRATION_LIMBER_EPSREL: 1e-2
+
 
 sources:  # Sources
     nbins : 5
@@ -35,18 +40,19 @@ sources:  # Sources
         input_file : 'data/srd_source_bins_y1.txt'
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
-    mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
-    delta_z : 0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
+    # mult_bias: https://github.com/CosmoLike/DESC_SRD/blob/f3b44070e40cbdc1a459e07a1a8eb31d2608af6f/like_fourier.c#L840
+    mult_bias : [0.0, 0.0, 0.0, 0.0, 0.0]  # Scalar or list (if list, then it's a value per bin)
+    delta_z : 0.0  # Photo-z shift, Scalar or list (if list, then it's a value per bin)
     ia_class: 'wl.LinearAlignmentSystematic'
-    ia_bias : 5.  # ia-bias 
-    alphaz : 1.
-    z_piv : 1.0
+    ia_bias : 5.0  # ia-bias 
+    alphaz : -0.47 # not modeling Luminosity-dependent ampltiude - discrepancy from SRD
+    z_piv : 0.3
     ia_kwargs :  # Left here for future extensions to pass as optional parameter to IA-systematics
 
 lenses :  # Lenses
     nbins : 5
     ndens : 18  # in arcmin^-2, same convention as for sources
-    delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
+    delta_z : 0.0  # Photo-z shift for lenses (if ommited it assumes no shift)
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
         input_file : 'data/srd_lens_bins_y1.txt'
@@ -65,13 +71,13 @@ lenses :  # Lenses
     # Another option is to use the `custom` bias type, but it requires a value per bin
     bias_type : 'custom'
     bias_kwargs :
-        b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD
+        b : [1.562362, 1.732963, 1.913252, 2.100644, 2.293210]  # Values from SRD p48
 
 statistics:
     galaxy_density_cl :  # The statistics are supposed to be SACC statistics
         tracer_combs : [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]  # These need to be lists for now
         ell_edges : np.geomspace(20, 15000, 21, endpoint=True)  # bandpower edges
-        kmax : 0.201  # scale cut (in Mpc^-1)
+        kmax : 0.202  # scale cut (in Mpc^-1), 0.3 h/Mpc in SRD
         # kmax : None
     galaxy_shear_cl_ee : 
         tracer_combs :  [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], 
@@ -84,9 +90,9 @@ statistics:
     galaxy_shearDensity_cl_e : 
         tracer_combs : [[0, 2], [0, 3], [0, 4], [1, 3], [1, 4], [2, 4], [3, 4]]
         ell_edges : np.geomspace(20, 15000, 21, endpoint=True)
-        kmax : 0.201
+        kmax : 0.202
 
-fiducial_sacc_path : test_sacc.sacc
+fiducial_sacc_path : test_sacc_srd_repo_y1_3x2.sacc
 cov_options:
     # Several options implemented -- Gaussian internal
     #cov_type : 'gaus_internal'
@@ -104,11 +110,12 @@ cov_options:
 
 fisher:
     var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h', 'lens0_bias', 'lens1_bias', 
-               'lens2_bias', 'lens3_bias', 'lens4_bias', 
+               'lens2_bias', 'lens3_bias', 'lens4_bias', 'ia_bias', 'alphaz',
                'src0_mult_bias', 'src1_mult_bias', 'src2_mult_bias', 'src3_mult_bias', 'src4_mult_bias',
                'lens0_delta_z', 'lens1_delta_z', 'lens2_delta_z', 'lens3_delta_z', 'lens4_delta_z',
+               'lens0_sigma_z', 'lens1_sigma_z', 'lens2_sigma_z', 'lens3_sigma_z', 'lens4_sigma_z',
                'src0_delta_z', 'src1_delta_z', 'src2_delta_z', 'src3_delta_z', 'src4_delta_z']
-    # parameters:  # TODO: For now priors are ignored
+    # parameters:  # These uniform "priors" are useful for defining normalized step sizes 
     #     Omega_c: [0.1, 0.26, 0.9]
     #     A_s: [1e-9, 4e-9]
     #     #sigma8: [0.4, 0.81, 1.2]
@@ -117,15 +124,52 @@ fisher:
     #     h: [0.5, 0.6727, 0.8]
     #     n_s: [0.9, 0.9645, 1.0]
     #     #mult_bias: [-0.1 0.0 0.1]
-    step: 1e-2
+    step: 1e-3
     output: 'output/fisher.dat'
     fid_output: 'output/fiducials.dat'
+    transform_Omega_m: True
+    transform_S8: True
+    gaussian_priors:
+       lens0_bias: 0.9 #SRD p50
+       lens1_bias: 0.9
+       lens2_bias: 0.9
+       lens3_bias: 0.9
+       lens4_bias: 0.9
+       lens0_delta_z: 0.005 # SRD p16
+       lens1_delta_z: 0.005
+       lens2_delta_z: 0.005
+       lens3_delta_z: 0.005
+       lens4_delta_z: 0.005
+       lens0_sigma_z: 0.1 # SRD p17
+       lens1_sigma_z: 0.1
+       lens2_sigma_z: 0.1
+       lens3_sigma_z: 0.1
+       lens4_sigma_z: 0.1
+       src0_delta_z: 0.002 # SRD p18
+       src1_delta_z: 0.002
+       src2_delta_z: 0.002
+       src3_delta_z: 0.002
+       src4_delta_z: 0.002
+       src0_mult_bias: 0.013 # SRD p19
+       src1_mult_bias: 0.013
+       src2_mult_bias: 0.013
+       src3_mult_bias: 0.013
+       src4_mult_bias: 0.013
+       ia_bias: 3.9 # SRD p55
+       alphaz: 2.3
+       Omega_m : 0.2 # actually for Omega_m, as per SRD p43
+       Omega_b : 0.006 #SRD p43
+       h : 0.063
+       n_s : 0.08
+       sigma8 : 0.14
+       w0: 0.8
+       wa: 2.0 
     fisher_bias:
         biased_dv: ''  # Path to file containing modified data vector with the systematic shift to probe
                     # If the file is provided it should be a FITS or ASCII file with the  same binning as the
                     # fiducial data vector and the column dv_sys
         bias_params: 
-            Omega_c: 0.27
+            Omega_m: 0.27
             lens0_bias: 1.3
             lens0_delta_z: 0.01
             src3_delta_z: 0.005
@@ -134,7 +178,7 @@ postprocess:
   latex_table: output/latex_table.tex
   triangle_plot: output/triangle_plot.pdf
   facecolor: blue
-  pairplots: [(w0, wa), (omega_c, sigma8)]
+  pairplots: [(w0, wa), (Omega_m, S8)]
   outdir: 'output/'
   CL: 
     - 0.68
