@@ -1,11 +1,9 @@
 import numpy as np
-from packaging import version
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
 from augur.utils.config_io import parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
-import firecrown.version as firecrown_version
 from astropy.table import Table
 import warnings
 import pandas as pd
