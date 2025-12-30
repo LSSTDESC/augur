@@ -151,7 +151,7 @@ Additionally, we can compute the Fisher matrix and Fisher biases via numerical d
 ```
 from augur.analyze import Analyze
 ao = Analyze('./examples/config_test.yml')
-ao.get_fisher_bias()  # This command computes the derivates+Fisher matrices+fisher bias
+ao.get_fisher_bias(method='5pt_stencil')  # This command computes the derivates+Fisher matrices+fisher bias
 print(ao.Fij, ao.bi)  # These are the values of the Fisher matrix, Fij, and Fisher biases bi
 ```
 
