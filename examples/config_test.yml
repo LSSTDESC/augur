@@ -116,7 +116,7 @@ sources:  # Sources
        # Nz_sigmaz : 0.05
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_source_bins_y1.txt'
+        input_file : "{{ env['AUGUR_DIR'] }}/data/srd_source_bins_y1.txt"
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
     mult_bias : 0  # Scalar or list (if list, then it's a value per bin)
@@ -133,7 +133,7 @@ lenses :  # Lenses
     delta_z : 0  # Photo-z shift for lenses (if ommited it assumes no shift)
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_lens_bins_y1.txt'
+        input_file : "{{ env['AUGUR_DIR'] }}/data/srd_lens_bins_y1.txt"
         format : 'ascii'
         # input_file : 'data/srd_lens_bins_year_1.npy'
     # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
@@ -178,7 +178,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : "{{ env['AUGUR_DIR'] }}/data/Y1_3x2_SRD_cov.npy"
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
@@ -202,8 +202,8 @@ fisher:
     #     n_s: [0.9, 0.9645, 1.0]
     #     #mult_bias: [-0.1 0.0 0.1]
     step: 1e-2
-    output: 'output/fisher.dat'
-    fid_output: 'output/fiducials.dat'
+    output: "{{ env['AUGUR_DIR'] }}/output/fisher.dat"
+    fid_output: "{{ env['AUGUR_DIR'] }}/output/fiducials.dat"
     fisher_bias:
         biased_dv: ''  # Path to file containing modified data vector with the systematic shift to probe
                     # If the file is provided it should be a FITS or ASCII file with the  same binning as the
@@ -215,11 +215,11 @@ fisher:
             src3_delta_z: 0.005
         
 postprocess:
-  latex_table: output/latex_table.tex
-  triangle_plot: output/triangle_plot.pdf
+  latex_table: "{{ env['AUGUR_DIR'] }}/output/latex_table.tex"
+  triangle_plot: "{{ env['AUGUR_DIR'] }}/output/triangle_plot.pdf"
   facecolor: blue
   pairplots: [(w0, wa), (omega_c, sigma8)]
-  outdir: 'output/'
+  outdir: "{{ env['AUGUR_DIR'] }}/output/"
   CL: 
     - 0.68
     - 0.95
