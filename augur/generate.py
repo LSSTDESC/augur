@@ -357,8 +357,11 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     use_sacc : sacc.Sacc
         If provided, bypasses the generate_sacc_and_stats function and uses pre-existing data
         vector to generate a likelihood. 
+<<<<<<< HEAD
     sacc_path : path
         If use_sacc is not `None`, a file path must be provided for Firecrown. 
+=======
+>>>>>>> 53d53a4 (Use augur on own sacc files)
     lk : firecrown.likelihood.Likelihood
         If provided, it uses this likelihood object instead of generating a new one.
     tools : firecrown.modeling.ModelingTools
@@ -379,6 +382,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
 
     """
     config = parse_config(configs)
+<<<<<<< HEAD
 
     # Exit function early if a sacc is provided
     if use_sacc is not None:
@@ -430,6 +434,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
     # choose objects to take precedence.
+=======
+>>>>>>> 53d53a4 (Use augur on own sacc files)
 
     if tools is None:
         tools, cosmo = create_modeling_tools(config)
@@ -449,10 +455,53 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
 
+    # Exit function early if a sacc is provided
+    if use_sacc is not None:
+        S = use_sacc
+        sys_params = config['systematics'] if 'systematics' in config.keys() else {}
+        if tools is None:
+            tools, cosmo = create_modeling_tools(config)
         else:
+<<<<<<< HEAD
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
     
+=======
+            cosmo = tools.ccl_cosmo
+        #cosmo.compute_nonlin_power()
+
+        # Build likelihood
+        if lk is None:
+            if "Firecrown_Factory" in config.keys():
+                # Many Firecrown YAML pipelines expect a DataSourceSacc with a file path.
+                # Save the placeholder/template SACC to a temporary FITS file, build the
+                # likelihood from YAML pointing at that file, then immediately rebind the
+                # in-memory S object to ensure we use the generated data-vector/covariance.
+                import tempfile
+                import os
+                tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
+                tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.fits")
+                S.save_fits(tmp_sacc_path, overwrite=True)
+    
+                from augur.utils.firecrown_interface import load_likelihood_from_yaml
+                lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
+    
+                # Bind our in-memory S after construction, overriding any file-based DataSource.
+                # lk.read(S)
+            else:
+                lk = ConstGaussian(statistics=stats)
+                lk.read(S)
+        else:
+            raise RuntimeError("Non-YAML likelihood with use_sacc is not supported cleanly")
+
+        if return_all_outputs:
+            return lk, tools, sys_params
+        else:
+            return lk
+
+    # Rest of function is only triggered when use_sacc is None
+    S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
+>>>>>>> 53d53a4 (Use augur on own sacc files)
 
     _pars = cosmo.to_dict()
     # Populate ModelingTools and likelihood
