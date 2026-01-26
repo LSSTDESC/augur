@@ -385,7 +385,12 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None, 
         if tools is None:
             tools, cosmo = create_modeling_tools(config)
         else:
-            cosmo = tools.ccl_cosmo
+            if tools.ccl_cosmo is None:
+                # Build a cosmology from the factory
+                cosmo = tools.ccl_factory.build()
+                tools.set_ccl_cosmology(cosmo)
+            else:
+                cosmo = tools.ccl_cosmo
         #cosmo.compute_nonlin_power()
 
         # Build likelihood
@@ -403,6 +408,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None, 
     
                 from augur.utils.firecrown_interface import load_likelihood_from_yaml
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
+                tools.ccl_cosmo = cosmo
     
                 # Bind our in-memory S after construction, overriding any file-based DataSource.
                 # lk.read(S)
