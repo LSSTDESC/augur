@@ -16,9 +16,8 @@ def test_get_tracers_shear_density():
 
 
 def test_get_tracers_unrecognized():
-    res = _get_tracers('unknown_stat', (0, 1))
-    # Function returns a NotImplementedError instance rather than raising.
-    assert isinstance(res, NotImplementedError)
+    with pytest.raises(NotImplementedError):
+        _get_tracers('unknown_stat', (0, 1))
 
 
 def test_get_scale_cuts_scalar_lmax():

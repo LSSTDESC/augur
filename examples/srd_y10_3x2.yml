@@ -216,7 +216,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : "{{ env['AUGUR_DIR'] }}/data/Y10_3x2_SRD_cov.npy"
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
@@ -245,7 +245,7 @@ fisher:
     fid_output: 'output/fiducials.dat'
     #transform_Omega_m: True
     #transform_S8: True
-    derivative_method: '5pt_stencil'
+    derivative_method: 'numdifftools'
     #derivative_method: 'derivkit'
     #derivative_args: # args for derivkit
     #  method: 'finite'
