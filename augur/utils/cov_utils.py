@@ -31,6 +31,9 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     The input number_densities are #/arcmin. The output noise has no units.
     The output number density is in arcmin^-2.
     """
+    if 'src' not in tracer_name and 'lens' not in tracer_name:
+        print("Cannot compute noise for source of kind %s." % (tracer_name[:-1]))
+        raise NotImplementedError
     nz_all = dict()
     nz_all['src'] = []
     nz_all['lens'] = []
@@ -49,14 +52,14 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
         norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
         ndens = config['lenses']['ndens']
         ndens *= norm['lens'][int(tracer_name[-1])]
+
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
+
     if 'src' in tracer_name:
         noise_power = config['sources']['ellipticity_error'] ** 2 / nbar
     elif 'lens' in tracer_name:
         noise_power = 1 / nbar
-    else:
-        print("Cannot do error for source of kind %s." % (tracer_name[:-1]))
-        raise NotImplementedError
+
     if return_ndens:
         return noise_power, ndens
     else:
@@ -201,9 +204,10 @@ class TJPCovGaus(FourierGaussianFsky):
     """
     Class to patch FourierGaussianFsky to work with Augur
     """
+
     def __init__(self, config):
         super().__init__(config)
-        self.tracer_Noise = self.tracer_Noise_coupled
+        _, self.tracer_Noise = self.get_tracer_info()
 
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()
