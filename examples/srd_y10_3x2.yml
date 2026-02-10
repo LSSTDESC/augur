@@ -165,7 +165,7 @@ sources:  # Sources
        # Nz_sigmaz : 0.05
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_source_bins_y10.txt'
+        input_file : "{{ env['AUGUR_DIR'] }}/data/srd_source_bins_y10.txt"
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
 
@@ -174,7 +174,7 @@ lenses :  # Lenses
     ndens : 48  # in arcmin^-2, same convention as for sources
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_lens_bins_y10.txt'
+        input_file : "{{ env['AUGUR_DIR'] }}/data/srd_lens_bins_y10.txt"
         format : 'ascii'
         # input_file : 'data/srd_lens_bins_year_1.npy'
     # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
