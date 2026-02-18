@@ -22,7 +22,7 @@ from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
-
+import warnings
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
@@ -42,7 +42,7 @@ def _get_tracers(statistic, comb):
         tr1 = f'lens{comb[0]}'
         tr2 = f'src{comb[1]}'
     else:
-        return NotImplementedError('Only C_ls available')
+        raise NotImplementedError('Only C_ls available')
     return tr1, tr2
 
 
@@ -492,7 +492,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
                     cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
         S.add_covariance(cov_all)
     else:
-        raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
+        warnings.warn('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
     if write_sacc:
         print(config['fiducial_sacc_path'])

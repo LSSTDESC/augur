@@ -164,7 +164,7 @@ class Analyze(object):
         # Normalize the pivot point given the sampling region
         if self.norm_step:
             self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
-                        np.array(self.par_bounds[:, 0]).astype(np.float64)
+                np.array(self.par_bounds[:, 0]).astype(np.float64)
 
         # reads in associated gaussian prior width of parameters
         if 'gaussian_priors' in self.config.keys():
@@ -173,7 +173,7 @@ class Analyze(object):
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
         # derivative method
-        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        self.derivative_method = self.config.get('derivative_method', 'numdifftools')
         if self.derivative_method == 'derivkit':
             self.derivative_args = self.config.get('derivative_args', {})
         # step size
@@ -397,8 +397,8 @@ class Analyze(object):
                 x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                     * 1/self.norm
             elif self.norm_step and 'derivkit' in method:
-                raise warnings.warning('Using derivkit with norm_step=True not recommended.\
-                                       Forcing norm_step to False and continuing computation.')
+                warnings.warn('Using derivkit with norm_step=True not recommended.\
+                               Forcing norm_step to False and continuing computation.')
                 self.norm_step = False
                 x_here = self.x
             else:
