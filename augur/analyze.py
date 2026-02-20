@@ -579,9 +579,9 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".theory_vector", fid)
                 np.savetxt(self.config['output']+".derivatives", self.derivatives)
         if self.gprior_pars is not None:
-            print('adding priors')
+            #print('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
-
+        
         return self.Fij
 
     def get_fisher_bias(self, force=False, method=None, save_txt=True, use_fid=False):
