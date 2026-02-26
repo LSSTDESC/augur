@@ -445,6 +445,22 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
         S.add_covariance(cov)
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
+        tjpcov_ell_edges = np.asarray(
+            eval(config['cov_options']['binning_info']['ell_edges'])
+        )
+        for stat_name, stat_info in config['statistics'].items():
+            dv_ell_edges = np.asarray(eval(stat_info['ell_edges']))
+            if (
+                tjpcov_ell_edges.shape != dv_ell_edges.shape
+                or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)
+            ):
+                raise ValueError(
+                    "TJPCov ell_edges do not match the data-vector ell_edges "
+                    f"for statistic `{stat_name}`. "
+                    "Please set `cov_options.binning_info.ell_edges` to match "
+                    "`statistics.<stat>.ell_edges`."
+                )
+
         tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
         tjpcov_config['tjpcov'] = dict()
         tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
@@ -468,8 +484,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
         tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
         tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
         tjpcov_config['tjpcov']['binning_info'] = dict()
-        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
-            eval(config['cov_options']['binning_info']['ell_edges'])
+        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = tjpcov_ell_edges
         for tr in S.tracers:
             _, ndens = get_noise_power(config, S, tr, return_ndens=True)
             tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
