@@ -503,7 +503,9 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
                     jj = S.indices(tracers=trcombs2)
                     ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
                     # no B-modes for now, as we are only evaluating in Fourier space
-                    cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2, include_b_modes=False)
+                    cov_here = cov_calc.get_covariance_block(
+                        trcombs1, trcombs2, include_b_modes=False
+                        )
                     cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
                     cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
         S.add_covariance(cov_all)
