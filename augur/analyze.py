@@ -173,9 +173,8 @@ class Analyze(object):
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
         # derivative method
-        self.derivative_method = self.config.get('derivative_method', 'numdifftools')
-        if self.derivative_method == 'derivkit':
-            self.derivative_args = self.config.get('derivative_args', {})
+        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        self.derivative_args = self.config.get('derivative_args', {})
         # step size
         self.step_size = float(self.config.get('step', 0.01))
 
