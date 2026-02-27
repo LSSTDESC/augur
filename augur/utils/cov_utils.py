@@ -39,27 +39,38 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     nz_all['lens'] = []
     for tr in S.tracers:
         trobj = S.get_tracer(tr)
-        nz_all[tr[:-1]].append(trobj.nz)  # This assumes 10 or less bins
+        # obtain some arbitrary number of bins
+        prefix = tr.rstrip('0123456789')
+        nz_all[prefix].append(trobj.nz)
+    tracer_prefix = tracer_name.rstrip('0123456789')
+    tracer_bin_str = tracer_name[len(tracer_prefix):]
+    if tracer_bin_str == '':
+        raise ValueError(
+            f"Tracer name '{tracer_name}' must end with a bin index."
+        )
+    tracer_bin = int(tracer_bin_str)
+
     norm = dict()
     if 'src' in tracer_name:
         nz_all['src'] = np.array(nz_all['src'])
         norm['src'] = np.sum(nz_all['src'], axis=1)/np.sum(nz_all['src'])
 
         ndens = config['sources']['ndens']
-        ndens *= norm['src'][int(tracer_name[-1])]
+        ndens *= norm['src'][tracer_bin]
     elif 'lens' in tracer_name:
         nz_all['lens'] = np.array(nz_all['lens'])
         norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
         ndens = config['lenses']['ndens']
-        ndens *= norm['lens'][int(tracer_name[-1])]
-
+        ndens *= norm['lens'][tracer_bin]
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
 
     if 'src' in tracer_name:
         noise_power = config['sources']['ellipticity_error'] ** 2 / nbar
     elif 'lens' in tracer_name:
         noise_power = 1 / nbar
-
+    else:
+        print("Cannot do error for source of kind %s." % tracer_prefix)
+        raise NotImplementedError
     if return_ndens:
         return noise_power, ndens
     else:
@@ -69,7 +80,8 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
 def get_gaus_cov(S, lk, cosmo, fsky, config):
     """
     Basic implementation of Gaussian covariance using the mode-counting formula
-    and fsky approximation.
+    and fsky approximation. Assumes that all ell-edges are the same for (3x)2pt
+    statistics and uniform bin-widths in ell.
 
     Parameters:
     -----------
@@ -92,9 +104,23 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     """
     # Initialize big matrix
     cov_all = np.zeros((len(S.data), len(S.data)))
+
+    ell_edges_by_stat = {
+        stat_name: np.asarray(eval(stat_cfg['ell_edges']))
+        for stat_name, stat_cfg in config['statistics'].items()
+    }
+
+    def _noise_between(tr_a_name, tr_b_name):
+        """Uncorrelated noise term N_ab (non-zero only for auto-tracer pairs)."""
+        if tr_a_name != tr_b_name:
+            return 0.0
+        return get_noise_power(config, S, tr_a_name)
+
     # Loop over statistic in the likelihood (assuming 3x2pt so far)
     for i, myst1 in enumerate(lk.statistics):
         myst1 = myst1.statistic
+        tr1_name = myst1.source0.sacc_tracer
+        tr2_name = myst1.source1.sacc_tracer
         tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
         tr2 = myst1.source1.tracers[0].ccl_tracer
         ell12 = myst1.ells
@@ -102,26 +128,37 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
         for j in range(i, len(lk.statistics)):
             myst2 = lk.statistics[j]
             myst2 = myst2.statistic
+            tr3_name = myst2.source0.sacc_tracer
+            tr4_name = myst2.source1.sacc_tracer
             tr3 = myst2.source0.tracers[0].ccl_tracer
             tr4 = myst2.source1.tracers[0].ccl_tracer
             ell34 = myst2.ells
             # Assuming that everything has the same ell-edges and we are just changing the length
             # TODO update this for a more general case
             if len(ell34) < len(ell12):
-                ells_here = ell34.astype(np.int16)
+                ells_here = ell34
+                stat_here = myst2.sacc_data_type
             else:
-                ells_here = ell12.astype(np.int16)
+                ells_here = ell12
+                stat_here = myst1.sacc_data_type
             # Get the necessary Cls
             cls13 = ccl.angular_cl(cosmo, tr1, tr3, ells_here)
             cls24 = ccl.angular_cl(cosmo, tr2, tr4, ells_here)
             cls14 = ccl.angular_cl(cosmo, tr1, tr4, ells_here)
             cls23 = ccl.angular_cl(cosmo, tr2, tr3, ells_here)
+
+            # Add uncorrelated noise (shot/shape) terms for auto-tracer pairs:
+            # C_ab -> C_ab + N_ab, where N_ab != 0 only if a == b.
+            cls13 += _noise_between(tr1_name, tr3_name)
+            cls24 += _noise_between(tr2_name, tr4_name)
+            cls14 += _noise_between(tr1_name, tr4_name)
+            cls23 += _noise_between(tr2_name, tr3_name)
+
             # Normalization factor
-            norm = np.gradient(ells_here)*(2*ells_here+1)*fsky
+            dell = np.diff(ell_edges_by_stat[stat_here])[:len(ells_here)]
+            norm = dell*(2*ells_here+1)*fsky
             cov_here = cls13*cls24 + cls14*cls23
             cov_here /= norm
-            if (i == j) & (myst1.source0.sacc_tracer == myst1.source1.sacc_tracer):
-                cov_here += get_noise_power(config, S, myst1.source0.sacc_tracer)**2
             # The following lines only work if the ell-edges are constant across the probes
             # and we just vary the length
             n_ells = min(len(ell12), len(ell34))
@@ -207,12 +244,16 @@ class TJPCovGaus(FourierGaussianFsky):
 
     def __init__(self, config):
         super().__init__(config)
-        _, self.tracer_Noise = self.get_tracer_info()
+        # self.tracer_Noise = self.tracer_Noise_coupled
 
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()
-        if 'ell_edges' in self.config['tjpcov']['binning_info'].keys():
-            ell_edges = self.config['tjpcov']['binning_info']['ell_edges']
+        if 'ell_edges' not in self.config['tjpcov']['binning_info'].keys():
+            raise ValueError(
+                "`tjpcov.binning_info.ell_edges` must be defined in the configuration "
+                "when using TJPCov with Augur."
+            )
+        ell_edges = self.config['tjpcov']['binning_info']['ell_edges']
         ell_min = np.min(ell_edges)
         ell_max = np.max(ell_edges)
         nbpw = ell_max - ell_min

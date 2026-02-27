@@ -56,6 +56,16 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
                 dict_all['HMCode_eta_baryon'] = hm.get('HMCode_eta_baryon', 0.603)
                 dict_all['HMCode_A_baryon'] = hm.get('HMCode_A_baryon', 3.13)
 
+    # TODO: add modified gravity parameters here
+    # hm = dict_all.pop('mg_parameterization')
+    # if hm is not None:
+    #    print("AHHHHH")
+
+    # hm = dict_all.pop('baryonic_effects')
+
+    _ = dict_all.pop('transfer_function')
+    _ = dict_all.pop('matter_power_spectrum')
+
     keys = list(dict_all.keys())
 
     # Remove None values
