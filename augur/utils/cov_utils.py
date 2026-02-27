@@ -105,6 +105,11 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     # Initialize big matrix
     cov_all = np.zeros((len(S.data), len(S.data)))
 
+    ell_edges_by_stat = {
+        stat_name: np.asarray(eval(stat_cfg['ell_edges']))
+        for stat_name, stat_cfg in config['statistics'].items()
+    }
+
     def _noise_between(tr_a_name, tr_b_name):
         """Uncorrelated noise term N_ab (non-zero only for auto-tracer pairs)."""
         if tr_a_name != tr_b_name:
@@ -132,8 +137,10 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             # TODO update this for a more general case
             if len(ell34) < len(ell12):
                 ells_here = ell34
+                stat_here = myst2.sacc_data_type
             else:
                 ells_here = ell12
+                stat_here = myst1.sacc_data_type
             # Get the necessary Cls
             cls13 = ccl.angular_cl(cosmo, tr1, tr3, ells_here)
             cls24 = ccl.angular_cl(cosmo, tr2, tr4, ells_here)
@@ -148,7 +155,8 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             cls23 += _noise_between(tr2_name, tr3_name)
 
             # Normalization factor
-            norm = np.gradient(ells_here)*(2*ells_here+1)*fsky
+            dell = np.diff(ell_edges_by_stat[stat_here])[:len(ells_here)]
+            norm = dell*(2*ells_here+1)*fsky
             cov_here = cls13*cls24 + cls14*cls23
             cov_here /= norm
             # The following lines only work if the ell-edges are constant across the probes
@@ -236,7 +244,7 @@ class TJPCovGaus(FourierGaussianFsky):
 
     def __init__(self, config):
         super().__init__(config)
-        _, self.tracer_Noise = self.get_tracer_info()
+        # self.tracer_Noise = self.tracer_Noise_coupled
 
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()
