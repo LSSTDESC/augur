@@ -87,7 +87,7 @@ class Analyze(object):
         self.data_fid = self.lk.get_data_vector()
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
-        self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
+        self.pars_fid = tools.get_ccl_cosmology().to_dict()
         self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
@@ -452,7 +452,7 @@ class Analyze(object):
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil, numdifftools, or derivkit.')
-            if self.norm is not None:
+            if (self.norm is not None) and (self.norm_step):
                 self.derivatives /= self.norm[:, None]
             return self.derivatives
         else:

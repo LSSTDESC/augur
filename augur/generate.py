@@ -290,9 +290,9 @@ def generate_sacc_and_stats(config):
                 zmean2 = dndz[tr2].zav
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
                 lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                ells_here = ells[ells < lmax]
+                ells_here = ells[ells <= lmax]
             elif (lmax is not None) and (lmax != 'None'):
-                ells_here = ells[ells < lmax]
+                ells_here = ells[ells <= lmax]
             else:
                 ells_here = ells
                 lmax = ells_here[-1]
@@ -302,10 +302,9 @@ def generate_sacc_and_stats(config):
                                                          cut_low=ells_here[0],
                                                          cut_high=lmax)
                                   )
-
-            if not ignore_sc:
-                ells_here = ells[ells < lmax]
-            else:
+            # User may want likelihood cuts but not generated DV cuts,
+            # allow for this option here.
+            if ignore_sc:
                 ells_here = ells
             # add bandpower windows
             if Bandpower == 'TopHat':
@@ -398,13 +397,11 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
 
-            # Bind our in-memory S after construction, overriding any file-based DataSource.
-            # lk.read(S)
         else:
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
 
-    _pars = cosmo.__dict__['_params_init_kwargs']
+    _pars = cosmo.to_dict()
     # Populate ModelingTools and likelihood
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
