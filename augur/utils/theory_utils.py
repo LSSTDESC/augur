@@ -1,5 +1,5 @@
 from firecrown.parameters import ParamsMap
-
+import warnings
 
 def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     """
@@ -56,15 +56,33 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
                 dict_all['HMCode_eta_baryon'] = hm.get('HMCode_eta_baryon', 0.603)
                 dict_all['HMCode_A_baryon'] = hm.get('HMCode_A_baryon', 3.13)
 
-    # TODO: add modified gravity parameters here
-    # hm = dict_all.pop('mg_parameterization')
-    # if hm is not None:
-    #    print("AHHHHH")
+    # Handle modified gravity parameters
+    mg = dict_all.pop('mg_parametrization', None)
+    if mg is not None:
+        # mg may be a MuSigmaMG object (from cosmo.to_dict()) or a raw
+        # config dict (from YAML).  Normalise to scalar attributes.
+        from pyccl.modified_gravity import MuSigmaMG
+        if isinstance(mg, MuSigmaMG):
+            dict_all['mg_musigma_mu'] = float(mg.mu_0)
+            dict_all['mg_musigma_sigma'] = float(mg.sigma_0)
+            dict_all['mg_musigma_c1'] = float(mg.c1_mg)
+            dict_all['mg_musigma_c2'] = float(mg.c2_mg)
+            dict_all['mg_musigma_lambda0'] = float(mg.lambda_mg)
+        elif isinstance(mg, dict):
+            musigma = mg.get('mu_Sigma', None)
+            if musigma is not None:
+                dict_all['mg_musigma_mu'] = float(musigma.get('mu_0', 0.0))
+                dict_all['mg_musigma_sigma'] = float(musigma.get('sigma_0', 0.0))
+                dict_all['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
+                dict_all['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
+                dict_all['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
 
-    # hm = dict_all.pop('baryonic_effects')
+    be = dict_all.pop('baryonic_effects', None)
+    if be is not None:
+        warnings.warn("Baryonic effects parameters specified but not currently implemented. Ignoring these parameters.")
 
-    _ = dict_all.pop('transfer_function')
-    _ = dict_all.pop('matter_power_spectrum')
+    _ = dict_all.pop('transfer_function', None)
+    _ = dict_all.pop('matter_power_spectrum', None)
 
     keys = list(dict_all.keys())
 

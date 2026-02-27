@@ -88,6 +88,29 @@ class Analyze(object):
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().to_dict()
+        # need to potentially extract modified gravity parameters here and remove superfluous parameters
+        if 'mg_parametrization' in self.pars_fid.keys():
+            mg = self.pars_fid.pop('mg_parametrization')
+            # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
+            from pyccl.modified_gravity import MuSigmaMG
+            if isinstance(mg, MuSigmaMG):
+                self.pars_fid['mg_musigma_mu'] = float(mg.mu_0)
+                self.pars_fid['mg_musigma_sigma'] = float(mg.sigma_0)
+                self.pars_fid['mg_musigma_c1'] = float(mg.c1_mg)
+                self.pars_fid['mg_musigma_c2'] = float(mg.c2_mg)
+                self.pars_fid['mg_musigma_lambda0'] = float(mg.lambda_mg)
+            elif isinstance(mg, dict):
+                musigma = mg.get('mu_Sigma', None)
+                if musigma is not None:
+                    self.pars_fid['mg_musigma_mu'] = float(musigma.get('mu_0', 0.0))
+                    self.pars_fid['mg_musigma_sigma'] = float(musigma.get('sigma_0', 0.0))
+                    self.pars_fid['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
+                    self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
+                    self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
+        if 'baryonic_effects' in self.pars_fid.keys():
+            warnings.warn("Baryonic effects parameters specified but not currently implemented. Ignoring these parameters.")
+            self.pars_fid.pop('baryonic_effects')
+
         self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file

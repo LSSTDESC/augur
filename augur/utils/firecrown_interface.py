@@ -59,8 +59,16 @@ def _create_ccl_factory(config):
     tf_name = cosmo_cfg.pop("transfer_function", "boltzmann_camb").lower()
     tf_enum = TRANSFER_FUNCTION_REGISTRY.get(tf_name, CCLPureModeTransferFunction.BOLTZMANN_CAMB)
 
-    # Optional flag to require nonlinear P(k)
-    require_nl = bool(cosmo_cfg.pop("require_nonlinear_pk", True))
+    # Optional flag to require nonlinear P(k).
+    # If not explicitly provided, infer from matter_power_spectrum so we stay
+    # consistent with the cosmology used during generate_sacc_and_stats().
+    mps_name = cosmo_cfg.pop("matter_power_spectrum", None)
+    require_nl = bool(
+        cosmo_cfg.pop(
+            "require_nonlinear_pk",
+            (mps_name is None) or (str(mps_name).lower() != "linear"),
+        )
+    )
 
     # Handle extra parameters for CAMB matter power spectrum
     camb_baryon = False
@@ -95,6 +103,36 @@ def _create_ccl_factory(config):
     for k, v in acc_cfg.get("gsl_params", {}).items():
         if hasattr(ccl.gsl_params, k):
             ccl.gsl_params[k] = type(getattr(ccl.gsl_params, k))(v)
+
+    mg_cfg = cosmo_cfg.pop('mg_parametrization', None)
+    if mg_cfg is not None:
+        # mg_cfg may already be a MuSigmaMG object (if generate_sacc_and_stats
+        # already converted it in-place on the shared config dict) or still a
+        # raw YAML dict.
+        from pyccl.modified_gravity import MuSigmaMG
+        if isinstance(mg_cfg, MuSigmaMG):
+            mg_obj = mg_cfg
+        elif isinstance(mg_cfg, dict):
+            mu_sig = mg_cfg.get('mu_Sigma', None)
+            if mu_sig is not None:
+                mg_obj = MuSigmaMG(**mu_sig)
+            else:
+                raise ValueError("Modified gravity parametrization specified but not recognized. Currently only 'mu_Sigma' is implemented.")
+        else:
+            raise ValueError(f"Unexpected type for mg_parametrization: {type(mg_cfg)}")
+
+        cosmo_cfg['mg_parametrization'] = mg_obj
+
+        # return early for Mu Sigma for firecrown consistency
+        cosmo = ccl.Cosmology(**cosmo_cfg)
+
+        factory = CCLFactory(
+            creation_mode=CCLCreationMode.MU_SIGMA_ISITGR,
+            require_nonlinear_pk=require_nl,
+            amplitude_parameter=amplitude,
+        )
+        factory.cosmo = cosmo
+        return factory, cosmo 
 
     # Build cosmology
     cosmo = ccl.Cosmology(**cosmo_cfg)

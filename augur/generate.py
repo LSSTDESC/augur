@@ -220,6 +220,21 @@ def generate_sacc_and_stats(config):
                 except ValueError:
                     print(f'The selected value `{value}` could not be casted to `{type_here}`.')
 
+    if cosmo_cfg.get('mg_parametrization', None) is not None:
+        mg_cfg = cosmo_cfg['mg_parametrization']
+        if mg_cfg.get('mu_Sigma', None) is not None:
+            mu_sig = mg_cfg['mu_Sigma']
+            required_keys = ['mu_0', 'sigma_0', 'c1_mg', 'c2_mg', 'lambda_mg']
+            for key in required_keys:
+                if key not in mu_sig.keys():
+                    raise ValueError(f'Missing required key `{key}` in `mu_Sigma` modified gravity parametrization.')
+                else:
+                    try:
+                        mu_sig[key] = float(mu_sig[key])
+                    except ValueError:
+                        print(f'The selected value `{mu_sig[key]}` for `{key}` could not be casted to `float`.')
+
+            cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:
@@ -375,6 +390,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
     config = parse_config(configs)
     # Generate placeholders
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
+    # config = parse_config(configs)
+
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
     # choose objects to take precedence.
