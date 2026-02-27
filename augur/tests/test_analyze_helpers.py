@@ -20,7 +20,7 @@ class DummyTools:
                 self.__dict__['_params_init_kwargs'] = d
 
             def to_dict(self):
-                return self.__dict__['_params_init_kwargs']    
+                return self.__dict__['_params_init_kwargs']
         self._cosmo = Cosmo(pars_fid)
         self.ccl_factory = None
 
