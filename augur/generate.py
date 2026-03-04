@@ -529,8 +529,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         else:
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
-    
-    _pars = cosmo.__dict__['_params_init_kwargs']
+
+    _pars = cosmo.to_dict()
 
     # Populate ModelingTools and likelihood
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
