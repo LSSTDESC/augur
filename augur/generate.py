@@ -22,7 +22,7 @@ from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
-
+import warnings
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
@@ -42,7 +42,7 @@ def _get_tracers(statistic, comb):
         tr1 = f'lens{comb[0]}'
         tr2 = f'src{comb[1]}'
     else:
-        return NotImplementedError('Only C_ls available')
+        raise NotImplementedError('Only C_ls available')
     return tr1, tr2
 
 
@@ -290,9 +290,9 @@ def generate_sacc_and_stats(config):
                 zmean2 = dndz[tr2].zav
                 a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
                 lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                ells_here = ells[ells < lmax]
+                ells_here = ells[ells <= lmax]
             elif (lmax is not None) and (lmax != 'None'):
-                ells_here = ells[ells < lmax]
+                ells_here = ells[ells <= lmax]
             else:
                 ells_here = ells
                 lmax = ells_here[-1]
@@ -302,10 +302,9 @@ def generate_sacc_and_stats(config):
                                                          cut_low=ells_here[0],
                                                          cut_high=lmax)
                                   )
-
-            if not ignore_sc:
-                ells_here = ells[ells < lmax]
-            else:
+            # User may want likelihood cuts but not generated DV cuts,
+            # allow for this option here.
+            if ignore_sc:
                 ells_here = ells
             # add bandpower windows
             if Bandpower == 'TopHat':
@@ -450,12 +449,11 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
 
-            # Bind our in-memory S after construction, overriding any file-based DataSource.
-            # lk.read(S)
         else:
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
     
+
     _pars = cosmo.to_dict()
     # Populate ModelingTools and likelihood
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
@@ -497,6 +495,22 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         S.add_covariance(cov)
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
+        tjpcov_ell_edges = np.asarray(
+            eval(config['cov_options']['binning_info']['ell_edges'])
+        )
+        for stat_name, stat_info in config['statistics'].items():
+            dv_ell_edges = np.asarray(eval(stat_info['ell_edges']))
+            if (
+                tjpcov_ell_edges.shape != dv_ell_edges.shape
+                or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)
+            ):
+                raise ValueError(
+                    "TJPCov ell_edges do not match the data-vector ell_edges "
+                    f"for statistic `{stat_name}`. "
+                    "Please set `cov_options.binning_info.ell_edges` to match "
+                    "`statistics.<stat>.ell_edges`."
+                )
+
         tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
         tjpcov_config['tjpcov'] = dict()
         tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
@@ -520,8 +534,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
         tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
         tjpcov_config['tjpcov']['binning_info'] = dict()
-        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = \
-            eval(config['cov_options']['binning_info']['ell_edges'])
+        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = tjpcov_ell_edges
         for tr in S.tracers:
             _, ndens = get_noise_power(config, S, tr, return_ndens=True)
             tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
@@ -539,12 +552,15 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 for trcombs2 in S.get_tracer_combinations()[i:]:
                     jj = S.indices(tracers=trcombs2)
                     ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
-                    cov_here = cov_calc.get_covariance_block(trcombs1, trcombs2)
+                    # no B-modes for now, as we are only evaluating in Fourier space
+                    cov_here = cov_calc.get_covariance_block(
+                        trcombs1, trcombs2, include_b_modes=False
+                        )
                     cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
                     cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
         S.add_covariance(cov_all)
     else:
-        raise Warning('''Currently only internal Gaussian covariance and SRD has been implemented,
+        warnings.warn('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
     if write_sacc:
         print(config['fiducial_sacc_path'])

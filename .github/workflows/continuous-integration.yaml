@@ -3,6 +3,9 @@ name: flake8 pytest
 
 on: [push]
 
+env:
+  AUGUR_DIR: ${{ github.workspace }}/augur
+
 jobs:
   build:
 

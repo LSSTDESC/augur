@@ -87,7 +87,7 @@ class Analyze(object):
         self.data_fid = self.lk.get_data_vector()
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
-        self.pars_fid = tools.get_ccl_cosmology().__dict__['_params_init_kwargs']
+        self.pars_fid = tools.get_ccl_cosmology().to_dict()
         self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
@@ -164,7 +164,7 @@ class Analyze(object):
         # Normalize the pivot point given the sampling region
         if self.norm_step:
             self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
-                        np.array(self.par_bounds[:, 0]).astype(np.float64)
+                np.array(self.par_bounds[:, 0]).astype(np.float64)
 
         # reads in associated gaussian prior width of parameters
         if 'gaussian_priors' in self.config.keys():
@@ -174,8 +174,7 @@ class Analyze(object):
                 self.gpriors.append(_val)
         # derivative method
         self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
-        if self.derivative_method == 'derivkit':
-            self.derivative_args = self.config.get('derivative_args', {})
+        self.derivative_args = self.config.get('derivative_args', {})
         # step size
         self.step_size = float(self.config.get('step', 0.01))
 
@@ -397,8 +396,8 @@ class Analyze(object):
                 x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                     * 1/self.norm
             elif self.norm_step and 'derivkit' in method:
-                raise warnings.warning('Using derivkit with norm_step=True not recommended.\
-                                       Forcing norm_step to False and continuing computation.')
+                warnings.warn('Using derivkit with norm_step=True not recommended.\
+                               Forcing norm_step to False and continuing computation.')
                 self.norm_step = False
                 x_here = self.x
             else:
@@ -453,7 +452,7 @@ class Analyze(object):
             else:
                 raise ValueError(f'Selected method: `{method}` is not available. \
                                  Please select 5pt_stencil, numdifftools, or derivkit.')
-            if self.norm is not None:
+            if (self.norm is not None) and (self.norm_step):
                 self.derivatives /= self.norm[:, None]
             return self.derivatives
         else:

@@ -135,7 +135,7 @@ sources:  # Sources
        # Nz_sigmaz : 0.05
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_source_bins_y1.txt'
+        input_file : "{{ env['AUGUR_DIR'] }}/data/srd_source_bins_y1.txt"
         format : 'ascii'
         # input_file : 'data/srd_source_bins_year_1.npy'
 
@@ -144,7 +144,7 @@ lenses :  # Lenses
     ndens : 18  # in arcmin^-2, same convention as for sources
     Nz_type : 'ZDistFromFile'
     Nz_kwargs : 
-        input_file : 'data/srd_lens_bins_y1.txt'
+        input_file : "{{ env['AUGUR_DIR'] }}/data/srd_lens_bins_y1.txt"
         format : 'ascii'
         # input_file : 'data/srd_lens_bins_year_1.npy'
     # Nz_type : 'LensSRD2018'  # For now, this is the assumed N(z) for lenses -- check SRD 2018
@@ -181,7 +181,7 @@ cov_options:
     # ------
     # Or you can also get it from a file
     cov_type : 'SRD'
-    SRD_cov_path : './data/Y1_3x2_SRD_cov.npy'
+    SRD_cov_path : "{{ env['AUGUR_DIR'] }}/data/Y1_3x2_SRD_cov.npy"
     # Or using TJPCov
     #cov_type : 'tjpcov'
     #IA : 0.0
@@ -210,7 +210,7 @@ fisher:
     fid_output: 'output/fiducials.dat'
     #transform_Omega_m: True
     #transform_S8: True
-    derivative_method: '5pt_stencil'
+    derivative_method: 'numdifftools'
     #derivative_method: 'derivkit'
     #derivative_args: # args for derivkit
     #  method: 'finite'
