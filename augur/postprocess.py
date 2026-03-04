@@ -73,7 +73,7 @@ def postprocess(config):
         i_key = labels[i]
         for j in range(i+1, npars):
             j_key = labels[j]
-            #print(i_key, j_key)
+            print(i_key, j_key)
             inv_fisher = np.zeros((2, 2))
             inv_fisher[0, 0] = inv_cache[i, i]
             inv_fisher[0, 1] = inv_cache[i, j]
@@ -100,7 +100,6 @@ def postprocess(config):
                 ax[j, i].set_ylabel(j_key)
     plt.tight_layout()
     f.savefig(pconfig["triangle_plot"])
-    plt.close(f)
     if "pairplots" in pconfig.keys():
         pairplots = pconfig["pairplots"]
         npairplots = int(len(pairplots)/2)
@@ -136,7 +135,6 @@ def postprocess(config):
             ax.set_ylabel(pair1)
             plt.tight_layout()
             f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
-            plt.close(f)
 
     # w0 -- wa plots are always made
     # iw = np.where(keys == "w0")[0][0]
