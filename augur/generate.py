@@ -338,7 +338,7 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params, tp_filters
 
 
-def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None, 
+def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
              sacc_path=None, lk=None, tools=None):
     """
     Generate likelihood object and sacc file with fiducial cosmology
@@ -358,7 +358,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         If provided, bypasses the generate_sacc_and_stats function and uses pre-existing data
         vector to generate a likelihood. 
     sacc_path : path
-        If use_sacc is not `None`, a file path must be provided for Firecrown. 
+        If use_sacc is not `None`, a file path must be provided for Firecrown.
     lk : firecrown.likelihood.Likelihood
         If provided, it uses this likelihood object instead of generating a new one.
     tools : firecrown.modeling.ModelingTools
@@ -393,27 +393,35 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 tools.set_ccl_cosmology(cosmo)
             else:
                 cosmo = tools.ccl_cosmo
-        #cosmo.compute_nonlin_power()
+        # cosmo.compute_nonlin_power()
 
         # Build likelihood
         if lk is None:
             if "Firecrown_Factory" in config.keys():
                 from augur.utils.firecrown_interface import load_likelihood_from_yaml
-                if sacc_path == None:
+                if sacc_path is None:
                     raise ValueError("Must include sacc_path when passing a sacc")
 
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
                 _pars = cosmo.__dict__['_params_init_kwargs']
-            
+
                 # Make sure using YOUR covariance
-                if use_sacc is not None and hasattr(use_sacc, 'covariance') and use_sacc.covariance is not None:
+                if (
+                    use_sacc is not None 
+                    and hasattr(use_sacc, 'covariance') 
+                    and use_sacc.covariance is not None
+                ):
                     lk.inv_cov = np.linalg.inv(S.covariance.covmat)
                     lk.cov = S.covariance.covmat  # just in case expected
                     # Ensure dv matches the SACC
                     lk.data_vector = S.mean
 
-                _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
-                
+                _, lk, tools = compute_new_theory_vector(lk,
+                                                         tools,
+                                                         sys_params,
+                                                         _pars,
+                                                         return_all=True)
+
             else:
                 lk = ConstGaussian(statistics=stats)
                 lk.read(S)
@@ -430,7 +438,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
     # choose objects to take precedence.
-
 
     if tools is None:
         tools, cosmo = create_modeling_tools(config)
@@ -461,31 +468,39 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             lk.read(S)
 
             cosmo = tools.ccl_cosmo
-        #cosmo.compute_nonlin_power()
+        # cosmo.compute_nonlin_power()
 
         # Build likelihood
         if lk is None:
             if "Firecrown_Factory" in config.keys():
                 from augur.utils.firecrown_interface import load_likelihood_from_yaml
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
-    
+
                 # Bind our in-memory S after construction, overriding any file-based DataSource.
                 # lk.read(S)
-                if sacc_path == None:
+                if sacc_path is None:
                     raise ValueError("Must include sacc_path when passing a sacc")
 
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
                 _pars = cosmo.__dict__['_params_init_kwargs']
-            
+
                 # Make sure using YOUR covariance
-                if use_sacc is not None and hasattr(use_sacc, 'covariance') and use_sacc.covariance is not None:
+                if (
+                    use_sacc is not None
+                    and hasattr(use_sacc, 'covariance')
+                    and use_sacc.covariance is not None
+                ):
                     lk.inv_cov = np.linalg.inv(S.covariance.covmat)
                     lk.cov = S.covariance.covmat  # just in case expected
                     # Ensure dv matches the SACC
                     lk.data_vector = S.mean
 
-                _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
-                
+                _, lk, tools = compute_new_theory_vector(lk,
+                                                         tools,
+                                                         sys_params,
+                                                         _pars,
+                                                         return_all=True)
+
             else:
                 lk = ConstGaussian(statistics=stats)
                 lk.read(S)
