@@ -338,7 +338,8 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params, tp_filters
 
 
-def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=None):
+def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
+             sacc_path=None, lk=None, tools=None):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -353,6 +354,11 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
         likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
+    use_sacc : sacc.Sacc
+        If provided, bypasses the generate_sacc_and_stats function and uses pre-existing data
+        vector to generate a likelihood.
+    sacc_path : path
+        If use_sacc is not `None`, a file path must be provided for Firecrown.
     lk : firecrown.likelihood.Likelihood
         If provided, it uses this likelihood object instead of generating a new one.
     tools : firecrown.modeling.ModelingTools
@@ -373,7 +379,82 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
 
     """
     config = parse_config(configs)
-    # Generate placeholders
+
+    # Exit function early if a sacc is provided
+    if use_sacc is not None:
+        S = use_sacc
+
+        # Create Firecrown stats object
+        if 'statistics' not in config.keys():
+            raise ValueError('statistics key is required in config file')
+        stat_cfg = config['statistics']
+        stats = []
+        ignore_sc = config['general'].get('ignore_scale_cuts', False)
+        ignore_sc_likelihood = config['general'].get('ignore_scale_cuts_likelihood', False)
+        if not ignore_sc and ignore_sc_likelihood:
+            raise ValueError("Cannot ignore scale cuts in likelihood while \
+                             applying them to the data vector.")
+        for key in stat_cfg.keys():
+            tracer_combs = stat_cfg[key]['tracer_combs']
+            for comb in tracer_combs:
+                tr1, tr2 = _get_tracers(key, comb)
+                # Now create TwoPoint objects for firecrown
+                _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
+                                     sacc_data_type=key)
+                stats.append(_aux_stat)
+
+        # Sys params
+        sys_params = config['systematics'] if 'systematics' in config.keys() else {}
+        if tools is None:
+            tools, cosmo = create_modeling_tools(config)
+        else:
+            if tools.ccl_cosmo is None:
+                # Build a cosmology from the factory
+                cosmo = tools.ccl_factory.build()
+                tools.set_ccl_cosmology(cosmo)
+            else:
+                cosmo = tools.ccl_cosmo
+              # cosmo.compute_nonlin_power()
+
+        # Build likelihood
+        if lk is None:
+            if "Firecrown_Factory" in config.keys():
+                from augur.utils.firecrown_interface import load_likelihood_from_yaml
+                if sacc_path is None:
+                    raise ValueError("Must include sacc_path when passing a sacc")
+
+                lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
+                _pars = cosmo.__dict__['_params_init_kwargs']
+
+                # Make sure using YOUR covariance
+                if (
+                    use_sacc is not None
+                    and hasattr(use_sacc, 'covariance')
+                    and use_sacc.covariance is not None
+                ):
+                    lk.inv_cov = np.linalg.inv(S.covariance.covmat)
+                    lk.cov = S.covariance.covmat  # just in case expected
+                    # Ensure dv matches the SACC
+                    lk.data_vector = S.mean
+
+                _, lk, tools = compute_new_theory_vector(lk,
+                                                         tools,
+                                                         sys_params,
+                                                         _pars,
+                                                         return_all=True)
+
+            else:
+                lk = ConstGaussian(statistics=stats)
+                lk.read(S)
+        else:
+            raise RuntimeError("Non-YAML likelihood with use_sacc is not supported cleanly")
+
+        if return_all_outputs:
+            return lk, tools, sys_params
+        else:
+            return lk
+
+    # Rest of function is only triggered when use_sacc is None
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
@@ -397,11 +478,41 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
 
+    # Rest of function is only triggered when use_sacc is None
+    S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
+
+    # config needs to specify likelihood yaml.
+    # alternatively, can pass likelihood and tools objects at input paramters.
+    # choose objects to take precedence.
+
+    _pars = cosmo.to_dict()
+
+    if tools is None:
+        tools, cosmo = create_modeling_tools(config)
+    cosmo.compute_nonlin_power()
+    if lk is None:
+        if "Firecrown_Factory" in config.keys():
+            # Many Firecrown YAML pipelines expect a DataSourceSacc with a file path.
+            # Save the placeholder/template SACC to a temporary FITS file, build the
+            # likelihood from YAML pointing at that file, then immediately rebind the
+            # in-memory S object to ensure we use the generated data-vector/covariance.
+            import tempfile
+            import os
+            tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
+            tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.fits")
+            S.save_fits(tmp_sacc_path, overwrite=True)
+
+            from augur.utils.firecrown_interface import load_likelihood_from_yaml
+            lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
+
+            # Bind our in-memory S after construction, overriding any file-based DataSource.
+            # lk.read(S)
         else:
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
 
     _pars = cosmo.to_dict()
+
     # Populate ModelingTools and likelihood
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
