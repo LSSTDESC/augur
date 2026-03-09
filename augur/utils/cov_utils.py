@@ -256,6 +256,6 @@ class TJPCovGaus(FourierGaussianFsky):
         ell_edges = self.config['tjpcov']['binning_info']['ell_edges']
         ell_min = np.min(ell_edges)
         ell_max = np.max(ell_edges)
-        nbpw = ell_max - ell_min
+        nbpw = int(ell_max - ell_min)
         ell = np.linspace(ell_min, ell_max, nbpw+1).astype(np.int32)
         return ell, ell_eff, ell_edges
