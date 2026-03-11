@@ -11,3 +11,4 @@ dependencies:
   - numpydoc
   - qp-prob
   - tjpcov
+  - pyccl >= 3.3.1
