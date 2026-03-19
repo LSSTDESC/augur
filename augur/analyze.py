@@ -88,7 +88,8 @@ class Analyze(object):
         self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().to_dict()
-        # need to potentially extract modified gravity parameters here and remove superfluous parameters
+        # need to potentially extract modified gravity parameters here
+        # and remove superfluous parameters
         if 'mg_parametrization' in self.pars_fid.keys():
             mg = self.pars_fid.pop('mg_parametrization')
             # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
@@ -108,7 +109,8 @@ class Analyze(object):
                     self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
                     self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
         if 'baryonic_effects' in self.pars_fid.keys():
-            warnings.warn("Baryonic effects parameters specified but not currently implemented. Ignoring these parameters.")
+            warnings.warn("Baryonic effects parameters specified \
+                           but not currently implemented. Ignoring these parameters.")
             self.pars_fid.pop('baryonic_effects')
 
         self.cf = tools.ccl_factory

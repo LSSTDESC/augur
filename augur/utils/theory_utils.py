@@ -1,6 +1,7 @@
 from firecrown.parameters import ParamsMap
 import warnings
 
+
 def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     """
     Utility function to update the likelihood and modeling tool objects to use a new
@@ -79,7 +80,8 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
 
     be = dict_all.pop('baryonic_effects', None)
     if be is not None:
-        warnings.warn("Baryonic effects parameters specified but not currently implemented. Ignoring these parameters.")
+        warnings.warn("Baryonic effects parameters specified but not currently \
+                       implemented. Ignoring these parameters.")
 
     _ = dict_all.pop('transfer_function', None)
     _ = dict_all.pop('matter_power_spectrum', None)

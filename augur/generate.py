@@ -227,12 +227,14 @@ def generate_sacc_and_stats(config):
             required_keys = ['mu_0', 'sigma_0', 'c1_mg', 'c2_mg', 'lambda_mg']
             for key in required_keys:
                 if key not in mu_sig.keys():
-                    raise ValueError(f'Missing required key `{key}` in `mu_Sigma` modified gravity parametrization.')
+                    raise ValueError(f'Missing required key `{key}` in \
+                                      `mu_Sigma` modified gravity parametrization.')
                 else:
                     try:
                         mu_sig[key] = float(mu_sig[key])
                     except ValueError:
-                        print(f'The selected value `{mu_sig[key]}` for `{key}` could not be casted to `float`.')
+                        print(f'The selected value `{mu_sig[key]}` \
+                              for `{key}` could not be casted to `float`.')
 
             cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
     try:

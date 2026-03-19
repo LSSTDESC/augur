@@ -117,7 +117,8 @@ def _create_ccl_factory(config):
             if mu_sig is not None:
                 mg_obj = MuSigmaMG(**mu_sig)
             else:
-                raise ValueError("Modified gravity parametrization specified but not recognized. Currently only 'mu_Sigma' is implemented.")
+                raise ValueError("Modified gravity parametrization specified \
+                           but not recognized. Currently only 'mu_Sigma' is implemented.")
         else:
             raise ValueError(f"Unexpected type for mg_parametrization: {type(mg_cfg)}")
 
@@ -132,7 +133,7 @@ def _create_ccl_factory(config):
             amplitude_parameter=amplitude,
         )
         factory.cosmo = cosmo
-        return factory, cosmo 
+        return factory, cosmo
 
     # Build cosmology
     cosmo = ccl.Cosmology(**cosmo_cfg)
