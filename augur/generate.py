@@ -67,19 +67,11 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
     # These are to match the N(z)s from the fits file in the firecrown repo
     z = np.linspace(0.004004004004004004,
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
-#    Nz_centers = None
-#    if 'Nz_center' in cfg['Nz_kwargs'].keys():
-#        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
-#        cfg['Nz_kwargs'].pop('Nz_center')
-# Fix check
-    Nz_kwargs = cfg['Nz_kwargs'].copy()
-
     Nz_centers = None
-    if 'Nz_center' in Nz_kwargs:
-        Nz_centers = eval(Nz_kwargs['Nz_center'])
-        Nz_kwargs.pop('Nz_center')
-# end fix check
-# and replace **cfg['Nz_kwargs'] with **Nz_kwargs
+    if 'Nz_center' in cfg['Nz_kwargs'].keys():
+        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+        cfg['Nz_kwargs'].pop('Nz_center')
+
         if np.isscalar(Nz_centers):
             Nz_centers = [Nz_centers]
             if nbins != 1:
@@ -96,15 +88,15 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                         dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
                                                                     Nz_center=Nz_centers[i],
                                                                     Nz_nbins=nbins,
-                                                                    **Nz_kwargs)
+                                                                    **cfg['Nz_kwargs'])
                     else:
                         dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
                                                                     Nz_ibin=i,
                                                                     Nz_nbins=nbins,
-                                                                    **Nz_kwargs)
+                                                                    **cfg['Nz_kwargs'])
 
                 else:
-                    dndz[sacc_tracer] = ZDistFromFile(**Nz_kwargs, ibin=i)
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         else:
@@ -114,14 +106,14 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                         dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
                                                                  Nz_center=Nz_centers[i],
                                                                  Nz_nbins=nbins,
-                                                                 **Nz_kwargs)
+                                                                 **cfg['Nz_kwargs'])
                     else:
                         dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
                                                                  Nz_ibin=i,
                                                                  Nz_nbins=nbins,
-                                                                 **Nz_kwargs)
+                                                                 **cfg['Nz_kwargs'])
                 else:
-                    dndz[sacc_tracer] = ZDistFromFile(**Nz_kwargs, ibin=i)
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
@@ -228,6 +220,23 @@ def generate_sacc_and_stats(config):
                 except ValueError:
                     print(f'The selected value `{value}` could not be casted to `{type_here}`.')
 
+    if cosmo_cfg.get('mg_parametrization', None) is not None:
+        mg_cfg = cosmo_cfg['mg_parametrization']
+        if mg_cfg.get('mu_Sigma', None) is not None:
+            mu_sig = mg_cfg['mu_Sigma']
+            required_keys = ['mu_0', 'sigma_0', 'c1_mg', 'c2_mg', 'lambda_mg']
+            for key in required_keys:
+                if key not in mu_sig.keys():
+                    raise ValueError(f'Missing required key `{key}` in \
+                                      `mu_Sigma` modified gravity parametrization.')
+                else:
+                    try:
+                        mu_sig[key] = float(mu_sig[key])
+                    except ValueError:
+                        print(f'The selected value `{mu_sig[key]}` \
+                              for `{key}` could not be casted to `float`.')
+
+            cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:
@@ -414,14 +423,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         if not ignore_sc and ignore_sc_likelihood:
             raise ValueError("Cannot ignore scale cuts in likelihood while \
                              applying them to the data vector.")
-#        for key in stat_cfg.keys():
-#            tracer_combs = stat_cfg[key]['tracer_combs']
-#            for comb in tracer_combs:
-#                tr1, tr2 = _get_tracers(key, comb)
-#                # Now create TwoPoint objects for firecrown
-#                _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
-#                                     sacc_data_type=key)
-#                stats.append(_aux_stat)
+
         # Detect flat vs nested structure
         if 'tracer_combs' in stat_cfg:
             # Flat format (your custom shortcut)
@@ -516,7 +518,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             return lk
 
     # Rest of function is only triggered when use_sacc is None
+
+    # Generate placeholders
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
+    # config = parse_config(configs)
 
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
@@ -539,6 +544,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
 
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
+
+        else:
+            lk = ConstGaussian(statistics=stats)
+            lk.read(S)
 
     _pars = cosmo.to_dict()
     # Populate ModelingTools and likelihood
