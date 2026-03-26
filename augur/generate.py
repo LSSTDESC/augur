@@ -67,11 +67,19 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
     # These are to match the N(z)s from the fits file in the firecrown repo
     z = np.linspace(0.004004004004004004,
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
-    Nz_centers = None
-    if 'Nz_center' in cfg['Nz_kwargs'].keys():
-        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
-        cfg['Nz_kwargs'].pop('Nz_center')
+#    Nz_centers = None
+#    if 'Nz_center' in cfg['Nz_kwargs'].keys():
+#        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+#        cfg['Nz_kwargs'].pop('Nz_center')
+# Fix check
+    Nz_kwargs = cfg['Nz_kwargs'].copy()
 
+    Nz_centers = None
+    if 'Nz_center' in Nz_kwargs:
+        Nz_centers = eval(Nz_kwargs['Nz_center'])
+        Nz_kwargs.pop('Nz_center')
+# end fix check
+# and replace **cfg['Nz_kwargs'] with **Nz_kwargs
         if np.isscalar(Nz_centers):
             Nz_centers = [Nz_centers]
             if nbins != 1:
@@ -88,15 +96,15 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                         dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
                                                                     Nz_center=Nz_centers[i],
                                                                     Nz_nbins=nbins,
-                                                                    **cfg['Nz_kwargs'])
+                                                                    **Nz_kwargs)
                     else:
                         dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
                                                                     Nz_ibin=i,
                                                                     Nz_nbins=nbins,
-                                                                    **cfg['Nz_kwargs'])
+                                                                    **Nz_kwargs)
 
                 else:
-                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+                    dndz[sacc_tracer] = ZDistFromFile(**Nz_kwargs, ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         else:
@@ -106,14 +114,14 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                         dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
                                                                  Nz_center=Nz_centers[i],
                                                                  Nz_nbins=nbins,
-                                                                 **cfg['Nz_kwargs'])
+                                                                 **Nz_kwargs)
                     else:
                         dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
                                                                  Nz_ibin=i,
                                                                  Nz_nbins=nbins,
-                                                                 **cfg['Nz_kwargs'])
+                                                                 **Nz_kwargs)
                 else:
-                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+                    dndz[sacc_tracer] = ZDistFromFile(**Nz_kwargs, ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
@@ -220,23 +228,6 @@ def generate_sacc_and_stats(config):
                 except ValueError:
                     print(f'The selected value `{value}` could not be casted to `{type_here}`.')
 
-    if cosmo_cfg.get('mg_parametrization', None) is not None:
-        mg_cfg = cosmo_cfg['mg_parametrization']
-        if mg_cfg.get('mu_Sigma', None) is not None:
-            mu_sig = mg_cfg['mu_Sigma']
-            required_keys = ['mu_0', 'sigma_0', 'c1_mg', 'c2_mg', 'lambda_mg']
-            for key in required_keys:
-                if key not in mu_sig.keys():
-                    raise ValueError(f'Missing required key `{key}` in \
-                                      `mu_Sigma` modified gravity parametrization.')
-                else:
-                    try:
-                        mu_sig[key] = float(mu_sig[key])
-                    except ValueError:
-                        print(f'The selected value `{mu_sig[key]}` \
-                              for `{key}` could not be casted to `float`.')
-
-            cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:
@@ -355,7 +346,8 @@ def generate_sacc_and_stats(config):
     return S, cosmo, stats, sys_params, tp_filters
 
 
-def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=None):
+def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
+             sacc_path=None, lk=None, tools=None):
     """
     Generate likelihood object and sacc file with fiducial cosmology
 
@@ -370,6 +362,11 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
         likelihood object.
     write_sacc : bool
         If `True` it writes a sacc file with fiducial data vector.
+    use_sacc : sacc.Sacc
+        If provided, bypasses the generate_sacc_and_stats function and uses pre-existing data
+        vector to generate a likelihood.
+    sacc_path : path
+        If use_sacc is not `None`, a file path must be provided for Firecrown.
     lk : firecrown.likelihood.Likelihood
         If provided, it uses this likelihood object instead of generating a new one.
     tools : firecrown.modeling.ModelingTools
@@ -390,9 +387,136 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
 
     """
     config = parse_config(configs)
-    # Generate placeholders
+
+    # Exit function early if a sacc is provided
+    if use_sacc is not None:
+        S = use_sacc
+
+        # Create Firecrown stats object
+        # Read info in from the sacc
+        sources = {}
+        for tracer_name in S.tracers:
+            tracer_obj = S.get_tracer(tracer_name)
+            if tracer_obj.quantity == "galaxy_shear":
+                sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_obj)
+            elif tracer_obj.quantity == "galaxy_density":
+                sources[tracer_name] = nc.NumberCounts(
+                    sacc_tracer=tracer_obj,
+                    derived_scale=True
+                )
+
+        if 'statistics' not in config.keys():
+            raise ValueError('statistics key is required in config file')
+        stat_cfg = config['statistics']
+        stats = []
+        ignore_sc = config['general'].get('ignore_scale_cuts', False)
+        ignore_sc_likelihood = config['general'].get('ignore_scale_cuts_likelihood', False)
+        if not ignore_sc and ignore_sc_likelihood:
+            raise ValueError("Cannot ignore scale cuts in likelihood while \
+                             applying them to the data vector.")
+#        for key in stat_cfg.keys():
+#            tracer_combs = stat_cfg[key]['tracer_combs']
+#            for comb in tracer_combs:
+#                tr1, tr2 = _get_tracers(key, comb)
+#                # Now create TwoPoint objects for firecrown
+#                _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
+#                                     sacc_data_type=key)
+#                stats.append(_aux_stat)
+        # Detect flat vs nested structure
+        if 'tracer_combs' in stat_cfg:
+            # Flat format (your custom shortcut)
+            if use_sacc is None:
+                raise ValueError("Flat 'statistics' format requires use_sacc")
+
+            # Infer the SACC data type automatically
+            data_types = S.get_data_types()
+            if len(data_types) != 1:
+                raise ValueError(
+                    "Flat statistics format only supported when SACC has a single data type"
+                )
+            key = data_types[0]
+
+            tracer_combs = stat_cfg['tracer_combs']
+
+            for comb in tracer_combs:
+                tr1, tr2 = _get_tracers(key, comb)
+                stats.append(
+                    TwoPoint(
+                        source0=sources[tr1],
+                        source1=sources[tr2],
+                        sacc_data_type=key
+                    )
+                )
+
+        else:
+            # Original nested format (unchanged behavior)
+            for key in stat_cfg.keys():
+                tracer_combs = stat_cfg[key]['tracer_combs']
+                for comb in tracer_combs:
+                    tr1, tr2 = _get_tracers(key, comb)
+                    stats.append(
+                        TwoPoint(
+                            source0=sources[tr1],
+                            source1=sources[tr2],
+                            sacc_data_type=key
+                        )
+                    )
+
+        # Sys params
+        sys_params = config['systematics'] if 'systematics' in config.keys() else {}
+        if tools is None:
+            tools, cosmo = create_modeling_tools(config)
+        else:
+            if tools.ccl_cosmo is None:
+                # Build a cosmology from the factory
+                cosmo = tools.ccl_factory.build()
+                tools.set_ccl_cosmology(cosmo)
+            else:
+                # cosmo.compute_nonlin_power()
+                cosmo = tools.ccl_cosmo
+
+        # Build likelihood
+        if lk is None:
+            if "Firecrown_Factory" in config.keys():
+                from augur.utils.firecrown_interface import load_likelihood_from_yaml
+                if sacc_path is None:
+                    raise ValueError("Must include sacc_path when passing a sacc")
+
+                lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
+                # _pars = cosmo.__dict__['_params_init_kwargs']
+                _pars = config.get('cosmo', {}).copy()
+                print(_pars)
+
+                # Make sure using YOUR covariance
+                if (
+                    use_sacc is not None
+                    and hasattr(use_sacc, 'covariance')
+                    and use_sacc.covariance is not None
+                ):
+                    lk.inv_cov = np.linalg.inv(S.covariance.covmat)
+                    lk.cov = S.covariance.covmat  # just in case expected
+                    # Ensure dv matches the SACC
+                    lk.data_vector = S.mean
+
+                _, lk, tools = compute_new_theory_vector(lk,
+                                                         tools,
+                                                         sys_params,
+                                                         _pars,
+                                                         return_all=True)
+
+            else:
+                lk = ConstGaussian(statistics=stats)
+                lk.read(S)
+        else:
+            raise RuntimeError("Non-YAML likelihood with use_sacc is not supported cleanly")
+
+        if return_all_outputs:
+            return lk, tools, sys_params
+        else:
+            return lk
+
+    # Rest of function is only triggered when use_sacc is None
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
-    # config = parse_config(configs)
 
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
@@ -415,10 +539,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, lk=None, tools=
 
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
-
-        else:
-            lk = ConstGaussian(statistics=stats)
-            lk.read(S)
 
     _pars = cosmo.to_dict()
     # Populate ModelingTools and likelihood
