@@ -44,7 +44,7 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     extra_dict['mass_split'] = dict_all['mass_split']
     dict_all.pop('mass_split')
 
-    hm = dict_all.pop('extra_parameters')
+    hm = dict_all.pop('extra_parameters', None)
     if hm is not None and 'camb' in hm.keys():
         hm = hm.pop('camb')
         if hm is not None:
