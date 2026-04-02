@@ -137,7 +137,7 @@ python -m pip install --no-deps --editable ${PWD}
 `augur` has changed from its initial version and currently only contains a
 `generate` stage where it creates the firecrown-likelihood object and fiducial data vector as specified by the configuration file passed to this stage.
 
-The user can create configuration files to fit their specific purposes following the example configuration files in the [`examples`](./examples) subdirectory. We show a quick example of how to obtain a likelihood object from an example configuration file.
+The user can create configuration files to fit their specific purposes following the example configuration files in the [`examples`](./examples) subdirectory. Please refer to the [`config_guide`](./examples/config_guide.md) to set up an analysis for your specific science case. We show a quick example of how to obtain a likelihood object from an example configuration file.
 
 ```
 from augur.generate import generate
@@ -155,8 +155,8 @@ ao.get_fisher_bias(method='5pt_stencil')  # This command computes the derivates+
 print(ao.Fij, ao.bi)  # These are the values of the Fisher matrix, Fij, and Fisher biases bi
 ```
 
-## Example run for SRD v1
-We also include example configuration files for `cosmosis` and `cobaya` to reproduce the results from the [LSST DESC Science Requirements Document](https://arxiv.org/pdf/1809.01669.pdf).
+## Example run for SRD Y1
+We also include example configuration files for `cosmosis` to reproduce the results from the [LSST DESC Science Requirements Document](https://arxiv.org/pdf/1809.01669.pdf).
 
 __Note: It is left to the discretion of the user which inference framework to use. In order to run the chains the user can decide whether they want to install `cosmosis`, `cobaya`, or `NumCosmo`, or a combination of them.__
 
@@ -180,16 +180,3 @@ Feel free to modify the paths indicated in this configuration file as needed or 
 * `CSL_DIR`: The path to the directory where the cosmosis standard library can be found. It should contain the cosmosis modules.
 * `AUGUR_DIR`: The directory where you have `augur` or the `augur` installation.
 * `FIRECROWN_DIR`: The directory where you have `firecrown` or the `firecrown` installation.
-
-### Cobaya
-
-Similarly to the case of `cosmosis`, first you need to have `cobaya` installed in order to be able to run the `cobaya` example. Please follow the instructions [here](https://cobaya.readthedocs.io/en/latest/installation.html) to learn how to install `cobaya`.
-
-To run the example chain you can just do:
-
-```
-cd examples
-cobaya-run cobaya_mcmc.yaml
-```
-
-By default the outputs will be saved at `./examples/cobaya_evaluate_output`.
