@@ -20,7 +20,7 @@ def run(config, verbose):
         print("rendered config file:\n", pprint.pformat(parsed_config), flush=True)
 
     print("Generating fiducial data vector...", flush=True)
-    likelihood, tools, req_params = generate(parsed_config, return_all_outputs=True)
+    likelihood, S, tools, req_params = generate(parsed_config, return_all_outputs=True)
 
     if "fisher" in parsed_config:
         print("Computing Fisher matrix...", flush=True)
@@ -31,8 +31,6 @@ def run(config, verbose):
             req_params=req_params,
         )
         analysis.get_fisher_matrix()
-        if "gaussian_priors" in parsed_config["fisher"]:
-            analysis.add_gaussian_priors()
         if "fisher_bias" in parsed_config["fisher"]:
             analysis.get_fisher_bias()
 
