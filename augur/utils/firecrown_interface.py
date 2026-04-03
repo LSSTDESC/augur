@@ -35,10 +35,16 @@ PT_CALCULATOR_REGISTRY = {
 
 BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead', 'mead2015', 'mead2016']
 
-TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
-                      'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
-                      'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
-                      }
+TP_FILTER_REGISTRY = {
+    'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
+    'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
+    'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
+    # Real-space aliases used by TwoPointFactory(correlation_space='real')
+    'galaxy_shear_xi_plus': [[Galaxies.PART_OF_XI_PLUS, Galaxies.PART_OF_XI_PLUS]],
+    'galaxy_shear_xi_minus': [[Galaxies.PART_OF_XI_MINUS, Galaxies.PART_OF_XI_MINUS]],
+    'galaxy_density_xi': [[Galaxies.COUNTS, Galaxies.COUNTS]],
+    'galaxy_shearDensity_xi_t': [[Galaxies.COUNTS, Galaxies.SHEAR_T]],
+}
 
 
 def _create_ccl_factory(config):
