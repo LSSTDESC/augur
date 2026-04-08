@@ -1,7 +1,6 @@
 """Tracer / N(z) setup and naming helpers."""
 
 import numpy as np
-import sacc
 
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile
 
@@ -13,7 +12,11 @@ implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
 def get_tracers(statistic, comb):
     """
-    Map a statistic name and bin combination to SACC tracer names.
+    Map a galaxy two-point statistic and bin pair to SACC tracer names.
+
+    This helper is intentionally limited to galaxy source/lens two-point
+    observables used by harmonic and real-space 2pt generation. CMB-lensing
+    and cluster-count probe modules define their own tracer mapping rules.
 
     Parameters
     ----------
@@ -27,15 +30,29 @@ def get_tracers(statistic, comb):
     tr1, tr2 : str
         SACC tracer names (e.g. ``'lens0'``, ``'src1'``).
     """
-    if 'galaxy_density' in statistic:
+    stat_lower = str(statistic).lower()
+
+    if 'cmb' in stat_lower or 'cluster' in stat_lower:
+        raise NotImplementedError(
+            f"Statistic '{statistic}' is not handled by get_tracers. "
+            "Use the probe-specific mapping in generate_utils/cmb_lensing.py "
+            "or generate_utils/cluster_counts.py."
+        )
+
+    if len(comb) != 2:
+        raise ValueError(
+            f"Statistic '{statistic}' expects a 2-bin combination, got {comb}."
+        )
+
+    if 'galaxy_sheardensity' in stat_lower:
         tr1 = f'lens{comb[0]}'
-        tr2 = f'lens{comb[1]}'
-    elif 'galaxy_shear' in statistic and 'Density' not in statistic:
+        tr2 = f'src{comb[1]}'
+    elif 'galaxy_shear' in stat_lower:
         tr1 = f'src{comb[0]}'
         tr2 = f'src{comb[1]}'
-    elif 'galaxy_shearDensity' in statistic:
+    elif 'galaxy_density' in stat_lower:
         tr1 = f'lens{comb[0]}'
-        tr2 = f'src{comb[1]}'
+        tr2 = f'lens{comb[1]}'
     else:
         raise NotImplementedError(
             f'Tracer mapping not implemented for statistic: {statistic}'

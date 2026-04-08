@@ -14,7 +14,7 @@ from firecrown.ccl_factory import (
     CAMBExtraParams,
     PoweSpecAmplitudeParameter,
 )
-from firecrown.metadata_types import Galaxies
+from firecrown.metadata_types import Galaxies, CMB
 from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFilter
 
 import warnings
@@ -44,6 +44,13 @@ TP_FILTER_REGISTRY = {
     'galaxy_shear_xi_minus': [[Galaxies.PART_OF_XI_MINUS, Galaxies.PART_OF_XI_MINUS]],
     'galaxy_density_xi': [[Galaxies.COUNTS, Galaxies.COUNTS]],
     'galaxy_shearDensity_xi_t': [[Galaxies.COUNTS, Galaxies.SHEAR_T]],
+    # CMB lensing harmonic correlations
+    'cmb_convergence_cl': [[CMB.CONVERGENCE, CMB.CONVERGENCE]],
+    'cmbGalaxy_convergenceDensity_cl': [[CMB.CONVERGENCE, Galaxies.COUNTS]],
+    'cmbGalaxy_convergenceShear_cl_e': [[CMB.CONVERGENCE, Galaxies.SHEAR_E]],
+    # CMB lensing real-space cross correlations (experimental path)
+    'cmbGalaxy_convergenceDensity_xi': [[CMB.CONVERGENCE, Galaxies.COUNTS]],
+    'cmbGalaxy_convergenceShear_xi_t': [[CMB.CONVERGENCE, Galaxies.SHEAR_T]],
 }
 
 

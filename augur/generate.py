@@ -14,7 +14,6 @@ This module orchestrates the high-level flow:
 """
 
 import numpy as np
-import pyccl as ccl
 import sacc
 import warnings
 
@@ -31,7 +30,6 @@ from augur.utils.firecrown_interface import create_modeling_tools
 from augur.generate_utils.cosmology import initialize_cosmology
 from augur.generate_utils.tracers import (
     get_tracers as _get_tracers_impl,
-    add_nz as _add_nz_impl,
     setup_sources,
     setup_lenses,
 )
@@ -113,6 +111,12 @@ def generate_sacc_and_stats(config):
     all_tp_filters = []
     active_probes = []
 
+    if 'statistics' in config and 'statistics_real_space' in config:
+        raise ValueError(
+            "Augur does not support specifying both \'statistics\'"
+            " and \'statistics_real_space\' in config."
+        )
+
     # 4a. Harmonic-space two-point (required for existing configs)
     if 'statistics' in config:
         stats_h, filters_h = add_harmonic_two_point(
@@ -133,15 +137,28 @@ def generate_sacc_and_stats(config):
 
     # 4c. CMB lensing (stub)
     if 'cmb_lensing' in config:
-        stats_cmb, filters_cmb = add_cmb_lensing(
-            config, S, sources, dndz, cosmo
-        )
-        all_stats.extend(stats_cmb)
-        all_tp_filters.extend(filters_cmb)
-        active_probes.append('cmb_lensing')
+        if 'statistics_real_space' in config:
+            warnings.warn(
+                "CMB lensing generation is currently only implemented for "
+                "harmonic-space statistics. If 'statistics_real_space' is also "
+                "present in the config, the CMB lensing section will be ignored."
+            )
+        else:
+            stats_cmb, filters_cmb = add_cmb_lensing(
+                config, S, sources, dndz, cosmo
+            )
+            all_stats.extend(stats_cmb)
+            all_tp_filters.extend(filters_cmb)
+            active_probes.append('cmb_lensing')
 
     # 4d. Cluster counts (stub)
     if 'cluster_counts' in config:
+        raise NotImplementedError(
+            "Cluster count generation is not yet implemented in Augur. "
+            "Calling add_cluster_counts will register placeholder tracers and "
+            "issue a warning, but no firecrown likelihood objects are created. "
+            "Firecrown factories for cluster counts with CROW are not yet available."
+        )
         stats_cc, filters_cc = add_cluster_counts(
             config, S, sources, cosmo
         )
@@ -317,7 +334,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # ── 3. Likelihood ───────────────────────────────────────────────── #
     if lk is None:
         if "Firecrown_Factory" in config:
-            import tempfile, os
+            import tempfile
+            import os
             tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
             tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.fits")
             S.save_fits(tmp_sacc_path, overwrite=True)
@@ -380,7 +398,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             filters=tp_filters,
         )
     elif "Firecrown_Factory" in config:
-        import tempfile, os
+        import tempfile
+        import os
         tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_final_")
         tmp_sacc_path = os.path.join(tmp_dir, "final_sacc.fits")
         S.save_fits(tmp_sacc_path, overwrite=True)

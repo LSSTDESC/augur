@@ -7,11 +7,15 @@ import sacc
 from firecrown.likelihood.two_point import TwoPoint
 from augur.utils.firecrown_interface import create_twopoint_filter
 from augur.generate_utils.tracers import get_tracers
+from augur.generate_utils.scale_cuts import parse_combination_scale_cut
 
 
 def _get_scale_cuts(stat_cfg, comb):
     """
     Extract the ell/k scale-cut for a tracer combination.
+
+    ``lmax`` and ``kmax`` may be provided either as scalars (applied to all
+    combinations) or as lists with one entry per ``tracer_combs`` element.
 
     Parameters
     ----------
@@ -25,23 +29,11 @@ def _get_scale_cuts(stat_cfg, comb):
     lmax : float or None
     kmax : float or None
     """
-    tracer_combs = stat_cfg.get('tracer_combs', [])
     if 'kmax' in stat_cfg and 'lmax' in stat_cfg:
         raise ValueError('Cannot specify both lmax and kmax for scale cuts.')
 
-    lmax = stat_cfg.get('lmax', None)
-    if isinstance(lmax, list):
-        if len(lmax) != len(tracer_combs):
-            raise ValueError('If lmax is a list, it must have the same length as tracer_combs')
-        lmax = lmax[tracer_combs.index(comb)]
-    elif isinstance(lmax, (int, float)) or lmax is None or lmax == 'None':
-        pass
-    else:
-        raise ValueError('lmax must be either a single number or a list of numbers')
-
-    kmax = stat_cfg.get('kmax', None)
-    if kmax is not None and not isinstance(kmax, (int, float)) and kmax != 'None':
-        raise ValueError('kmax must be a single number')
+    lmax = parse_combination_scale_cut(stat_cfg, 'lmax', comb)
+    kmax = parse_combination_scale_cut(stat_cfg, 'kmax', comb)
     return lmax, kmax
 
 

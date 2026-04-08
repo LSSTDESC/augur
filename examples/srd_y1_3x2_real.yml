@@ -104,6 +104,11 @@ statistics_real_space:
                        [4, 4]]
         theta_edges: np.geomspace(2.5, 250., 21, endpoint=True)
         theta_min: 10.0
+        ell_for_xi:
+            minimum: 2
+            midpoint: 50
+            maximum: 60000
+            n_log: 200
     galaxy_shear_xi_minus:
         tracer_combs: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
                        [1, 1], [1, 2], [1, 3], [1, 4],
@@ -112,6 +117,11 @@ statistics_real_space:
                        [4, 4]]
         theta_edges: np.geomspace(2.5, 250., 21, endpoint=True)
         theta_min: 10.0
+        ell_for_xi:
+            minimum: 2
+            midpoint: 50
+            maximum: 60000
+            n_log: 200
 
 
 # See README section "cov_options" for gaus_internal and tjpcov alternatives.
