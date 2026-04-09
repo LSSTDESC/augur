@@ -131,6 +131,7 @@ def _create_ccl_factory(config):
             creation_mode=CCLCreationMode.MU_SIGMA_ISITGR,
             require_nonlinear_pk=require_nl,
             amplitude_parameter=amplitude,
+            mass_split=cosmo_cfg.get("mass_split", "normal"),
         )
         factory.cosmo = cosmo
         return factory, cosmo
@@ -145,6 +146,7 @@ def _create_ccl_factory(config):
         camb_extra_params=camb_extra,
         use_camb_hm_sampling=camb_baryon,
         amplitude_parameter=amplitude,
+        mass_split=cosmo_cfg.get("mass_split", "normal"),
     )
     factory.cosmo = cosmo
     return factory, cosmo
