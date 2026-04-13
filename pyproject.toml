@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=65", "setuptools-scm>=7"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "augur"
+description = "DESC Cosmology Forecasting Tool"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "LICENSE"}
+authors = [
+    {name = "DESC Team"}
+]
+keywords = ["cosmology", "forecasting", "fisher", "inference"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+dynamic = ["version"]
+
+dependencies = [
+    "jinja2",
+    "healpy",
+    "numpydoc",
+    "qp-prob",
+    "pyccl>=3.3.1",
+    "tjpcov",
+    "numdifftools",
+    "scipy",
+    "numpy",
+    "sacc",
+    "astropy",
+    "pandas",
+    "click",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8",
+    "pytest",
+    "black",
+    "isort",
+    "derivkit",
+]
+
+[project.urls]
+Repository = "https://github.com/LSSTDESC/augur"
+Documentation = "https://github.com/LSSTDESC/augur"
+
+[project.scripts]
+augur = "augur.cli:run"
+
+[tool.setuptools.packages.find]
+exclude = ["examples*", "tests*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "augur._version.__version__"}
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312", "py313", "py314"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pylint]
+max-line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["augur/tests"]
+python_files = "test_*.py"

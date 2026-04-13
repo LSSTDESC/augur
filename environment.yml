@@ -12,3 +12,7 @@ dependencies:
   - qp-prob
   - tjpcov
   - pyccl >= 3.3.1
+  - astropy
+  - click
+  - pandas
+  - pyyaml
