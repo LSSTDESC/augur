@@ -7,6 +7,8 @@ from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
 import pandas as pd
+import astropy.table
+import os
 
 mnu_norm = 93.14  # eV
 
@@ -616,7 +618,6 @@ class Analyze(object):
         # Allowing to provide externally calculated "systematics"
         # They should have the same ells as the original data-vector
         # and the same length
-        import os
 
         if self.derivatives is None:
             self.get_derivatives(force=force, method=method)
@@ -636,7 +637,6 @@ class Analyze(object):
                 if (len(_sys_path) < 1) or (os.path.exists(_sys_path) is False):
                     _calculate_biased_cls = True
                 else:
-                    import astropy.table
                     if ('.dat' in _sys_path) or ('.txt' in _sys_path):
                         _format = 'ascii'
                     elif ('.fits' in _sys_path):
