@@ -19,6 +19,7 @@ from firecrown.likelihood.two_point import TwoPoint
 from augur.utils.firecrown_interface import create_twopoint_filter
 from augur.generate_utils.scale_cuts import parse_combination_scale_cut
 from augur.generate_utils.tracers import get_tracers
+from augur.utils.config_io import parse_array
 
 # Radians → arcmin conversion factor
 _RAD_TO_ARCMIN = 180.0 * 60.0 / np.pi
@@ -180,7 +181,7 @@ def add_real_space_two_point(config, S, sources, dndz, cosmo):
         tracer_combs = stat_cfg[key]['tracer_combs']
 
         # Angular bins in arcmin
-        theta_edges = np.array(eval(stat_cfg[key]['theta_edges']))  # arcmin
+        theta_edges = parse_array(stat_cfg[key]['theta_edges'])  # arcmin
         theta_centers = np.sqrt(theta_edges[:-1] * theta_edges[1:])
 
         # Sanity-check theta range

@@ -28,6 +28,8 @@ See :func:`setup_cluster_sacc_tracers_for_tjpcov` for tracer setup.
 
 import numpy as np
 import sacc
+
+from augur.utils.config_io import parse_array
 import warnings
 
 
@@ -140,10 +142,14 @@ def setup_cluster_sacc_tracers_for_tjpcov(S, config):
         return
 
     # Parse redshift and richness bin edges
-    z_edges = np.asarray(eval(cluster_cfg.get('z_edges', '[0.3, 0.5, 0.7, 1.2]')))
-    richness_log_edges = np.asarray(
-        eval(cluster_cfg.get('richness_log_edges', '[1.0, 1.48, 1.90, 2.30]'))
+    z_edges = parse_array(cluster_cfg.get('z_edges', None))
+    richness_log_edges = parse_array(
+        cluster_cfg.get('richness_log_edges', None)
     )
+    if z_edges is None or richness_log_edges is None:
+        raise ValueError(
+            "Cluster counts require 'z_edges' and 'richness_log_edges' in config."
+        )
 
     # Add bin_z tracers (redshift bins)
     for i in range(len(z_edges) - 1):

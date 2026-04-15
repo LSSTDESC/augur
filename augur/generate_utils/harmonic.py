@@ -8,6 +8,7 @@ from firecrown.likelihood.two_point import TwoPoint
 from augur.utils.firecrown_interface import create_twopoint_filter
 from augur.generate_utils.tracers import get_tracers
 from augur.generate_utils.scale_cuts import parse_combination_scale_cut
+from augur.utils.config_io import parse_array
 
 
 def _get_scale_cuts(stat_cfg, comb):
@@ -78,7 +79,7 @@ def add_harmonic_two_point(config, S, sources, dndz, cosmo):
 
     for key in stat_cfg:
         tracer_combs = stat_cfg[key]['tracer_combs']
-        ell_edges = eval(stat_cfg[key]['ell_edges'])
+        ell_edges = parse_array(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1] * ell_edges[1:])  # geometric mean
 
         for comb in tracer_combs:

@@ -5,6 +5,7 @@ import warnings
 
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus, TJPCovClusterGaus, TJPCovClusterSSC
+from augur.utils.config_io import parse_array
 
 
 def compute_covariance(config, S, lk, cosmo, tools, probes=None):
@@ -57,12 +58,31 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
     #     tjpcov_capable = {'harmonic', 'cmb_lensing', 'cluster_counts'}
     #     unsupported_probes = [p for p in probes if p not in tjpcov_capable]
 
+    # ---- Probe support check for gaus_internal / SRD ---------- #
+    _gaus_supported = {'harmonic', 'cmb_lensing'}
+    _srd_supported = {'harmonic'}  # SRD matrices are pre-computed for WL+GCl only
+    _active = set(probes) if probes else {'harmonic'}
+
     if cov_type == 'gaus_internal':
+        unsupported = _active - _gaus_supported
+        if unsupported:
+            warnings.warn(
+                f"gaus_internal does not support probes {unsupported}. "
+                "Their covariance blocks will receive a placeholder "
+                "(variance = 1e30) so the matrix stays invertible."
+            )
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
         S.add_covariance(cov)
 
     elif cov_type == 'srd':
+        unsupported = _active - _srd_supported
+        if unsupported:
+            warnings.warn(
+                f"SRD covariance does not support probes {unsupported}. "
+                "Only harmonic two-point blocks are covered; other blocks "
+                "will receive a placeholder (variance = 1e30)."
+            )
         cov = get_SRD_cov(config['cov_options'], S)
         S.add_covariance(cov)
 
@@ -88,8 +108,8 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
 
         # ---- Compute Fourier (Harmonic + CMB Lensing) Covariance ---- #
         if has_fourier or has_cmb:
-            tjpcov_ell_edges = np.asarray(
-                eval(config['cov_options']['binning_info']['ell_edges'])
+            tjpcov_ell_edges = parse_array(
+                config['cov_options']['binning_info']['ell_edges']
             )
 
             # TJPCov FourierGaussianFsky uses a single global ell binning.
@@ -102,7 +122,7 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
                     all_harmonic_stats[stat_name] = stat_info
 
             for stat_name, stat_info in all_harmonic_stats.items():
-                dv_ell_edges = np.asarray(eval(stat_info['ell_edges']))
+                dv_ell_edges = parse_array(stat_info['ell_edges'])
                 if (
                     tjpcov_ell_edges.shape != dv_ell_edges.shape
                     or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)

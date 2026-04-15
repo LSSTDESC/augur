@@ -1,0 +1,201 @@
+# SRD-like Year 1 example: joint 3x2pt + CMB lensing forecast in harmonic space with TJPCov.
+# Usage:
+#   augur examples/srd_y1_3x2pt_cmb_lensing_tjpcov.yml
+
+fiducial_sacc_path: output/srd_y1_3x2pt_cmb_lensing_tjpcov.sacc
+
+general:
+    ignore_scale_cuts: True
+    ignore_scale_cuts_likelihood: False
+    bandpower_windows: None
+
+cosmo:
+    Omega_c: 0.2664
+    Omega_b: 0.0492
+    h: 0.6727
+    n_s: 0.9645
+    sigma8: 0.831
+    w0: -1.0
+    wa: 0.0
+    Omega_k: 0.0
+    transfer_function: 'eisenstein_hu'
+    matter_power_spectrum: 'halofit'
+
+ccl_accuracy:
+    spline_params:
+        K_MAX_SPLINE: 100
+
+systematics:
+    src0_mult_bias: 0.0
+    src1_mult_bias: 0.0
+    src2_mult_bias: 0.0
+    src3_mult_bias: 0.0
+    src4_mult_bias: 0.0
+    src0_delta_z: 0.0
+    src1_delta_z: 0.0
+    src2_delta_z: 0.0
+    src3_delta_z: 0.0
+    src4_delta_z: 0.0
+    ia_bias: 5.717
+    alphaz: -0.47
+    z_piv: 0.3
+    lens0_bias: 1.562362
+    lens1_bias: 1.732963
+    lens2_bias: 1.913252
+    lens3_bias: 2.100644
+    lens4_bias: 2.293210
+    lens0_alphaz: 0.0
+    lens1_alphaz: 0.0
+    lens2_alphaz: 0.0
+    lens3_alphaz: 0.0
+    lens4_alphaz: 0.0
+    lens0_z_piv: 0.0
+    lens1_z_piv: 0.0
+    lens2_z_piv: 0.0
+    lens3_z_piv: 0.0
+    lens4_z_piv: 0.0
+    lens0_alphag: 0.0
+    lens1_alphag: 0.0
+    lens2_alphag: 0.0
+    lens3_alphag: 0.0
+    lens4_alphag: 0.0
+    lens0_delta_z: 0.0
+    lens1_delta_z: 0.0
+    lens2_delta_z: 0.0
+    lens3_delta_z: 0.0
+    lens4_delta_z: 0.0
+    lens0_sigma_z: 1.0
+    lens1_sigma_z: 1.0
+    lens2_sigma_z: 1.0
+    lens3_sigma_z: 1.0
+    lens4_sigma_z: 1.0
+
+Firecrown_Factory:
+    TwoPointFactory:
+        correlation_space: harmonic
+        number_counts_factories:
+            - type_source: default
+              global_systematics: []
+              include_rsd: false
+              per_bin_systematics:
+                - {type: PhotoZShiftandStretchFactory}
+                - {type: LinearBiasSystematicFactory}
+        weak_lensing_factories:
+            - type_source: default
+              global_systematics:
+                - {type: LinearAlignmentSystematicFactory, alphag: 1}
+              per_bin_systematics:
+                - {type: MultiplicativeShearBiasFactory}
+                - {type: PhotoZShiftFactory}
+        cmb_factories:
+            - type_source: default
+              z_source: 1100.0
+              scale: 1.0
+        int_options: null
+
+sources:
+    nbins: 5
+    ndens: 10
+    ellipticity_error: 0.26
+    Nz_type: 'ZDistFromFile'
+    Nz_kwargs:
+        input_file: "{{ env['AUGUR_DIR'] }}/data/srd_source_bins_y1.txt"
+        format: 'ascii'
+
+lenses:
+    nbins: 5
+    ndens: 18
+    Nz_type: 'ZDistFromFile'
+    Nz_kwargs:
+        input_file: "{{ env['AUGUR_DIR'] }}/data/srd_lens_bins_y1.txt"
+        format: 'ascii'
+
+statistics:
+    galaxy_shear_cl_ee:
+        tracer_combs: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
+                       [1, 1], [1, 2], [1, 3], [1, 4],
+                       [2, 2], [2, 3], [2, 4],
+                       [3, 3], [3, 4],
+                       [4, 4]]
+        ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+        kmax: None
+    galaxy_shearDensity_cl_e:
+        tracer_combs: [[0, 2], [0, 3], [0, 4], [1, 3], [1, 4], [2, 4], [3, 4]]
+        ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+        kmax: 0.202
+    galaxy_density_cl:
+        tracer_combs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]
+        ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+        kmax: 0.202
+
+cmb_lensing:
+    z_source: 1100.0
+    noise_cl: 1.0e-8
+    statistics:
+        cmb_convergence_cl:
+            tracer_combs: [[]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+        cmbGalaxy_convergenceDensity_cl:
+            tracer_combs: [[0], [1], [2], [3], [4]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+        cmbGalaxy_convergenceShear_cl_e:
+            tracer_combs: [[0], [1], [2], [3], [4]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+
+cov_options:
+    cov_type: 'tjpcov'
+    fsky: 0.2862
+    binning_info:
+        ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+
+fisher:
+    var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h',
+               'lens0_bias', 'lens1_bias', 'lens2_bias', 'lens3_bias', 
+               'lens4_bias', 'ia_bias', 'alphaz']
+    step: 1e-5
+    output: 'output/srd_y1_3x2pt_cmb_lensing_tjpcov_fisher.dat'
+    fid_output: 'output/srd_y1_3x2pt_cmb_lensing_tjpcov_fiducials.dat'
+    derivative_method: 'numdifftools'
+    gaussian_priors:
+       lens0_bias: 0.9
+       lens1_bias: 0.9
+       lens2_bias: 0.9
+       lens3_bias: 0.9
+       lens4_bias: 0.9
+       lens0_delta_z: 0.005
+       lens1_delta_z: 0.005
+       lens2_delta_z: 0.005
+       lens3_delta_z: 0.005
+       lens4_delta_z: 0.005
+       src0_delta_z: 0.002
+       src1_delta_z: 0.002
+       src2_delta_z: 0.002
+       src3_delta_z: 0.002
+       src4_delta_z: 0.002
+       src0_mult_bias: 0.013
+       src1_mult_bias: 0.013
+       src2_mult_bias: 0.013
+       src3_mult_bias: 0.013
+       src4_mult_bias: 0.013
+       ia_bias: 3.9
+       alphaz: 2.3
+       Omega_c: 0.2
+       Omega_b: 0.006
+       h: 0.063
+       n_s: 0.08
+       sigma8: 0.14
+       w0: 0.8
+       wa: 2.0
+
+postprocess:
+  latex_table: output/srd_y1_3x2pt_cmb_lensing_tjpcov_latex_table.tex
+  triangle_plot: output/srd_y1_3x2pt_cmb_lensing_tjpcov_triangle_plot.pdf
+  facecolor: blue
+  pairplots: [(w0, wa), (Omega_m, S8)]
+  outdir: 'output/'
+  CL:
+    - 0.68
+    - 0.95

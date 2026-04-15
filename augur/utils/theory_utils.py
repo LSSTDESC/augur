@@ -34,6 +34,42 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     tools.reset()
     dict_all = {**_sys_pars, **_pars}
     extra_dict = {}
+    # Support either amplitude convention being present in the incoming
+    # dictionary; older/newer cosmology dicts may omit one of these keys.
+    if 'A_s' not in dict_all:
+        dict_all['A_s'] = None
+    elif 'sigma8' not in dict_all:
+        dict_all['sigma8'] = None
+    else:
+        raise ValueError("Input parameter dictionary must contain either A_s or sigma8.")
+
+    # Ensure required CCLFactory sampler parameters are present even when
+    # callers provide a partial cosmology dictionary (common in use_sacc paths).
+    ccl_factory = getattr(tools, 'ccl_factory', None)
+    if ccl_factory is not None:
+        for key in [
+            'Omega_c', 'Omega_b', 'h', 'n_s', 'Omega_k',
+            'Neff', 'm_nu', 'w0', 'wa', 'T_CMB',
+        ]:
+            if key not in dict_all and hasattr(ccl_factory, key):
+                value = getattr(ccl_factory, key)
+                # ccl_factory stores many of these as updatable parameter objects;
+                # only pass through plain scalar values.
+                if isinstance(value, (int, float)):
+                    dict_all[key] = value
+
+    # Hard fallback defaults for any still-missing core cosmology keys.
+    default_cosmo = {
+        'Neff': 3.044,
+        'T_CMB': 2.7255,
+        'm_nu': 0.0,
+        'Omega_k': 0.0,
+        'w0': -1.0,
+        'wa': 0.0,
+    }
+    for key, value in default_cosmo.items():
+        dict_all.setdefault(key, value)
+
     if dict_all['A_s'] is None:
         extra_dict['amplitude_parameter'] = 'sigma8'
         dict_all.pop('A_s')
@@ -41,8 +77,8 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
         extra_dict['amplitude_parameter'] = 'as'
         dict_all.pop('sigma8')
 
-    extra_dict['mass_split'] = dict_all['mass_split']
-    dict_all.pop('mass_split')
+    extra_dict['mass_split'] = dict_all.get('mass_split', 'equal')
+    dict_all.pop('mass_split', None)
 
     hm = dict_all.pop('extra_parameters', None)
     if hm is not None and 'camb' in hm.keys():

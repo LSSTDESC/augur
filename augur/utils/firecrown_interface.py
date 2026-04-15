@@ -286,6 +286,11 @@ def _create_clusterdeltasigma(config, cosmo):
 
 
 def create_modeling_tools(config):
+    import copy
+    # Deepcopy to avoid mutating the caller's config dict.
+    # The _create_* helpers use config.pop() internally to prevent
+    # passing consumed keys to downstream constructors.
+    config = copy.deepcopy(config)
 
     factory, cosmo = _create_ccl_factory(config)
     pt_calculator = _create_pt_calculator(config, cosmo)

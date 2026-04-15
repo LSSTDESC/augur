@@ -3,6 +3,7 @@ import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 from tjpcov.covariance_cluster_counts_gaussian import ClusterCountsGaussian as BaseClusterGaussian
 from tjpcov.covariance_cluster_counts_ssc import ClusterCountsSSC as BaseClusterSSC
+from augur.utils.config_io import parse_array
 
 
 def get_noise_power(config, S, tracer_name, return_ndens=False):
@@ -224,15 +225,27 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     # Initialize big matrix
     cov_all = np.zeros((len(S.data), len(S.data)))
 
-    ell_edges_by_stat = {
-        stat_name: np.asarray(eval(stat_cfg['ell_edges']))
-        for stat_name, stat_cfg in config['statistics'].items()
-    }
+    # Merge ell_edges from all harmonic-space config sections:
+    # standard galaxy statistics and CMB lensing statistics.
+    ell_edges_by_stat = {}
+    for stat_name, stat_cfg in config.get('statistics', {}).items():
+        ell_edges_by_stat[stat_name] = parse_array(stat_cfg['ell_edges'])
+    cmb_stats = config.get('cmb_lensing', {}).get('statistics', {})
+    for stat_name, stat_cfg in cmb_stats.items():
+        ell_edges_by_stat[stat_name] = parse_array(stat_cfg['ell_edges'])
+
+    # CMB convergence noise (reconstruction noise floor)
+    cmb_noise_cl = float(
+        config.get('cmb_lensing', {}).get('noise_cl', 0.0)
+    )
 
     def _noise_between(tr_a_name, tr_b_name):
         """Uncorrelated noise term N_ab (non-zero only for auto-tracer pairs)."""
         if tr_a_name != tr_b_name:
             return 0.0
+        # CMB convergence reconstruction noise
+        if tr_a_name == 'cmb_convergence':
+            return cmb_noise_cl
         return get_noise_power(config, S, tr_a_name)
 
     # Loop over statistic in the likelihood (assuming 3x2pt so far)

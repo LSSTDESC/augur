@@ -12,6 +12,7 @@ from firecrown.likelihood.cmb import CMBConvergence
 from firecrown.likelihood.two_point import TwoPoint
 
 from augur.utils.firecrown_interface import create_twopoint_filter
+from augur.utils.config_io import parse_array
 
 
 def add_cmb_lensing(config, S, sources, dndz, cosmo):
@@ -84,7 +85,7 @@ def add_cmb_lensing(config, S, sources, dndz, cosmo):
             )
 
         tracer_combs = stat_keys[key].get('tracer_combs', [])
-        ell_edges = np.array(eval(stat_keys[key]['ell_edges']))
+        ell_edges = parse_array(stat_keys[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1] * ell_edges[1:])
         lmax_cfg = stat_keys[key].get('lmax', None)
 
