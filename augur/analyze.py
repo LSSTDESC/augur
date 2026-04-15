@@ -582,7 +582,7 @@ class Analyze(object):
         **kwargs:
             Additional keyword arguments to pass to the derivative method (e.g. numdifftools
             or derivkit kwargs).
-        
+
         Returns:
         --------
         Fij : np.ndarray
