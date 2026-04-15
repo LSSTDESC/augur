@@ -38,10 +38,10 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     # dictionary; older/newer cosmology dicts may omit one of these keys.
     if 'A_s' not in dict_all:
         dict_all['A_s'] = None
-    elif 'sigma8' not in dict_all:
+    if 'sigma8' not in dict_all:
         dict_all['sigma8'] = None
-    else:
-        raise ValueError("Input parameter dictionary must contain either A_s or sigma8.")
+    # else:
+     # raise ValueError("Input parameter dictionary must contain either A_s or sigma8.")
 
     # Ensure required CCLFactory sampler parameters are present even when
     # callers provide a partial cosmology dictionary (common in use_sacc paths).

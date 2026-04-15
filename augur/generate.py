@@ -18,6 +18,7 @@ import numpy as np
 import sacc
 import warnings
 import tempfile
+import os
 
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
@@ -28,6 +29,7 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
 from augur.utils.firecrown_interface import create_modeling_tools
+from augur.utils.firecrown_interface import load_likelihood_from_yaml
 
 # ── generate_utils modules ------------------------------------------------ #
 from augur.generate_utils.cosmology import initialize_cosmology
@@ -44,6 +46,10 @@ from augur.generate_utils.real_space import add_real_space_two_point
 from augur.generate_utils.cmb_lensing import add_cmb_lensing
 from augur.generate_utils.cluster_counts import add_cluster_counts
 from augur.generate_utils.covariance import compute_covariance
+from augur.generate_utils.sacc_interface import (
+    extract_x_and_windows, add_data_points,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +240,9 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     #  use_sacc path — bypass generation entirely
     # ================================================================== #
     if use_sacc is not None:
+        logger.info("Using pre-existing SACC file for generation: %s, " \
+        "setting write_sacc=False", sacc_path)
+        write_sacc = False
         S = use_sacc
 
         # Build firecrown source objects from existing SACC tracers
@@ -305,7 +314,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         # Build likelihood
         if lk is None:
             if "Firecrown_Factory" in config:
-                from augur.utils.firecrown_interface import load_likelihood_from_yaml
                 if sacc_path is not None:
                     sacc_input = sacc_path
                 else:
@@ -360,12 +368,9 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # ── 3. Likelihood ───────────────────────────────────────────────── #
     if lk is None:
         if "Firecrown_Factory" in config:
-            import tempfile
-            import os
             tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
             tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.sacc")
             S.save_fits(tmp_sacc_path, overwrite=True)
-            from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
         else:
             lk = ConstGaussian(statistics=stats)
@@ -377,10 +382,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     )
 
     # ── 4. Fill SACC with fiducial theory predictions ───────────────── #
-    from augur.generate_utils.sacc_interface import (
-        extract_x_and_windows, add_data_points,
-    )
-
     # Collect the set of (dtype, tracer1, tracer2) triples managed by the
     # likelihood so we can distinguish two-point entries from other data
     # types (e.g. cluster counts) that should be preserved.
@@ -435,12 +436,9 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
 
     # ── 7. Re-build likelihood with scale-cut filters ───────────────── #
-    import tempfile
-    import os
 
     if tp_filters:
         logger.debug("Rebuilding likelihood with scale-cut filters")
-        from augur.utils.firecrown_interface import load_likelihood_from_yaml
         # Use the on-disk file if it was just written; otherwise use a tempfile
         if write_sacc:
             sacc_for_rebuild = config['fiducial_sacc_path']
@@ -457,7 +455,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_final_")
         tmp_sacc_path = os.path.join(tmp_dir, "final_sacc.sacc")
         S.save_fits(tmp_sacc_path, overwrite=True)
-        from augur.utils.firecrown_interface import load_likelihood_from_yaml
         lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
     else:
         lk = ConstGaussian(statistics=stats)
