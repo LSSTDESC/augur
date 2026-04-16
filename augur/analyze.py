@@ -567,7 +567,28 @@ class Analyze(object):
         # F_ext, fid_ext = read_fisher_from_file(external_fisher)
 
     def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
-        # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
+        """
+        Method to compute the Fisher matrix. It will use the cached derivatives
+        and Fisher matrix if they are already computed, otherwise it will compute
+        them.
+
+        Parameters:
+        -----------
+        method : str
+            Method to compute derivatives, `numdifftools` or `derivkit` are allowed.
+        save_txt : bool
+            If `True`, saves the Fisher matrix and derivatives to text files in the output
+            directory specified in the config.
+        **kwargs:
+            Additional keyword arguments to pass to the derivative method (e.g. numdifftools
+            or derivkit kwargs).
+
+        Returns:
+        --------
+        Fij : np.ndarray
+            Fisher matrix evaluated at the fiducial cosmology and transformed to the specified
+            parameter basis.
+        """
         if self.derivatives is None:
             self.get_derivatives(method=method, **kwargs)
         if self.Fij is None:
@@ -611,14 +632,41 @@ class Analyze(object):
         return self.Fij
 
     def get_fisher_bias(self, force=False, method=None, save_txt=True, use_fid=False):
-        # Compute Fisher bias following the generalized Amara formalism
-        # More details in Bianca's thesis and the note here:
-        # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
+        """
+        Compute Fisher bias following the generalized Amara formalism
+        More details in Bianca's thesis and the note here:
+        https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
 
-        # Allowing to provide externally calculated "systematics"
-        # They should have the same ells as the original data-vector
-        # and the same length
+        The sign convention follows the note linked above, <theta_{i} - theta_{i}^{ref}> = bi,
+        where theta_{i} are the parameters of interest and theta_{i}^{ref} are the reference
+        parameters about which the Fisher matrix is evaluated (e.g. the fiducial cosmology).
+        The bias is then given by bi = F^-1 @ Bj, where Bj = biased_cls^T @ inv_cov @ derivatives.
+        The biased_cls are the differences between the biased theory vector and either the fiducial
+        theory vector or the original theory vector evaluated at the pivot point,
+        depending on the value of `use_fid`.
 
+        The method allows the usage of externally calculated "systematics"
+        They should have the same ells as the original data-vector
+        and the same length, and should be provided in the form of a text file with a column named
+        `dv_sys` and the same number of rows as the data vector. If no external systematics are
+        provided, the code will calculate the biased theory vector internally by evaluating the
+        theory at a new point in parameter space defined by `bias_params` in the config, which
+        should be a dictionary of parameter names and values to bias.
+
+        Paramters:
+        ----------
+        force : bool
+            If `True` force recalculation of the derivatives and Fisher matrix if they are
+            already cached.
+        method : str
+            Method to compute derivatives, `numdifftools` or `derivkit` are allowed.
+        save_txt : bool
+            If `True`, saves the biased parameter shifts and biased theory vector to text files.
+        use_fid : bool
+            If `True`, the bias will be calculated with respect to the fiducial theory vector
+            instead of the theory vector evaluated at the pivot point. This can be useful if the
+            pivot point is.
+        """
         if self.derivatives is None:
             self.get_derivatives(force=force, method=method)
 
