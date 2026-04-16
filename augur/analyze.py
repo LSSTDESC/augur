@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
@@ -9,6 +10,9 @@ import warnings
 import pandas as pd
 import astropy.table
 import os
+from copy import deepcopy
+
+logger = logging.getLogger(__name__)
 
 mnu_norm = 93.14  # eV
 
@@ -66,10 +70,11 @@ class Analyze(object):
                             value = config['ccl_accuracy']['spline_params'][key]
                             ccl.spline_params[key] = type_here(value)
                         except KeyError:
-                            print(f'The selected spline keyword `{key}` is not recognized.')
+                            logger.warning('The selected spline keyword `%s` is not recognized.',
+                                           key)
                         except ValueError:
-                            print(f'The selected value `{value}` could not be casted to \
-                                    `{type_here}`.')
+                            logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                           value, type_here)
                 # Pass along GSL control parameters
                 if 'gsl_params' in config['ccl_accuracy'].keys():
                     for key in config['ccl_accuracy']['gsl_params'].keys():
@@ -78,10 +83,10 @@ class Analyze(object):
                             value = config['ccl_accuracy']['gsl_params'][key]
                             ccl.gsl_params[key] = type_here(value)
                         except KeyError:
-                            print(f'The selected GSL keyword `{key}` is not recognized.')
+                            logger.warning('The selected GSL keyword `%s` is not recognized.', key)
                         except ValueError:
-                            print(f'The selected value `{value}` could not be casted to \
-                                    `{type_here}`.')
+                            logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                           value, type_here)
 
         self.lk = likelihood  # Just to save some typing
         self.tools = tools
@@ -294,7 +299,7 @@ class Analyze(object):
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                         J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*mnu_norm)
 
-                print('Replaced Omega_c with Omega_m in Jacobian')
+                logger.info('Replaced Omega_c with Omega_m in Jacobian')
 
             if self.transform_S8:
                 Om = self.get_Om()
@@ -325,7 +330,7 @@ class Analyze(object):
                         if 'h' in self.var_pars:
                             ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                             J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 * mnu_norm)
-                print("Replaced sigma8 with S8 in Jacobian")
+                logger.info("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
         return self.J
@@ -364,8 +369,8 @@ class Analyze(object):
                 x = self.norm * x + np.array(self.par_bounds[:, 0]).astype(np.float64)
 
             if x.ndim == 1:
-                _pars = pars_fid.copy()
-                _sys_pars = sys_fid.copy()
+                _pars = deepcopy(pars_fid)
+                _sys_pars = deepcopy(sys_fid)
                 for i in range(len(labels)):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
@@ -384,9 +389,9 @@ class Analyze(object):
             elif x.ndim == 2:
                 f_out = []
                 for i in range(len(labels)):
-                    _pars = pars_fid.copy()
+                    _pars = deepcopy(pars_fid)
                     # sys_fid is a ParamsMap object
-                    _sys_pars = sys_fid.copy()
+                    _sys_pars = deepcopy(sys_fid)
                     xi = x[i]
                     for j in range(len(labels)):
                         if labels[j] in pars_fid.keys():
@@ -437,7 +442,7 @@ class Analyze(object):
             elif 'numdifftools' in method:
                 import numdifftools as nd
                 if kwargs != {}:
-                    print('Overwriting config-specified numdifftools kwargs')
+                    logger.info('Overwriting config-specified numdifftools kwargs')
                     kwargs = kwargs
                 else:
                     kwargs = self.derivative_args
@@ -451,12 +456,12 @@ class Analyze(object):
             elif 'derivkit' in method:
                 from derivkit.calculus_kit import CalculusKit
                 if kwargs != {}:
-                    print('Overwriting config-specified derivkit kwargs')
+                    logger.info('Overwriting config-specified derivkit kwargs')
                     kwargs = kwargs
                 elif self.derivative_args != {}:
                     kwargs = self.derivative_args
                 else:
-                    print('Using default Augur derivkit kwargs')
+                    logger.info('Using default Augur derivkit kwargs')
                     kwargs = {'method': 'adaptive',
                               'n_workers': 1,
                               'n_points': 27,
@@ -526,7 +531,7 @@ class Analyze(object):
                     warnings.warn(f'The requested prior `{gvar}` is not recognized. \
                                        Please make sure that it is part of your model.')
 
-            self.Fij_with_gprior = np.copy(self.Fij)
+            self.Fij_with_gprior = deepcopy(self.Fij)
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
             for i in range(len(indices)):
                 j = indices[i]
@@ -604,8 +609,8 @@ class Analyze(object):
                 # Fallback in case var_pars is None or sizes mismatch
                 self.Fij_df = pd.DataFrame(self.Fij)
 
-            save_vals = np.copy(self.x.T)
-            save_names = np.copy(self.var_pars)
+            save_vals = deepcopy(self.x.T)
+            save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
                 # swap sigma8 with S8
@@ -626,7 +631,7 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".theory_vector", fid)
                 np.savetxt(self.config['output']+".derivatives", self.derivatives)
         if self.gprior_pars is not None:
-            print('adding priors')
+            logger.info('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
 
         return self.Fij
@@ -711,8 +716,8 @@ class Analyze(object):
                 if self.transform_S8 or self.transform_Omega_m:
                     raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
-                    _pars_here = self.pars_fid.copy()
-                    _sys_here = self.req_params.copy()
+                    _pars_here = deepcopy(self.pars_fid)
+                    _sys_here = deepcopy(self.req_params)
                     for key, value in self.config['fisher_bias']['bias_params'].items():
                         if key in _pars_here.keys():
                             _pars_here[key] = value

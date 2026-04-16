@@ -6,6 +6,7 @@ and then convincing it to generate data.
 
 """
 
+import logging
 import numpy as np
 import pyccl as ccl
 import sacc
@@ -23,6 +24,8 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 import warnings
+
+logger = logging.getLogger(__name__)
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
@@ -124,7 +127,7 @@ def _get_scale_cuts(stat_cfg, comb):
     """
     Auxiliary function to get the scale cuts in ell for a given tracer
     combination in the configuration file.
-    Parameters
+
     Parameters
     ----------
     stat_cfg : dict
@@ -205,9 +208,10 @@ def generate_sacc_and_stats(config):
                     value = config['ccl_accuracy']['spline_params'][key]
                     ccl.spline_params[key] = type_here(value)
                 except KeyError:
-                    print(f'The selected spline keyword `{key}` is not recognized.')
+                    logger.warning('The selected spline keyword `%s` is not recognized.', key)
                 except ValueError:
-                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
         # Pass along GSL control parameters
         if 'gsl_params' in config['ccl_accuracy'].keys():
             for key in config['ccl_accuracy']['gsl_params'].keys():
@@ -216,9 +220,10 @@ def generate_sacc_and_stats(config):
                     value = config['ccl_accuracy']['gsl_params'][key]
                     ccl.gsl_params[key] = type_here(value)
                 except KeyError:
-                    print(f'The selected GSL keyword `{key}` is not recognized.')
+                    logger.warning('The selected GSL keyword `%s` is not recognized.', key)
                 except ValueError:
-                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
 
     if cosmo_cfg.get('mg_parametrization', None) is not None:
         mg_cfg = cosmo_cfg['mg_parametrization']
@@ -233,14 +238,14 @@ def generate_sacc_and_stats(config):
                     try:
                         mu_sig[key] = float(mu_sig[key])
                     except ValueError:
-                        print(f'The selected value `{mu_sig[key]}` \
-                              for `{key}` could not be casted to `float`.')
+                        logger.warning('The selected value `%s` for `%s` could not be \
+                                        casted to `float`.', mu_sig[key], key)
 
             cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:
-        print('Error in cosmology configuration. Check the config file.')
+        logger.error('Error in cosmology configuration. Check the config file.')
         # Reraise the exception to see the full traceback
         raise e
 
@@ -487,7 +492,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
                 # _pars = cosmo.__dict__['_params_init_kwargs']
                 _pars = config.get('cosmo', {}).copy()
-                print(_pars)
+                logger.debug(_pars)
 
                 # Make sure using YOUR covariance
                 if (
@@ -658,13 +663,13 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         warnings.warn('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
     if write_sacc:
-        print(config['fiducial_sacc_path'])
+        logger.debug(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
 
     # add two-point filters here to the likelihood, in case of scale cuts
     if tp_filters != []:
-        print('loading filters')
+        logger.info('loading filters')
         config = parse_config(configs)
         from augur.utils.firecrown_interface import load_likelihood_from_yaml
         lk = load_likelihood_from_yaml(config,

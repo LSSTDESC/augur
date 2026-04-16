@@ -1,6 +1,9 @@
+import logging
 import numpy as np
 import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
+
+logger = logging.getLogger(__name__)
 
 
 def get_noise_power(config, S, tracer_name, return_ndens=False):
@@ -32,7 +35,7 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     The output number density is in arcmin^-2.
     """
     if 'src' not in tracer_name and 'lens' not in tracer_name:
-        print("Cannot compute noise for source of kind %s." % (tracer_name[:-1]))
+        logger.error("Cannot compute noise for source of kind %s.", tracer_name[:-1])
         raise NotImplementedError
     nz_all = dict()
     nz_all['src'] = []
@@ -69,7 +72,7 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     elif 'lens' in tracer_name:
         noise_power = 1 / nbar
     else:
-        print("Cannot do error for source of kind %s." % tracer_prefix)
+        logger.error("Cannot do error for source of kind %s.", tracer_prefix)
         raise NotImplementedError
     if return_ndens:
         return noise_power, ndens
