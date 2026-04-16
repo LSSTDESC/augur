@@ -23,7 +23,7 @@ def test_five_pt_stencil_vector():
     x0 = np.array([1.0, 2.0])
     der = np.asarray(five_pt_stencil(f, x0, h=1e-6))
     # Expect partial derivatives [2*x0[0], 3.0], [2*x0[0], 3.0]]]
-    assert der.shape[0] == (2, 2)
+    assert der.shape == (2, 2)
     assert pytest.approx(der[0], rel=1e-6) == [2.0 * x0[0], 3.0]
     assert pytest.approx(der[1], rel=1e-6) == [2.0 * x0[0], 3.0]
 
