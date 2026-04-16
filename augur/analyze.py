@@ -637,16 +637,21 @@ class Analyze(object):
         More details in Bianca's thesis and the note here:
         https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
 
+        The sign convention follows the note linked above, <theta_{i} - theta_{i}^{ref}> = bi,
+        where theta_{i} are the parameters of interest and theta_{i}^{ref} are the reference
+        parameters about which the Fisher matrix is evaluated (e.g. the fiducial cosmology).
+        The bias is then given by bi = F^-1 @ Bj, where Bj = biased_cls^T @ inv_cov @ derivatives.
+        The biased_cls are the differences between the biased theory vector and either the fiducial
+        theory vector or the original theory vector evaluated at the pivot point,
+        depending on the value of `use_fid`.
+
         The method allows the usage of externally calculated "systematics"
         They should have the same ells as the original data-vector
         and the same length, and should be provided in the form of a text file with a column named
         `dv_sys` and the same number of rows as the data vector. If no external systematics are
         provided, the code will calculate the biased theory vector internally by evaluating the
         theory at a new point in parameter space defined by `bias_params` in the config, which
-        should be a dictionary of parameter names and values to bias. The bias will then be
-        calculated as the difference between this biased theory vector and either the fiducial
-        theory vector or the original theory vector evaluated at the pivot point, depending on
-        the value of `use_fid`.
+        should be a dictionary of parameter names and values to bias.
 
         Paramters:
         ----------
