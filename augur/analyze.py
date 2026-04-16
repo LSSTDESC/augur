@@ -747,7 +747,7 @@ class Analyze(object):
 
             J = self.Jacobian_transform()
             self.bi = J.T @ self.bi
-            save_names = np.copy(self.var_pars)
+            save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
                 # swap sigma8 with S8
