@@ -2,6 +2,7 @@ import logging
 import numpy as np
 import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
+from augur.utils.eval_utils import _safe_eval
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     cov_all = np.zeros((len(S.data), len(S.data)))
 
     ell_edges_by_stat = {
-        stat_name: np.asarray(eval(stat_cfg['ell_edges']))
+        stat_name: np.asarray(_safe_eval(stat_cfg['ell_edges']))
         for stat_name, stat_cfg in config['statistics'].items()
     }
 

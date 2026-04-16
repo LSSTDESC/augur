@@ -24,10 +24,27 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 import warnings
+from augur.utils.eval_utils import _safe_eval
 
 logger = logging.getLogger(__name__)
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
+
+# Safe registry for N(z) classes - maps string names to actual classes
+NZ_CLASS_REGISTRY = {
+    'ZDist': ZDist,
+    'LensSRD2018': LensSRD2018,
+    'SourceSRD2018': SourceSRD2018,
+    'ZDistFromFile': ZDistFromFile,
+}
+
+
+def _get_nz_class(class_name):
+    """Safely get N(z) class from registry."""
+    if class_name not in NZ_CLASS_REGISTRY:
+        raise ValueError(f"Unknown N(z) class '{class_name}'. \
+                         Available classes: {list(NZ_CLASS_REGISTRY.keys())}")
+    return NZ_CLASS_REGISTRY[class_name]
 
 
 def _get_tracers(statistic, comb):
@@ -72,7 +89,7 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
     Nz_centers = None
     if 'Nz_center' in cfg['Nz_kwargs'].keys():
-        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+        Nz_centers = _safe_eval(cfg['Nz_kwargs']['Nz_center'])
         cfg['Nz_kwargs'].pop('Nz_center')
 
         if np.isscalar(Nz_centers):
@@ -85,36 +102,38 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
     for i in range(nbins):
         sacc_tracer = f'{src_root}{i}'
         if isinstance(cfg['Nz_type'], list):
-            if eval(cfg['Nz_type'][i]) in implemented_nzs:
+            nz_class = _get_nz_class(cfg['Nz_type'][i])
+            if nz_class in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type'][i]:
                     if Nz_centers is not None:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
-                                                                    Nz_center=Nz_centers[i],
-                                                                    Nz_nbins=nbins,
-                                                                    **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_center=Nz_centers[i],
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
                     else:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
-                                                                    Nz_ibin=i,
-                                                                    Nz_nbins=nbins,
-                                                                    **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_ibin=i,
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
 
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         else:
-            if eval(cfg['Nz_type']) in implemented_nzs:
+            nz_class = _get_nz_class(cfg['Nz_type'])
+            if nz_class in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type']:
                     if Nz_centers is not None:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                                 Nz_center=Nz_centers[i],
-                                                                 Nz_nbins=nbins,
-                                                                 **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_center=Nz_centers[i],
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
                     else:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                                 Nz_ibin=i,
-                                                                 Nz_nbins=nbins,
-                                                                 **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_ibin=i,
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
@@ -301,7 +320,7 @@ def generate_sacc_and_stats(config):
     Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
-        ell_edges = eval(stat_cfg[key]['ell_edges'])
+        ell_edges = _safe_eval(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
         # TODO: add scale cuts to likelihood, not just cutting datavector
         for comb in tracer_combs:
@@ -596,10 +615,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
         tjpcov_ell_edges = np.asarray(
-            eval(config['cov_options']['binning_info']['ell_edges'])
+            _safe_eval(config['cov_options']['binning_info']['ell_edges'])
         )
         for stat_name, stat_info in config['statistics'].items():
-            dv_ell_edges = np.asarray(eval(stat_info['ell_edges']))
+            dv_ell_edges = np.asarray(_safe_eval(stat_info['ell_edges']))
             if (
                 tjpcov_ell_edges.shape != dv_ell_edges.shape
                 or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)
