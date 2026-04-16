@@ -52,9 +52,10 @@ class Analyze(object):
         # Load the likelihood if no likelihood is passed along
 
         config = parse_config(config)  # Load full config
+        
         if likelihood is None:
-            likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
-        config = parse_config(config)  # Load full config
+            # Making a copy of the config to avoid modifying the original config dictionary
+            likelihood, S, tools, req_params = generate(deepcopy(config), return_all_outputs=True)
 
         if (tools is None) or (req_params is None):
             raise ValueError('If a likelihood is passed tools and req_params are required! \
