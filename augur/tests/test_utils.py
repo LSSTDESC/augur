@@ -9,22 +9,38 @@ def test_five_pt_stencil_scalar():
     def f(x):
         return x**3
     x0 = 1.5
-    der = five_pt_stencil(f, x0, h=1e-6)
+    der = np.asarray(five_pt_stencil(f, x0, h=1e-6))
     assert pytest.approx(der, rel=1e-6) == 3.0 * x0**2
 
 
 def test_five_pt_stencil_vector():
-    # Define a function of a 2-component vector that returns one value per row
+    # Define a function of a 2-component vector that returns one value per component
     def f(X):
-        # X has shape (n, 2) where each row is a perturbed vector
-        return np.array([row[0]**2 + 3.0 * row[1] for row in X])
+        # X has shape (2,) where each row is a perturbed vector
+        return np.array([X[0]**2 + 3.0 * X[1],
+                         X[0]**2 + 3.0 * X[1]])
 
     x0 = np.array([1.0, 2.0])
-    der = five_pt_stencil(f, x0, h=1e-6)
-    # Expect partial derivatives [2*x0[0], 3.0]
-    assert der.shape[0] == 2
-    assert pytest.approx(der[0], rel=1e-6) == 2.0 * x0[0]
-    assert pytest.approx(der[1], rel=1e-6) == 3.0
+    der = np.asarray(five_pt_stencil(f, x0, h=1e-6))
+    # Expect partial derivatives [2*x0[0], 3.0], [2*x0[0], 3.0]]]
+    assert der.shape[0] == (2, 2)
+    assert pytest.approx(der[0], rel=1e-6) == [2.0 * x0[0], 3.0]
+    assert pytest.approx(der[1], rel=1e-6) == [2.0 * x0[0], 3.0]
+
+
+def test_five_pt_stencil_invalid_h():
+    with pytest.raises(ValueError):
+        five_pt_stencil(lambda x: x, 1.0, h=0.0)
+
+
+def test_five_pt_stencil_non_callable():
+    with pytest.raises(ValueError):
+        five_pt_stencil(123, 1.0, h=1e-6)
+
+
+def test_five_pt_stencil_nonfinite_x0():
+    with pytest.raises(ValueError):
+        five_pt_stencil(lambda x: x, np.array([np.nan]), h=1e-6)
 
 
 def test_parse_config_accepts_dict():

@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def five_pt_stencil(f, x0, h=1e-4):
         raise ValueError("h must be a positive number")
 
     if h < 1e-12:
-        logger.warning("Step size h=%g is very small, may cause numerical instability", h)
+        warnings.warn("Step size h=%g is very small, may cause numerical instability", h)
 
     # Convert x0 to numpy array if needed
     if isinstance(x0, list):
@@ -51,7 +52,7 @@ def five_pt_stencil(f, x0, h=1e-4):
         # Evaluate function at central point first
         f0 = f(x0)
         if not np.isfinite(f0).all():
-            logger.warning("Function evaluation at x0 returns non-finite values: %s", f0)
+            warnings.warn("Function evaluation at x0 returns non-finite values: %s", f0)
     except Exception as e:
         raise RuntimeError(f"Function evaluation failed at x0: {e}")
 
@@ -66,13 +67,13 @@ def five_pt_stencil(f, x0, h=1e-4):
             # Check for non-finite values
             for val, label in [(fm2, 'x0-2h'), (fm1, 'x0-h'), (fp1, 'x0+h'), (fp2, 'x0+2h')]:
                 if not np.isfinite(val).all():
-                    logger.warning("Function evaluation at %s returns non-finite values: %s",
-                                   label, val)
+                    warnings.warn("Function evaluation at %s returns non-finite values: %s",
+                                  label, val)
 
             der = 1./(12.*h)*(fm2 - 8.*fm1 + 8.*fp1 - fp2)
 
             if not np.isfinite(der).all():
-                logger.warning("Derivative calculation produced non-finite values: %s", der)
+                warnings.warn("Derivative calculation produced non-finite values: %s", der)
 
             return der
 
@@ -104,13 +105,12 @@ def five_pt_stencil(f, x0, h=1e-4):
                 for vals, label in [(fm2_vals, 'x-2h'), (fm1_vals, 'x-h'),
                                     (fp1_vals, 'x+h'), (fp2_vals, 'x+2h')]:
                     if not np.isfinite(vals).all():
-                        logger.warning("Function evaluations at %s contain non-finite values",
-                                       label)
+                        warnings.warn("Function evaluations at %s contain non-finite values", label)
 
                 der = 1./(12.*h)*(fm2_vals - 8.*fm1_vals + 8.*fp1_vals - fp2_vals)
 
                 if not np.isfinite(der).all():
-                    logger.warning("Derivative calculation produced non-finite values")
+                    warnings.warn("Derivative calculation produced non-finite values")
 
                 return der
 
