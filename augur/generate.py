@@ -24,7 +24,7 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 import warnings
-from augur.utils.eval_utils import _safe_eval
+from augur.utils.config_io import parse_array
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
     Nz_centers = None
     if 'Nz_center' in cfg['Nz_kwargs'].keys():
-        Nz_centers = _safe_eval(cfg['Nz_kwargs']['Nz_center'])
+        Nz_centers = parse_array(cfg['Nz_kwargs']['Nz_center'])
         cfg['Nz_kwargs'].pop('Nz_center')
 
         if np.isscalar(Nz_centers):
@@ -320,7 +320,7 @@ def generate_sacc_and_stats(config):
     Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
-        ell_edges = _safe_eval(stat_cfg[key]['ell_edges'])
+        ell_edges = parse_array(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
         # TODO: add scale cuts to likelihood, not just cutting datavector
         for comb in tracer_combs:
@@ -615,10 +615,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
         tjpcov_ell_edges = np.asarray(
-            _safe_eval(config['cov_options']['binning_info']['ell_edges'])
+            parse_array(config['cov_options']['binning_info']['ell_edges'])
         )
         for stat_name, stat_info in config['statistics'].items():
-            dv_ell_edges = np.asarray(_safe_eval(stat_info['ell_edges']))
+            dv_ell_edges = np.asarray(parse_array(stat_info['ell_edges']))
             if (
                 tjpcov_ell_edges.shape != dv_ell_edges.shape
                 or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)
