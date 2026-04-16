@@ -52,7 +52,7 @@ class Analyze(object):
         # Load the likelihood if no likelihood is passed along
 
         config = parse_config(config)  # Load full config
-        
+
         if likelihood is None:
             # Making a copy of the config to avoid modifying the original config dictionary
             likelihood, S, tools, req_params = generate(deepcopy(config), return_all_outputs=True)
