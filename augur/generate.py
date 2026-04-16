@@ -15,7 +15,7 @@ from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from augur.utils.theory_utils import compute_new_theory_vector
-
+from copy import deepcopy
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
 from firecrown.likelihood.two_point import TwoPoint
@@ -491,7 +491,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
 
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
                 # _pars = cosmo.__dict__['_params_init_kwargs']
-                _pars = config.get('cosmo', {}).copy()
+                _pars = deepcopy(config.get('cosmo', {}))
                 logger.debug(_pars)
 
                 # Make sure using YOUR covariance
