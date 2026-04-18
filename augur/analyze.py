@@ -524,6 +524,8 @@ class Analyze(object):
         if self.Fij_with_gprior is None:
 
             indices = []
+            prior_widths = {gvar: self.gpriors[i] for i, gvar in enumerate(self.gprior_pars)}
+            direct_prior_widths = []
             ind_sigma8 = None
             ind_c = None
             ind_m = None
@@ -531,14 +533,15 @@ class Analyze(object):
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
+                    direct_prior_widths.append(prior_widths[gvar])
                 elif gvar == 'Omega_m' and self.transform_Omega_m:
                     ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                    ind_m = np.where(np.array(self.gprior_pars) == 'Omega_m')[0][0]
+                    ind_m = self.gprior_pars.index(gvar)
                     if 'Omega_c' in self.gprior_pars:
                         raise ValueError('Cannot set priors for both Omega_c and Omega_m')
                 elif gvar == 'S8' and self.transform_S8:
                     ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
-                    ind_S8 = np.where(np.array(self.gprior_pars) == 'S8')[0][0]
+                    ind_S8 = self.gprior_pars.index(gvar)
                     if 'sigma8' in self.gprior_pars:
                         raise ValueError('Cannot set priors for both sigma8 and S8')
                 else:
@@ -547,16 +550,16 @@ class Analyze(object):
 
             self.Fij_with_gprior = deepcopy(self.Fij)
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
-            for i in range(len(indices)):
+            for i, width in enumerate(direct_prior_widths):
                 j = indices[i]
-                gprior_only[j][j] += 1.0/self.gpriors[i]**2
+                gprior_only[j][j] += 1.0/width**2
 
             J = self.Jacobian_transform()
             gprior_only = J.T @ gprior_only @ J
             if ind_sigma8 is not None and ind_S8 is not None:
-                gprior_only[ind_sigma8][ind_sigma8] = 1.0/self.gpriors[ind_S8]**2
+                gprior_only[ind_sigma8][ind_sigma8] = 1.0/prior_widths['S8']**2
             if ind_c is not None and ind_m is not None:
-                gprior_only[ind_c][ind_c] = 1.0/self.gpriors[ind_m]**2
+                gprior_only[ind_c][ind_c] = 1.0/prior_widths['Omega_m']**2
 
             self.Fij_with_gprior += gprior_only
 
