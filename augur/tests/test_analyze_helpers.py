@@ -94,3 +94,17 @@ def test_Jacobian_transform_entries():
     # Check S8 diagonal scaling
     expected_s8_diag = 1.0 / np.sqrt(a.get_Om() / 0.3)
     assert pytest.approx(J[ind_sigma8][ind_sigma8], rel=1e-8) == expected_s8_diag
+
+
+def test_add_gaussian_priors_preserves_width_order_with_unrecognized_entries():
+    pars = {'Omega_c': 0.2, 'h': 0.7}
+    var_pars = ['Omega_c', 'h']
+    extra_cfg = {'gaussian_priors': {'unrecognized': 0.2, 'Omega_c': 0.1}}
+    a = make_analyze(var_pars, pars, extra_fisher_cfg=extra_cfg)
+    a.Fij = np.zeros((len(var_pars), len(var_pars)))
+
+    gprior_only = a.add_gaussian_priors(save_txt=False)
+
+    assert gprior_only.shape == (2, 2)
+    assert gprior_only[0, 0] == pytest.approx(1.0 / 0.1**2)
+    assert np.allclose(gprior_only[1], 0.0)

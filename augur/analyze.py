@@ -99,26 +99,30 @@ class Analyze(object):
         # need to potentially extract modified gravity parameters here
         # and remove superfluous parameters
         if 'mg_parametrization' in self.pars_fid.keys():
-            mg = self.pars_fid.pop('mg_parametrization')
-            # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
-            from pyccl.modified_gravity import MuSigmaMG
-            if isinstance(mg, MuSigmaMG):
-                self.pars_fid['mg_musigma_mu'] = float(mg.mu_0)
-                self.pars_fid['mg_musigma_sigma'] = float(mg.sigma_0)
-                self.pars_fid['mg_musigma_c1'] = float(mg.c1_mg)
-                self.pars_fid['mg_musigma_c2'] = float(mg.c2_mg)
-                self.pars_fid['mg_musigma_lambda0'] = float(mg.lambda_mg)
-            elif isinstance(mg, dict):
-                musigma = mg.get('mu_Sigma', None)
-                if musigma is not None:
-                    self.pars_fid['mg_musigma_mu'] = float(musigma.get('mu_0', 0.0))
-                    self.pars_fid['mg_musigma_sigma'] = float(musigma.get('sigma_0', 0.0))
-                    self.pars_fid['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
-                    self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
-                    self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
+            if self.pars_fid['mg_parametrization'] is not None:
+                warnings.warn("Modified gravity parametrizations are experimental and may not \
+                              be fully supported. Use with caution.")
+                mg = self.pars_fid.pop('mg_parametrization')
+                # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
+                from pyccl.modified_gravity import MuSigmaMG
+                if isinstance(mg, MuSigmaMG):
+                    self.pars_fid['mg_musigma_mu'] = float(mg.mu_0)
+                    self.pars_fid['mg_musigma_sigma'] = float(mg.sigma_0)
+                    self.pars_fid['mg_musigma_c1'] = float(mg.c1_mg)
+                    self.pars_fid['mg_musigma_c2'] = float(mg.c2_mg)
+                    self.pars_fid['mg_musigma_lambda0'] = float(mg.lambda_mg)
+                elif isinstance(mg, dict):
+                    musigma = mg.get('mu_Sigma', None)
+                    if musigma is not None:
+                        self.pars_fid['mg_musigma_mu'] = float(musigma.get('mu_0', 0.0))
+                        self.pars_fid['mg_musigma_sigma'] = float(musigma.get('sigma_0', 0.0))
+                        self.pars_fid['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
+                        self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
+                        self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
         if 'baryonic_effects' in self.pars_fid.keys():
-            warnings.warn("Baryonic effects parameters specified \
-                           but not currently implemented. Ignoring these parameters.")
+            if self.pars_fid['baryonic_effects'] is not None:
+                warnings.warn("Baryonic effects parameters specified \
+                              but not currently implemented. Ignoring these parameters.")
             self.pars_fid.pop('baryonic_effects')
 
         self.cf = tools.ccl_factory
@@ -388,6 +392,9 @@ class Analyze(object):
                 f_out = self.compute_new_theory_vector(_sys_pars, _pars)
 
             elif x.ndim == 2:
+                # This will be used by five-point stencil to evaluate the function at multiple
+                if (x.shape != (len(labels), len(labels))):
+                    raise ValueError('The labels should have the same length as the parameters!')
                 f_out = []
                 for i in range(len(labels)):
                     _pars = deepcopy(pars_fid)
@@ -399,9 +406,16 @@ class Analyze(object):
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
                             _sys_pars[labels[j]] = xi[j]
+                        elif 'extra_parameters' in pars_fid.keys():
+                            if 'camb' in pars_fid['extra_parameters'].keys():
+                                if labels[j] in pars_fid['extra_parameters']['camb'].keys():
+                                    _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
+                                    _sys_pars[labels[j]] = x[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
+            else:
+                raise ValueError('x should be either 1D or 2D array!')
             return np.array(f_out)
 
     def get_derivatives(self, force=False, method=None, step=None, **kwargs):
@@ -514,7 +528,6 @@ class Analyze(object):
             ind_c = None
             ind_m = None
             ind_S8 = None
-            # TODO: check logic here to make sure transformed parameters handled correctly
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
@@ -570,13 +583,13 @@ class Analyze(object):
         # if it is a dataframe, then we read it in and add it directly
         # if not, we need a helper to read in the text files into a dataframe object to then sum.
         raise NotImplementedError("External fisher addition not yet implemented.")
-        # F_ext, fid_ext = read_fisher_from_file(external_fisher)
 
     def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
         """
         Method to compute the Fisher matrix. It will use the cached derivatives
         and Fisher matrix if they are already computed, otherwise it will compute
-        them.
+        them. self.Fij is always the Fisher matrix without priors,
+        self.Fij_with_gprior is the Fisher matrix with Gaussian priors added in, if specified.
 
         Parameters:
         -----------
@@ -593,7 +606,7 @@ class Analyze(object):
         --------
         Fij : np.ndarray
             Fisher matrix evaluated at the fiducial cosmology and transformed to the specified
-            parameter basis.
+            parameter basis, without any additional priors.
         """
         if self.derivatives is None:
             self.get_derivatives(method=method, **kwargs)
@@ -642,6 +655,8 @@ class Analyze(object):
         Compute Fisher bias following the generalized Amara formalism
         More details in Bianca's thesis and the note here:
         https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
+
+        This method always computes the bias using the Fisher matrix without priors, self.Fij.
 
         The sign convention follows the note linked above, <theta_{i} - theta_{i}^{ref}> = bi,
         where theta_{i} are the parameters of interest and theta_{i}^{ref} are the reference

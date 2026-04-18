@@ -22,7 +22,7 @@ pip install -e .
 
 ### Via pip (after conda setup)
 
-If you already have `firecrown` installed via conda, you can install Augur with pip:
+If you already have `firecrown` (version newer than 1.14) installed via conda, you can install Augur with pip:
 
 ```bash
 pip install .

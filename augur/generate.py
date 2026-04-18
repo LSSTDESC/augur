@@ -245,6 +245,8 @@ def generate_sacc_and_stats(config):
                                    value, type_here)
 
     if cosmo_cfg.get('mg_parametrization', None) is not None:
+        warnings.warn("Modified gravity parametrizations are experimental and may not be \
+                      fully supported. Use with caution.")
         mg_cfg = cosmo_cfg['mg_parametrization']
         if mg_cfg.get('mu_Sigma', None) is not None:
             mu_sig = mg_cfg['mu_Sigma']
@@ -545,7 +547,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
 
     # Generate placeholders
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
-    # config = parse_config(configs)
 
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
