@@ -9,7 +9,7 @@ build:
     python: "3.11"
   jobs:
     post_install:
-      - pip install -U sphinx numpydoc sphinx-rtd-theme
+      - pip install -U sphinx sphinx-rtd-theme
       - pip install -e .
     post_build:
       - mkdir -p $READTHEDOCS_OUTPUT/html
