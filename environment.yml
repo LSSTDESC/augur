@@ -13,4 +13,3 @@ dependencies:
   - tjpcov
   - pyccl >= 3.3.1
   - sphinx
-  - sphinx-rtd-theme
