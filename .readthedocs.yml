@@ -22,4 +22,4 @@ sphinx:
 build:
   image: latest
   commands:
-    - pip install -U sphinx numpydoc
+    - pip install -U sphinx numpydoc sphinx-rtd-theme

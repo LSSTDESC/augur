@@ -1,0 +1,704 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Reference &mdash; desc-augur  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            desc-augur
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#augur.analyze.Analyze"><code class="docutils literal notranslate"><span class="pre">Analyze</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.Jacobian_transform"><code class="docutils literal notranslate"><span class="pre">Analyze.Jacobian_transform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.add_external_fisher"><code class="docutils literal notranslate"><span class="pre">Analyze.add_external_fisher()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.add_gaussian_priors"><code class="docutils literal notranslate"><span class="pre">Analyze.add_gaussian_priors()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.compute_new_theory_vector"><code class="docutils literal notranslate"><span class="pre">Analyze.compute_new_theory_vector()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.f"><code class="docutils literal notranslate"><span class="pre">Analyze.f()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.get_Om"><code class="docutils literal notranslate"><span class="pre">Analyze.get_Om()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.get_S8"><code class="docutils literal notranslate"><span class="pre">Analyze.get_S8()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.get_derivatives"><code class="docutils literal notranslate"><span class="pre">Analyze.get_derivatives()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.get_fisher_bias"><code class="docutils literal notranslate"><span class="pre">Analyze.get_fisher_bias()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#augur.analyze.Analyze.get_fisher_matrix"><code class="docutils literal notranslate"><span class="pre">Analyze.get_fisher_matrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.generate.generate"><code class="docutils literal notranslate"><span class="pre">generate()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.generate.generate_sacc_and_stats"><code class="docutils literal notranslate"><span class="pre">generate_sacc_and_stats()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.parser.parse"><code class="docutils literal notranslate"><span class="pre">parse()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.postprocess.draw_fisher_ellipses"><code class="docutils literal notranslate"><span class="pre">draw_fisher_ellipses()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.postprocess.get_FoM_all"><code class="docutils literal notranslate"><span class="pre">get_FoM_all()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.postprocess.postprocess"><code class="docutils literal notranslate"><span class="pre">postprocess()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.config_io.parse_array"><code class="docutils literal notranslate"><span class="pre">parse_array()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.config_io.parse_config"><code class="docutils literal notranslate"><span class="pre">parse_config()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.config_io.read_fisher_from_file"><code class="docutils literal notranslate"><span class="pre">read_fisher_from_file()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.cov_utils.TJPCovGaus"><code class="docutils literal notranslate"><span class="pre">TJPCovGaus</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#augur.utils.cov_utils.TJPCovGaus.get_binning_info"><code class="docutils literal notranslate"><span class="pre">TJPCovGaus.get_binning_info()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.cov_utils.get_SRD_cov"><code class="docutils literal notranslate"><span class="pre">get_SRD_cov()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.cov_utils.get_gaus_cov"><code class="docutils literal notranslate"><span class="pre">get_gaus_cov()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.cov_utils.get_noise_power"><code class="docutils literal notranslate"><span class="pre">get_noise_power()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.diff_utils.five_pt_stencil"><code class="docutils literal notranslate"><span class="pre">five_pt_stencil()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.firecrown_interface.create_modeling_tools"><code class="docutils literal notranslate"><span class="pre">create_modeling_tools()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.firecrown_interface.create_twopoint_filter"><code class="docutils literal notranslate"><span class="pre">create_twopoint_filter()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.firecrown_interface.load_likelihood_from_yaml"><code class="docutils literal notranslate"><span class="pre">load_likelihood_from_yaml()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.utils.theory_utils.compute_new_theory_vector"><code class="docutils literal notranslate"><span class="pre">compute_new_theory_vector()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.Gaussian"><code class="docutils literal notranslate"><span class="pre">Gaussian</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.LensSRD2018"><code class="docutils literal notranslate"><span class="pre">LensSRD2018</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.SourceSRD2018"><code class="docutils literal notranslate"><span class="pre">SourceSRD2018</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.TopHat"><code class="docutils literal notranslate"><span class="pre">TopHat</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.WLSource"><code class="docutils literal notranslate"><span class="pre">WLSource</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#augur.tracers.two_point.WLSource.to_dict"><code class="docutils literal notranslate"><span class="pre">WLSource.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.ZDist"><code class="docutils literal notranslate"><span class="pre">ZDist</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.ZDistFromFile"><code class="docutils literal notranslate"><span class="pre">ZDistFromFile</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.equal_density_zbins"><code class="docutils literal notranslate"><span class="pre">equal_density_zbins()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.gaus_kernel"><code class="docutils literal notranslate"><span class="pre">gaus_kernel()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#augur.tracers.two_point.srd_dndz"><code class="docutils literal notranslate"><span class="pre">srd_dndz()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">desc-augur</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">API Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/api.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="api-reference">
+<h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h1>
+<p>This section contains the API documentation for the Augur package.</p>
+<span class="target" id="module-augur"></span><span class="target" id="module-augur.analyze"></span><dl class="py class">
+<dt class="sig sig-object py" id="augur.analyze.Analyze">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.analyze.</span></span><span class="sig-name descname"><span class="pre">Analyze</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">likelihood</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">req_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm_step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.analyze.Analyze.Jacobian_transform" title="augur.analyze.Analyze.Jacobian_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Jacobian_transform</span></code></a>()</p></td>
+<td><p>Function that returns the Jacobian to transform the basis from: - Omega_c -&gt; Omega_m - sigma8 -&gt; S8 and will replace its value in the Fisher matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#augur.analyze.Analyze.add_gaussian_priors" title="augur.analyze.Analyze.add_gaussian_priors"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_gaussian_priors</span></code></a>([save_txt])</p></td>
+<td><p>Auxiliary function to add user-specified Gaussian priors to parameters.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.analyze.Analyze.compute_new_theory_vector" title="augur.analyze.Analyze.compute_new_theory_vector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_new_theory_vector</span></code></a>(_sys_pars, _pars)</p></td>
+<td><p>Utility function to update the likelihood and modeling tool objects to use a new set of parameters and compute a new theory prediction</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#augur.analyze.Analyze.f" title="augur.analyze.Analyze.f"><code class="xref py py-obj docutils literal notranslate"><span class="pre">f</span></code></a>(x, labels, pars_fid, sys_fid[, donorm])</p></td>
+<td><p>Auxiliary Function that returns a theory vector evaluated at x.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.analyze.Analyze.get_Om" title="augur.analyze.Analyze.get_Om"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_Om</span></code></a>()</p></td>
+<td><p>Function that calculates the fiducial value of Omega_m from the input fiducial cosmology.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#augur.analyze.Analyze.get_S8" title="augur.analyze.Analyze.get_S8"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_S8</span></code></a>()</p></td>
+<td><p>Function that calculates the fiducial value of S8 from the input fiducial cosmology.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.analyze.Analyze.get_derivatives" title="augur.analyze.Analyze.get_derivatives"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_derivatives</span></code></a>([force, method, step])</p></td>
+<td><p>Auxiliary function to compute numerical derivatives of the helper function <cite>f</cite></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#augur.analyze.Analyze.get_fisher_bias" title="augur.analyze.Analyze.get_fisher_bias"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_fisher_bias</span></code></a>([force, method, save_txt, ...])</p></td>
+<td><p>Compute Fisher bias following the generalized Amara formalism More details in Bianca's thesis and the note here: <a class="reference external" href="https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex">https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex</a></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.analyze.Analyze.get_fisher_matrix" title="augur.analyze.Analyze.get_fisher_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_fisher_matrix</span></code></a>([method, save_txt])</p></td>
+<td><p>Method to compute the Fisher matrix.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><strong>add_external_fisher</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.Jacobian_transform">
+<span class="sig-name descname"><span class="pre">Jacobian_transform</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.Jacobian_transform" title="Link to this definition"></a></dt>
+<dd><p>Function that returns the Jacobian to transform the basis from:
+- Omega_c -&gt; Omega_m
+- sigma8 -&gt; S8
+and will replace its value in the Fisher matrix.
+If neither transform is specified, this function will return the Identity matrix
+to keep all subsequent operations consistent.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.add_external_fisher">
+<span class="sig-name descname"><span class="pre">add_external_fisher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">external_fisher</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_txt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.add_external_fisher" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.add_gaussian_priors">
+<span class="sig-name descname"><span class="pre">add_gaussian_priors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">save_txt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.add_gaussian_priors" title="Link to this definition"></a></dt>
+<dd><p>Auxiliary function to add user-specified Gaussian priors to parameters.
+Called immediately after calculating the Fisher matrix if gaussian_priors
+header is specified.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.compute_new_theory_vector">
+<span class="sig-name descname"><span class="pre">compute_new_theory_vector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">_sys_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_pars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.compute_new_theory_vector" title="Link to this definition"></a></dt>
+<dd><p>Utility function to update the likelihood and modeling tool objects to use a new
+set of parameters and compute a new theory prediction</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.f">
+<span class="sig-name descname"><span class="pre">f</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pars_fid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sys_fid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">donorm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.f" title="Link to this definition"></a></dt>
+<dd><p>Auxiliary Function that returns a theory vector evaluated at x.
+Labels are the name of the parameters x (with the same length and order)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.get_Om">
+<span class="sig-name descname"><span class="pre">get_Om</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.get_Om" title="Link to this definition"></a></dt>
+<dd><p>Function that calculates the fiducial value of Omega_m from the input fiducial cosmology.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.get_S8">
+<span class="sig-name descname"><span class="pre">get_S8</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.get_S8" title="Link to this definition"></a></dt>
+<dd><p>Function that calculates the fiducial value of S8 from the input fiducial cosmology.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.get_derivatives">
+<span class="sig-name descname"><span class="pre">get_derivatives</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.get_derivatives" title="Link to this definition"></a></dt>
+<dd><p>Auxiliary function to compute numerical derivatives of the helper function <cite>f</cite></p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.get_fisher_bias">
+<span class="sig-name descname"><span class="pre">get_fisher_bias</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_txt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_fid</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.get_fisher_bias" title="Link to this definition"></a></dt>
+<dd><p>Compute Fisher bias following the generalized Amara formalism
+More details in Bianca’s thesis and the note here:
+<a class="reference external" href="https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex">https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex</a></p>
+<p>This method always computes the bias using the Fisher matrix without priors, self.Fij.</p>
+<p>The sign convention follows the note linked above, &lt;theta_{i} - theta_{i}^{ref}&gt; = bi,
+where theta_{i} are the parameters of interest and theta_{i}^{ref} are the reference
+parameters about which the Fisher matrix is evaluated (e.g. the fiducial cosmology).
+The bias is then given by bi = F^-1 &#64; Bj, where Bj = biased_cls^T &#64; inv_cov &#64; derivatives.
+The biased_cls are the differences between the biased theory vector and either the fiducial
+theory vector or the original theory vector evaluated at the pivot point,
+depending on the value of <cite>use_fid</cite>.</p>
+<p>The method allows the usage of externally calculated “systematics”
+They should have the same ells as the original data-vector
+and the same length, and should be provided in the form of a text file with a column named
+<cite>dv_sys</cite> and the same number of rows as the data vector. If no external systematics are
+provided, the code will calculate the biased theory vector internally by evaluating the
+theory at a new point in parameter space defined by <cite>bias_params</cite> in the config, which
+should be a dictionary of parameter names and values to bias.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.analyze.Analyze.get_fisher_matrix">
+<span class="sig-name descname"><span class="pre">get_fisher_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_txt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.analyze.Analyze.get_fisher_matrix" title="Link to this definition"></a></dt>
+<dd><p>Method to compute the Fisher matrix. It will use the cached derivatives
+and Fisher matrix if they are already computed, otherwise it will compute
+them. self.Fij is always the Fisher matrix without priors,
+self.Fij_with_gprior is the Fisher matrix with Gaussian priors added in, if specified.</p>
+</dd></dl>
+
+</dd></dl>
+
+<p id="module-augur.generate">Data Generation module</p>
+<p>This code generates synthetic dataset by cobbling
+together a suitable configuration file for firecrown
+and then convincing it to generate data.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.generate.generate">
+<span class="sig-prename descclassname"><span class="pre">augur.generate.</span></span><span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">configs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_all_outputs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">write_sacc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_sacc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sacc_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tools</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.generate.generate" title="Link to this definition"></a></dt>
+<dd><p>Generate likelihood object and sacc file with fiducial cosmology</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.generate.generate_sacc_and_stats">
+<span class="sig-prename descclassname"><span class="pre">augur.generate.</span></span><span class="sig-name descname"><span class="pre">generate_sacc_and_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.generate.generate_sacc_and_stats" title="Link to this definition"></a></dt>
+<dd><p>Routine to generate a placeholder SACC file containing the data-vector
+combinations and tracers specified in the configuration. It also generates
+the required TwoPoint statistics to feed the firecrown likelihood.</p>
+<p>Note: Systematics implemented are PhotoZShift, MultiplicativeShearBias,
+and LinearAlignmentSystematic.</p>
+</dd></dl>
+
+<span class="target" id="module-augur.parser"></span><dl class="py function">
+<dt class="sig sig-object py" id="augur.parser.parse">
+<span class="sig-prename descclassname"><span class="pre">augur.parser.</span></span><span class="sig-name descname"><span class="pre">parse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.parser.parse" title="Link to this definition"></a></dt>
+<dd><p>Parse a configuration file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>filename</strong><span class="classifier">str</span></dt><dd><p>The config file to parse. Should be YAML formatted.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>config: dict</dt><dd><p>The raw config file as a dictionary.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<span class="target" id="module-augur.postprocess"></span><dl class="py function">
+<dt class="sig sig-object py" id="augur.postprocess.draw_fisher_ellipses">
+<span class="sig-prename descclassname"><span class="pre">augur.postprocess.</span></span><span class="sig-name descname"><span class="pre">draw_fisher_ellipses</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ax</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inv_F</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">facecolors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edgecolors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linestyles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linewidth</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">CL</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.95</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.postprocess.draw_fisher_ellipses" title="Link to this definition"></a></dt>
+<dd><p>Draw uncertainty ellipses for a set of Fisher matrices.</p>
+<p>All ellipses are drawn with the same center. Contours are scaled
+to enclose a specified probability (CL) assuming Gaussian errors.</p>
+<p>Script copied from: <a class="reference external" href="https://github.com/LSSTDESC/Requirements/blob/v1.0.1/notebooks/DETF.ipynb">https://github.com/LSSTDESC/Requirements/blob/v1.0.1/notebooks/DETF.ipynb</a>
+Parameters
+———-
+ax : matplotlib axes</p>
+<blockquote>
+<div><p>Where the ellipses should be drawn.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>inv_F<span class="classifier">array</span></dt><dd><p>Array of dimensions (2,2) encoding 2x2 inverse of Fisher sub-matrices.</p>
+</dd>
+<dt>facecolors<span class="classifier">matplotlib.colors.Color</span></dt><dd><p>Matplotlib colors for filling the ellipse interior.</p>
+</dd>
+<dt>edgecolors<span class="classifier">matplotlib.colors.Color</span></dt><dd><p>Matplotlib colors for drawing the ellipse boundary.</p>
+</dd>
+<dt>linestyles<span class="classifier">matpolotlib.linestyles</span></dt><dd><p>Matplotlib line styles for drawing the ellipse boundary.</p>
+</dd>
+<dt>linewidth<span class="classifier">float</span></dt><dd><p>Linewidth of the ellipse</p>
+</dd>
+<dt>mu<span class="classifier">tuple</span></dt><dd><p>Center coordinates for the ellipse</p>
+</dd>
+<dt>CL<span class="classifier">float</span></dt><dd><p>Confidence level in the range [0,1] that the ellipses should enclose.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.postprocess.get_FoM_all">
+<span class="sig-prename descclassname"><span class="pre">augur.postprocess.</span></span><span class="sig-name descname"><span class="pre">get_FoM_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fisher</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">CL</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.postprocess.get_FoM_all" title="Link to this definition"></a></dt>
+<dd><p>Two alternative ways to get the FoM for a pair of parameters
+(code stolen from <a class="reference external" href="https://github.com/CosmoLike/DESC_SRD/blob/master/fisher.py#L274">https://github.com/CosmoLike/DESC_SRD/blob/master/fisher.py#L274</a>)</p>
+<section id="parameters">
+<h2>Parameters:<a class="headerlink" href="#parameters" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>fisher<span class="classifier">ndarray</span></dt><dd><p>Fisher matrix</p>
+</dd>
+<dt>par1<span class="classifier">int</span></dt><dd><p>Index of first parameter</p>
+</dd>
+<dt>par2<span class="classifier">int</span></dt><dd><p>Index of second parameter</p>
+</dd>
+<dt>CL<span class="classifier">float</span></dt><dd><p>Confidence level (between 0 and 1)</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns:<a class="headerlink" href="#returns" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>FOM<span class="classifier">float</span></dt><dd><p>Estimate of FoM.</p>
+</dd>
+<dt>FOM2<span class="classifier">float</span></dt><dd><p>Alternative estimate of FoM. Choose wisely.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.postprocess.postprocess">
+<span class="sig-prename descclassname"><span class="pre">augur.postprocess.</span></span><span class="sig-name descname"><span class="pre">postprocess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.postprocess.postprocess" title="Link to this definition"></a></dt>
+<dd><p>Generates postprocessing plots and Figure
+of Merit based on the configuration passed</p>
+<section id="id1">
+<h2>Parameters:<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>config<span class="classifier">dict</span></dt><dd><p>The yaml parsed dictional of the input yaml file</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<span class="target" id="module-augur.utils.config_io"></span><dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.config_io.parse_array">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.config_io.</span></span><span class="sig-name descname"><span class="pre">parse_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.config_io.parse_array" title="Link to this definition"></a></dt>
+<dd><p>Safely evaluate a config string to a numpy array.</p>
+<p>Accepts either a plain list literal (<code class="docutils literal notranslate"><span class="pre">&quot;[1,</span> <span class="pre">2,</span> <span class="pre">3]&quot;</span></code>) or a limited
+set of numpy expressions (<code class="docutils literal notranslate"><span class="pre">&quot;np.linspace(20,</span> <span class="pre">15000,</span> <span class="pre">21)&quot;</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>value</strong><span class="classifier">str or array-like</span></dt><dd><p>If already an array/list, returned as <code class="docutils literal notranslate"><span class="pre">np.asarray(value)</span></code>.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>np.ndarray</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.config_io.parse_config">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.config_io.</span></span><span class="sig-name descname"><span class="pre">parse_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.config_io.parse_config" title="Link to this definition"></a></dt>
+<dd><p>Utility to parse configuration file</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.config_io.read_fisher_from_file">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.config_io.</span></span><span class="sig-name descname"><span class="pre">read_fisher_from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.config_io.read_fisher_from_file" title="Link to this definition"></a></dt>
+<dd><p>Helper function to add external Fisher evaluations to the computed Fisher matrix in Augur.
+Requires the path have two files in the Augur format: fiducial and Fisher.</p>
+<dl class="simple">
+<dt>This function does not check the compatibility of the fiducial systematic parameters</dt><dd><p>or cosmology with the current Augur run; that is the user’s responsibility.</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>base</strong> – base path to the files (without _fiducials.dat or _fisher.dat)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>fisher matrix and fiducial vector as numpy arrays</p>
+</dd>
+</dl>
+</dd></dl>
+
+<span class="target" id="module-augur.utils.cov_utils"></span><dl class="py class">
+<dt class="sig sig-object py" id="augur.utils.cov_utils.TJPCovGaus">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.utils.cov_utils.</span></span><span class="sig-name descname"><span class="pre">TJPCovGaus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.cov_utils.TJPCovGaus" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">FourierGaussianFsky</span></code></p>
+<p>Class to patch FourierGaussianFsky to work with Augur</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">covariance_block_data_type</span></code></dt><dd><p>The covariance block data type for your builder.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.utils.cov_utils.TJPCovGaus.get_binning_info" title="augur.utils.cov_utils.TJPCovGaus.get_binning_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_binning_info</span></code></a>()</p></td>
+<td><p>Get the ells for bins given the sacc object.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_cosmology</span></code>()</p></td>
+<td><p>Return a CCL Cosmology instance.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_covariance</span></code>(**kwargs)</p></td>
+<td><p>Return the full covariance.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_covariance_block</span></code>(tracer_comb1, tracer_comb2)</p></td>
+<td><p>Compute a single covariance matrix for a given pair of C_ell.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_covariance_block_for_sacc</span></code>(tracer_comb1, ...)</p></td>
+<td><p>Return the covariance block as needed for the sacc file.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_datatypes_from_ncell</span></code>(ncell)</p></td>
+<td><p>Return the datatypes (e.g cl_00) for a the number of cells.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_ell_eff</span></code>()</p></td>
+<td><p>Return the effective ell in the sacc file.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_list_of_tracers_for_cov</span></code>()</p></td>
+<td><p>Return the covariance independent tracers combinations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_mask_names_dict</span></code>(tracer_names)</p></td>
+<td><p>Return a dictionary with the mask names for the given tracers.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_masks_dict</span></code>(tracer_names[, cache])</p></td>
+<td><p>Return a dictionary with the masks assotiated to the given tracers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_nbpw</span></code>()</p></td>
+<td><p>Return the number of bandpowers in which the data has been binned.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_sacc_with_concise_dtypes</span></code>()</p></td>
+<td><p>Return a copy of the sacc file with concise data types.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracer_comb_data_types</span></code>(tracer_comb)</p></td>
+<td><p>Return the tracer data types associated to the given tracers.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracer_comb_ncell</span></code>(tracer_comb[, independent])</p></td>
+<td><p>Return the number of Cell for a pair of tracers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracer_comb_spin</span></code>(tracer_comb)</p></td>
+<td><p>Return the spins of a pair of tracers.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracer_info</span></code>([return_noise_coupled])</p></td>
+<td><p>Returns CCL tracer objects and the noise for all the tracers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracer_nmaps</span></code>(tracer)</p></td>
+<td><p>Return the number of maps assotiated to the given tracer.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracer_spin</span></code>(tracer)</p></td>
+<td><p>Return the spin of a given tracer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_tracers_spin_dict</span></code>(tracer_names)</p></td>
+<td><p>Return a dictionary with the spins assotiated to the given tracers.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.utils.cov_utils.TJPCovGaus.get_binning_info">
+<span class="sig-name descname"><span class="pre">get_binning_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.cov_utils.TJPCovGaus.get_binning_info" title="Link to this definition"></a></dt>
+<dd><p>Get the ells for bins given the sacc object.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>binning (str): Binning type.</p>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>tuple:</dt><dd><ul class="simple">
+<li><p>ell (array): All the ells covered</p></li>
+<li><p>ell_eff (array): The effective ells</p></li>
+<li><p>ell_edges (array): The bandpower edges</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.cov_utils.get_SRD_cov">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.cov_utils.</span></span><span class="sig-name descname"><span class="pre">get_SRD_cov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.cov_utils.get_SRD_cov" title="Link to this definition"></a></dt>
+<dd><p>Read covariance file from SRD v1:
+<a class="reference external" href="https://github.com/LSSTDESC/Requirements/tree/master/forecasting/WL-LSS-CL/cov">https://github.com/LSSTDESC/Requirements/tree/master/forecasting/WL-LSS-CL/cov</a></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.cov_utils.get_gaus_cov">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.cov_utils.</span></span><span class="sig-name descname"><span class="pre">get_gaus_cov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">S</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lk</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cosmo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fsky</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.cov_utils.get_gaus_cov" title="Link to this definition"></a></dt>
+<dd><p>Basic implementation of Gaussian covariance using the mode-counting formula
+and fsky approximation. Assumes that all ell-edges are the same for (3x)2pt
+statistics and uniform bin-widths in ell.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.cov_utils.get_noise_power">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.cov_utils.</span></span><span class="sig-name descname"><span class="pre">get_noise_power</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tracer_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_ndens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.cov_utils.get_noise_power" title="Link to this definition"></a></dt>
+<dd><p>Returns noise power for tracer</p>
+<section id="id2">
+<h2>Parameters:<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>config<span class="classifier">dict</span></dt><dd><p>The dictinary containt the relevant two_point section of the config</p>
+</dd>
+<dt>S<span class="classifier">Sacc</span></dt><dd><p>Sacc file containing all tracers</p>
+</dd>
+<dt>tracer_name<span class="classifier">str</span></dt><dd><p>Tracer ID</p>
+</dd>
+<dt>return_ndens<span class="classifier">bool</span></dt><dd><p>If <cite>True</cite> return the number density (in arcmin^-2)</p>
+</dd>
+</dl>
+</section>
+<section id="id3">
+<h2>Returns:<a class="headerlink" href="#id3" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>noise<span class="classifier">float</span></dt><dd><p>Noise power for Cls for that particular tracer. That is 1/nbar for
+number counts and e**2/nbar for weak lensing tracer.</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<span class="target" id="module-augur.utils.diff_utils"></span><dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.diff_utils.five_pt_stencil">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.diff_utils.</span></span><span class="sig-name descname"><span class="pre">five_pt_stencil</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.diff_utils.five_pt_stencil" title="Link to this definition"></a></dt>
+<dd><p>Five-point stencil differentiation based on <a class="reference external" href="https://arxiv.org/pdf/2101.00298.pdf">https://arxiv.org/pdf/2101.00298.pdf</a></p>
+<p>The routine is designed for internal use only and is not guaranteed to be robust for all inputs.
+It is the user’s responsibility to ensure that the step size h is appropriate for the function
+f and the point x0 at which the derivative is being evaluated.</p>
+</dd></dl>
+
+<span class="target" id="module-augur.utils.firecrown_interface"></span><dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.firecrown_interface.create_modeling_tools">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.firecrown_interface.</span></span><span class="sig-name descname"><span class="pre">create_modeling_tools</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.firecrown_interface.create_modeling_tools" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.firecrown_interface.create_twopoint_filter">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.firecrown_interface.</span></span><span class="sig-name descname"><span class="pre">create_twopoint_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">combo_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cut_low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cut_high</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.firecrown_interface.create_twopoint_filter" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.firecrown_interface.load_likelihood_from_yaml">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.firecrown_interface.</span></span><span class="sig-name descname"><span class="pre">load_likelihood_from_yaml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ccl_factory</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">S</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.firecrown_interface.load_likelihood_from_yaml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-augur.utils.theory_utils"></span><dl class="py function">
+<dt class="sig sig-object py" id="augur.utils.theory_utils.compute_new_theory_vector">
+<span class="sig-prename descclassname"><span class="pre">augur.utils.theory_utils.</span></span><span class="sig-name descname"><span class="pre">compute_new_theory_vector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lk</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tools</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_sys_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_all</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.utils.theory_utils.compute_new_theory_vector" title="Link to this definition"></a></dt>
+<dd><p>Utility function to update the likelihood and modeling tool objects to use a new
+set of parameters and compute a new theory prediction</p>
+</dd></dl>
+
+<span class="target" id="module-augur.tracers.two_point"></span><dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.Gaussian">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">Gaussian</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_mu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_sigma</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.Gaussian" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#augur.tracers.two_point.ZDist" title="augur.tracers.two_point.ZDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZDist</span></code></a></p>
+<p>Gaussian redshift bin</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.LensSRD2018">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">LensSRD2018</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_width</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_nbins</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_sigmaz</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.94</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_z0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.26</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_filter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.LensSRD2018" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#augur.tracers.two_point.ZDist" title="augur.tracers.two_point.ZDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZDist</span></code></a></p>
+<p>Lenses from 2018 SRD</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.SourceSRD2018">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">SourceSRD2018</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_nbins</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_sigmaz</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_ibin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.78</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_z0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.13</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.SourceSRD2018" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#augur.tracers.two_point.ZDist" title="augur.tracers.two_point.ZDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZDist</span></code></a></p>
+<p>Source from 2018 SRD, benchmarked against Paul Rogozenski’s notebook</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.TopHat">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">TopHat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Nz_width</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.TopHat" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#augur.tracers.two_point.ZDist" title="augur.tracers.two_point.ZDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZDist</span></code></a></p>
+<p>Top Hat redshift bin</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.WLSource">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">WLSource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sacc_tracer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ellipticity_error</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">number_density</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zdist</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mult_bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ia_bias</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">ia_kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.WLSource" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Weak lensing source tracer</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#augur.tracers.two_point.WLSource.to_dict" title="augur.tracers.two_point.WLSource.to_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_dict</span></code></a>()</p></td>
+<td><p>Write WLSource object to a dictionary that can be added to a sacc file.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="augur.tracers.two_point.WLSource.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.WLSource.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Write WLSource object to a dictionary that can be added
+to a sacc file.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.ZDist">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">ZDist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.ZDist" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for redshift distribution</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="augur.tracers.two_point.ZDistFromFile">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">ZDistFromFile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ibin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'npy'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.ZDistFromFile" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#augur.tracers.two_point.ZDist" title="augur.tracers.two_point.ZDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">ZDist</span></code></a></p>
+<p>Class to pass an arbitrary redshift distribution to a tracer</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.tracers.two_point.equal_density_zbins">
+<span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">equal_density_zbins</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nz</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbins</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.equal_density_zbins" title="Link to this definition"></a></dt>
+<dd><p>This function takes a redshift distribution and returns the redshift bins
+that contain equal number of galaxies.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.tracers.two_point.gaus_kernel">
+<span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">gaus_kernel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sig_z</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.gaus_kernel" title="Link to this definition"></a></dt>
+<dd><p>Gaussian kernel to distort photo-z</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="augur.tracers.two_point.srd_dndz">
+<span class="sig-prename descclassname"><span class="pre">augur.tracers.two_point.</span></span><span class="sig-name descname"><span class="pre">srd_dndz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#augur.tracers.two_point.srd_dndz" title="Link to this definition"></a></dt>
+<dd><p>Overall redshift distribution described in the
+DESC Science Requirements Document.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, LSST DESC.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
