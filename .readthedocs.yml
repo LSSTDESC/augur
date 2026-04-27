@@ -13,7 +13,7 @@ build:
       - pip install -e .
     post_build:
       - mkdir -p $READTHEDOCS_OUTPUT/html
-      - mv _build/html/* $READTHEDOCS_OUTPUT/html/ || true
+      - cp -r _build/html/* $READTHEDOCS_OUTPUT/html/ || true
 
 sphinx:
   configuration: conf.py
