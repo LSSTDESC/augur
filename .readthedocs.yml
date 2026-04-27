@@ -1,0 +1,25 @@
+version: 2
+
+doc_root: .
+
+build:
+  image: latest
+
+python:
+  version: 3.11
+  install:
+    - method: pip
+      path: .
+
+conda:
+  file: environment.yml
+  env: forecasting
+
+sphinx:
+  configuration: conf.py
+
+# Additional build commands to ensure documentation tooling is installed.
+build:
+  image: latest
+  commands:
+    - pip install -U sphinx numpydoc
