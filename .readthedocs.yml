@@ -5,7 +5,7 @@ build:
   tools:
     python: "3.11"
   conda:
-    environment: environment.yml
+    file: environment.yml
   jobs:
     post_install:
       - pip install -U sphinx numpydoc sphinx-rtd-theme
