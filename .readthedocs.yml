@@ -13,6 +13,7 @@ build:
     python: "3.11"
   jobs:
     post_install:
+      - pip install sphinx-rtd-theme
       - pip install -e .
     post_build:
       - mkdir -p $READTHEDOCS_OUTPUT/html
