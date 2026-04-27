@@ -4,9 +4,9 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.11"
+  conda:
+    environment: environment.yml
   jobs:
-    install:
-      - requirements: environment.yml
     post_install:
       - pip install -U sphinx numpydoc sphinx-rtd-theme
       - pip install -e .
