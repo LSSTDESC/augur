@@ -1,5 +1,6 @@
 """Command-line interface for Augur."""
 
+import logging
 import pprint
 
 import click
@@ -9,21 +10,27 @@ from augur.analyze import Analyze
 from augur.generate import generate
 from augur.postprocess import postprocess
 
+logger = logging.getLogger(__name__)
+
 
 @click.command()
 @click.argument("config", type=str)
 @click.option("-v", "--verbose", is_flag=True)
 def run(config, verbose):
     """Run Augur from a YAML configuration file."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
     parsed_config = augur.parse(config)
     if verbose:
-        print("rendered config file:\n", pprint.pformat(parsed_config), flush=True)
+        logger.debug("rendered config file:\n%s", pprint.pformat(parsed_config))
 
-    print("Generating fiducial data vector...", flush=True)
+    logger.info("Generating fiducial data vector...")
     likelihood, S, tools, req_params = generate(parsed_config, return_all_outputs=True)
 
     if "fisher" in parsed_config:
-        print("Computing Fisher matrix...", flush=True)
+        logger.info("Computing Fisher matrix...")
         analysis = Analyze(
             parsed_config,
             likelihood=likelihood,
@@ -35,10 +42,10 @@ def run(config, verbose):
             analysis.get_fisher_bias()
 
     if "postprocess" in parsed_config:
-        print("Postprocessing...", flush=True)
+        logger.info("Postprocessing...")
         postprocess(parsed_config)
 
-    print("Done.", flush=True)
+    logger.info("Done.")
 
 
 if __name__ == "__main__":

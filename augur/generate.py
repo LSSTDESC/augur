@@ -6,6 +6,7 @@ and then convincing it to generate data.
 
 """
 
+import logging
 import numpy as np
 import pyccl as ccl
 import sacc
@@ -14,7 +15,7 @@ from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from augur.utils.theory_utils import compute_new_theory_vector
-
+from copy import deepcopy
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
 from firecrown.likelihood.two_point import TwoPoint
@@ -23,8 +24,27 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 import warnings
+from augur.utils.config_io import parse_array
+
+logger = logging.getLogger(__name__)
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
+
+# Safe registry for N(z) classes - maps string names to actual classes
+NZ_CLASS_REGISTRY = {
+    'ZDist': ZDist,
+    'LensSRD2018': LensSRD2018,
+    'SourceSRD2018': SourceSRD2018,
+    'ZDistFromFile': ZDistFromFile,
+}
+
+
+def _get_nz_class(class_name):
+    """Safely get N(z) class from registry."""
+    if class_name not in NZ_CLASS_REGISTRY:
+        raise ValueError(f"Unknown N(z) class '{class_name}'. \
+                         Available classes: {list(NZ_CLASS_REGISTRY.keys())}")
+    return NZ_CLASS_REGISTRY[class_name]
 
 
 def _get_tracers(statistic, comb):
@@ -69,7 +89,7 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                     4.004004004004004004, 1000)  # z to probe the dndz distribution
     Nz_centers = None
     if 'Nz_center' in cfg['Nz_kwargs'].keys():
-        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+        Nz_centers = parse_array(cfg['Nz_kwargs']['Nz_center'])
         cfg['Nz_kwargs'].pop('Nz_center')
 
         if np.isscalar(Nz_centers):
@@ -82,36 +102,38 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
     for i in range(nbins):
         sacc_tracer = f'{src_root}{i}'
         if isinstance(cfg['Nz_type'], list):
-            if eval(cfg['Nz_type'][i]) in implemented_nzs:
+            nz_class = _get_nz_class(cfg['Nz_type'][i])
+            if nz_class in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type'][i]:
                     if Nz_centers is not None:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
-                                                                    Nz_center=Nz_centers[i],
-                                                                    Nz_nbins=nbins,
-                                                                    **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_center=Nz_centers[i],
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
                     else:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(z,
-                                                                    Nz_ibin=i,
-                                                                    Nz_nbins=nbins,
-                                                                    **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_ibin=i,
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
 
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         else:
-            if eval(cfg['Nz_type']) in implemented_nzs:
+            nz_class = _get_nz_class(cfg['Nz_type'])
+            if nz_class in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type']:
                     if Nz_centers is not None:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                                 Nz_center=Nz_centers[i],
-                                                                 Nz_nbins=nbins,
-                                                                 **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_center=Nz_centers[i],
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
                     else:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(z,
-                                                                 Nz_ibin=i,
-                                                                 Nz_nbins=nbins,
-                                                                 **cfg['Nz_kwargs'])
+                        dndz[sacc_tracer] = nz_class(z,
+                                                     Nz_ibin=i,
+                                                     Nz_nbins=nbins,
+                                                     **cfg['Nz_kwargs'])
                 else:
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
@@ -124,7 +146,7 @@ def _get_scale_cuts(stat_cfg, comb):
     """
     Auxiliary function to get the scale cuts in ell for a given tracer
     combination in the configuration file.
-    Parameters
+
     Parameters
     ----------
     stat_cfg : dict
@@ -205,9 +227,10 @@ def generate_sacc_and_stats(config):
                     value = config['ccl_accuracy']['spline_params'][key]
                     ccl.spline_params[key] = type_here(value)
                 except KeyError:
-                    print(f'The selected spline keyword `{key}` is not recognized.')
+                    logger.warning('The selected spline keyword `%s` is not recognized.', key)
                 except ValueError:
-                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
         # Pass along GSL control parameters
         if 'gsl_params' in config['ccl_accuracy'].keys():
             for key in config['ccl_accuracy']['gsl_params'].keys():
@@ -216,11 +239,14 @@ def generate_sacc_and_stats(config):
                     value = config['ccl_accuracy']['gsl_params'][key]
                     ccl.gsl_params[key] = type_here(value)
                 except KeyError:
-                    print(f'The selected GSL keyword `{key}` is not recognized.')
+                    logger.warning('The selected GSL keyword `%s` is not recognized.', key)
                 except ValueError:
-                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
 
     if cosmo_cfg.get('mg_parametrization', None) is not None:
+        warnings.warn("Modified gravity parametrizations are experimental and may not be \
+                      fully supported. Use with caution.")
         mg_cfg = cosmo_cfg['mg_parametrization']
         if mg_cfg.get('mu_Sigma', None) is not None:
             mu_sig = mg_cfg['mu_Sigma']
@@ -233,14 +259,14 @@ def generate_sacc_and_stats(config):
                     try:
                         mu_sig[key] = float(mu_sig[key])
                     except ValueError:
-                        print(f'The selected value `{mu_sig[key]}` \
-                              for `{key}` could not be casted to `float`.')
+                        logger.warning('The selected value `%s` for `%s` could not be \
+                                        casted to `float`.', mu_sig[key], key)
 
             cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:
-        print('Error in cosmology configuration. Check the config file.')
+        logger.error('Error in cosmology configuration. Check the config file.')
         # Reraise the exception to see the full traceback
         raise e
 
@@ -296,7 +322,7 @@ def generate_sacc_and_stats(config):
     Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
         tracer_combs = stat_cfg[key]['tracer_combs']
-        ell_edges = eval(stat_cfg[key]['ell_edges'])
+        ell_edges = parse_array(stat_cfg[key]['ell_edges'])
         ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
         # TODO: add scale cuts to likelihood, not just cutting datavector
         for comb in tracer_combs:
@@ -486,8 +512,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
 
                 lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
                 # _pars = cosmo.__dict__['_params_init_kwargs']
-                _pars = config.get('cosmo', {}).copy()
-                print(_pars)
+                _pars = deepcopy(config.get('cosmo', {}))
+                logger.debug(_pars)
 
                 # Make sure using YOUR covariance
                 if (
@@ -521,7 +547,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
 
     # Generate placeholders
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
-    # config = parse_config(configs)
 
     # config needs to specify likelihood yaml.
     # alternatively, can pass likelihood and tools objects at input paramters.
@@ -591,10 +616,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
     elif config['cov_options']['cov_type'] == 'tjpcov':
         tjpcov_ell_edges = np.asarray(
-            eval(config['cov_options']['binning_info']['ell_edges'])
+            parse_array(config['cov_options']['binning_info']['ell_edges'])
         )
         for stat_name, stat_info in config['statistics'].items():
-            dv_ell_edges = np.asarray(eval(stat_info['ell_edges']))
+            dv_ell_edges = np.asarray(parse_array(stat_info['ell_edges']))
             if (
                 tjpcov_ell_edges.shape != dv_ell_edges.shape
                 or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)
@@ -658,13 +683,13 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         warnings.warn('''Currently only internal Gaussian covariance and SRD has been implemented,
                          cov_type is not understood. Using identity matrix as covariance.''')
     if write_sacc:
-        print(config['fiducial_sacc_path'])
+        logger.debug(config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
 
     # add two-point filters here to the likelihood, in case of scale cuts
     if tp_filters != []:
-        print('loading filters')
+        logger.info('loading filters')
         config = parse_config(configs)
         from augur.utils.firecrown_interface import load_likelihood_from_yaml
         lk = load_likelihood_from_yaml(config,

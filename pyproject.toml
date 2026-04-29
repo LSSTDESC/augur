@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "augur"
+version = "1.2.1"
+authors = [
+    {name = "DESC Team"},
+]
+description = "DESC Cosmology Forecasting Tool"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "click",
+    "jinja2",
+    "healpy",
+    "numpydoc",
+    "qp-prob",
+    "scipy<1.14.0",
+    "numdifftools",
+    "tjpcov",
+    "pyccl>=3.3.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/LSSTDESC/augur"
+
+[project.scripts]
+augur = "augur.cli:run"
+
+[tool.setuptools.packages.find]
+exclude = ["examples*", "tests*"]
+
+[tool.setuptools.package-data]
+augur = ["*"]

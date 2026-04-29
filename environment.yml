@@ -2,7 +2,7 @@ name: forecasting
 channels:
   - conda-forge
 dependencies:
-  - firecrown>=1.14.0
+  - firecrown >= 1.14.0
   - flake8
   - scipy < 1.14.0
   - healpy
@@ -12,3 +12,5 @@ dependencies:
   - qp-prob
   - tjpcov
   - pyccl >= 3.3.1
+  - sphinx
+  - pyyaml

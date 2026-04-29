@@ -8,15 +8,35 @@ Augur is a wrapper to firecrown that generates synthetic datasets of abitrary co
 
 ## Installation
 
-As always, you can force installation through pip like
+**Note:** Augur requires `firecrown`, which is only available via conda. You must install `firecrown` in a conda environment before installing Augur.
 
-```pip install augur/```
+### Via conda (recommended)
 
-or actually inside the augur directory running
+Create a conda environment with all dependencies:
 
-```python setup.py install```
+```bash
+conda env create -f environment.yml
+conda activate forecasting
+pip install -e .
+```
 
-## Step-by-Step Installation (via conda)
+### Via pip (after conda setup)
+
+If you already have `firecrown` (version newer than 1.14) installed via conda, you can install Augur with pip:
+
+```bash
+pip install .
+```
+
+Or for development:
+
+```bash
+pip install -e .
+```
+
+**Legacy methods** (not recommended):
+- `pip install augur/` (requires firecrown pre-installed)
+- `python setup.py install` (requires firecrown pre-installed)
 
 This step-by-step installaion shows you how to get a working environment with `firecrown` and `augur` that you can hack away efficiently.
 

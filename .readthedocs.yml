@@ -1,0 +1,20 @@
+version: 2
+
+conda:
+  environment: environment.yml
+
+python:
+  install:
+    - requirements: docs/requirements.txt
+
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.11"
+  jobs:
+    post_install:
+
+      - pip install -e .
+
+sphinx:
+  configuration: conf.py

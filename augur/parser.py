@@ -19,6 +19,6 @@ def parse(filename):
 
     with open(filename, "r") as fp:
         config_str = jinja2.Template(fp.read()).render(env=os.environ)
-    config = yaml.load(config_str, Loader=yaml.Loader)
+    config = yaml.load(config_str, Loader=yaml.SafeLoader)
 
     return config
