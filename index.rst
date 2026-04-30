@@ -6,10 +6,10 @@
 desc-augur documentation
 ========================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+Welcome to the documentation for desc-augur, 
+a package for forecasting cosmological parameter constraints 
+from astronomical surveys. This documentation provides an overview 
+of the installation process, usage instructions, and API reference for the package.
 
 .. toctree::
    :maxdepth: 2
