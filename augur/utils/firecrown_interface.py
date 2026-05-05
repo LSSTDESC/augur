@@ -16,7 +16,7 @@ from firecrown.ccl_factory import (
 )
 from firecrown.metadata_types import Galaxies
 from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFilter
-
+from copy import deepcopy
 import warnings
 
 TRANSFER_FUNCTION_REGISTRY = {
@@ -163,7 +163,7 @@ def _create_pt_calculator(config, cosmo):
     if pt_cfg is None or pt_cfg == {}:
         return None
 
-    cfg = dict(pt_cfg)  # shallow copy
+    cfg = dict(deepcopy(pt_cfg))
     calc_type = cfg.pop("type", "eulerian_pt_calculator").lower()
     cls = PT_CALCULATOR_REGISTRY.get(calc_type)
     if cls is None:
@@ -187,7 +187,7 @@ def _create_hm_calculator(config, cosmo):
     if hm_cfg is None or hm_cfg == {}:
         return None
 
-    cfg = dict(hm_cfg)  # shallow copy
+    cfg = dict(deepcopy(hm_cfg))
     try:
         hm_calculator = ccl.hm.HaloModelCalculator(cosmo=cosmo, **cfg)
         return hm_calculator

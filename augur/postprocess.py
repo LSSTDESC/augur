@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
@@ -5,6 +6,8 @@ from astropy.table import Table
 from scipy.stats import norm, chi2
 from augur.utils.config_io import parse_config
 import os
+
+logger = logging.getLogger(__name__)
 
 # prostprocess does not know about transformations, it just reads fisher file and
 # assumes var_pars is maintained. Look for pandas df?
@@ -27,13 +30,13 @@ def postprocess(config):
     try:
         fid_params = Table.read(config["fisher"]["fid_output"], format='ascii')
     except FileNotFoundError:
-        print("Obtain a fiducial file first by running get_fisher_matrix \
-               or provide your own text file.")
+        logger.error("Obtain a fiducial file first by running get_fisher_matrix or provide \
+                     your own text file.")
     var_params = config["fisher"]["var_pars"]
     try:
         fisher = np.loadtxt(config["fisher"]["output"])
     except FileNotFoundError:
-        print("Obtain a Fisher matrix first via analyze or provide your own text file.")
+        logger.error("Obtain a Fisher matrix first via analyze or provide your own text file.")
     npars = fisher.shape[0]
     keys = np.array(var_params)
     outdir = config["postprocess"]["outdir"]
@@ -67,13 +70,13 @@ def postprocess(config):
     try:
         inv_cache = np.linalg.inv(fisher)
     except np.linalg.LinAlgError:
-        print("Fisher matrix non-invertible -- quitting...")
+        logger.error("Fisher matrix non-invertible -- quitting...")
 
     for i in range(npars):
         i_key = labels[i]
         for j in range(i+1, npars):
             j_key = labels[j]
-            print(i_key, j_key)
+            logger.debug('%s %s', i_key, j_key)
             inv_fisher = np.zeros((2, 2))
             inv_fisher[0, 0] = inv_cache[i, i]
             inv_fisher[0, 1] = inv_cache[i, j]
