@@ -63,105 +63,128 @@ class Analyze(object):
         else:
             # Load the ccl accuracy parameters if `generate` is not run
             if 'ccl_accuracy' in config.keys():
-                # Pass along spline control parameters
-                if 'spline_params' in config['ccl_accuracy'].keys():
-                    for key in config['ccl_accuracy']['spline_params'].keys():
-                        try:
-                            type_here = type(ccl.spline_params[key])
-                            value = config['ccl_accuracy']['spline_params'][key]
-                            ccl.spline_params[key] = type_here(value)
-                        except KeyError:
-                            logger.warning('The selected spline keyword `%s` is not recognized.',
-                                           key)
-                        except ValueError:
-                            logger.warning('The selected value `%s` could not be casted to `%s`.',
-                                           value, type_here)
-                # Pass along GSL control parameters
-                if 'gsl_params' in config['ccl_accuracy'].keys():
-                    for key in config['ccl_accuracy']['gsl_params'].keys():
-                        try:
-                            type_here = type(ccl.gsl_params[key])
-                            value = config['ccl_accuracy']['gsl_params'][key]
-                            ccl.gsl_params[key] = type_here(value)
-                        except KeyError:
-                            logger.warning('The selected GSL keyword `%s` is not recognized.', key)
-                        except ValueError:
-                            logger.warning('The selected value `%s` could not be casted to `%s`.',
-                                           value, type_here)
+                self._unpack_ccl_accuracy_parameters(config)
 
-        self.lk = likelihood  # Just to save some typing
-        self.tools = tools
-        self.req_params = req_params
+        self.lk, self.tools = likelihood, tools
+        self.req_params, self.norm_step = req_params, norm_step
         self.data_fid = self.lk.get_data_vector()
-        self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().to_dict()
-        # need to potentially extract modified gravity parameters here
-        # and remove superfluous parameters
-        if 'mg_parametrization' in self.pars_fid.keys():
-            if self.pars_fid['mg_parametrization'] is not None:
-                warnings.warn("Modified gravity parametrizations are experimental and may not \
-                              be fully supported. Use with caution.")
-                mg = self.pars_fid.pop('mg_parametrization')
-                # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
-                from pyccl.modified_gravity import MuSigmaMG
-                if isinstance(mg, MuSigmaMG):
-                    self.pars_fid['mg_musigma_mu'] = float(mg.mu_0)
-                    self.pars_fid['mg_musigma_sigma'] = float(mg.sigma_0)
-                    self.pars_fid['mg_musigma_c1'] = float(mg.c1_mg)
-                    self.pars_fid['mg_musigma_c2'] = float(mg.c2_mg)
-                    self.pars_fid['mg_musigma_lambda0'] = float(mg.lambda_mg)
-                elif isinstance(mg, dict):
-                    musigma = mg.get('mu_Sigma', None)
-                    if musigma is not None:
-                        self.pars_fid['mg_musigma_mu'] = float(musigma.get('mu_0', 0.0))
-                        self.pars_fid['mg_musigma_sigma'] = float(musigma.get('sigma_0', 0.0))
-                        self.pars_fid['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
-                        self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
-                        self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
-        if 'baryonic_effects' in self.pars_fid.keys():
-            if self.pars_fid['baryonic_effects'] is not None:
-                warnings.warn("Baryonic effects parameters specified \
-                              but not currently implemented. Ignoring these parameters.")
-            self.pars_fid.pop('baryonic_effects')
-
         self.cf = tools.ccl_factory
 
         # Load the relevant section of the configuration file
         self.config = config['fisher']
 
         # Initialize pivot point
-        self.x = []
-        self.var_pars = None
-        self.derivatives = None
-        self.Fij = None
-        self.Fij_with_gprior = None
-        self.Fij_df = None
-        self.Fij_with_gprior_df = None
-        self.biased_cls, self.bi = None, None
-        self.par_bounds = []
-        self.norm = None
-        self.gpriors = []
-        self.gprior_pars = None
+        self.x, self.par_bounds, self.gpriors = [], [], []
+        self.var_pars = self.derivatives = self.gprior_pars = None
+        self.Fij = self.Fij_with_gprior = None
+        self.Fij_df = self.Fij_with_gprior_df = None
+        self.biased_cls = self.bi = self.J = None
+        self.norm = self.derivative_method = self.step_size = None
         self.transform_Omega_m, self.Om = False, None
         self.transform_S8, self.S8 = False, None
-        self.J = None
-        self.derivative_method = None
         self.derivative_args = {}
-        self.step_size = None
-        if 'transform_S8' in self.config.keys():
-            if type(self.config['transform_S8']) is not bool:
-                warnings.warn('transform_S8 not a boolean, therefore \
-                                not transforming Fisher to S8')
-            else:
-                self.transform_S8 = self.config['transform_S8']
-        if 'transform_Omega_m' in self.config.keys():
-            if type(self.config['transform_Omega_m']) is not bool:
-                warnings.warn('transform_Omega_m not a boolean, therefore \
-                                not transforming Fisher to Omega_m')
-            else:
-                self.transform_Omega_m = self.config['transform_Omega_m']
-        # Load the parameters to vary
+
+        if 'mg_parametrization' in self.pars_fid.keys():
+            self._unpack_mg_parameters()
+        if 'baryonic_effects' in self.pars_fid.keys():
+            self._unpack_baryonic_parameters()
+
+        self._unpack_transformations()
+        self._unpack_parameters_and_var_pars()
+        self._unpack_gaussian_priors()
+        self._unpack_norm_step()
+        self._unpack_derivative_method()
+
+    def _unpack_transformations(self):
+        """
+        Unpack options to transform the Fisher matrix to different parameter bases.
+        Currently supported transformations are:
+        - Omega_c -> Omega_m
+        - sigma8 -> S8
+        """
+        transform_options = ['transform_S8', 'transform_Omega_m']
+        for option in transform_options:
+            if option in self.config.keys():
+                if type(self.config[option]) is not bool:
+                    warnings.warn(f'{option} not a boolean, therefore \
+                                    not transforming Fisher to {option.split("_")[1]}')
+                else:
+                    setattr(self, option, self.config[option])
+
+    def _unpack_gaussian_priors(self):
+        """
+        Unpack options to add Gaussian priors to the diagonal of the Fisher matrix.
+        """
+        # reads in associated gaussian prior width of parameters
+        if 'gaussian_priors' in self.config.keys():
+            self.gprior_pars = list(self.config['gaussian_priors'].keys())
+            for var in self.gprior_pars:
+                _val = self.config['gaussian_priors'][var]
+                self.gpriors.append(_val)
+
+    def _unpack_derivative_method(self):
+        """
+        Unpack options to compute numerical derivatives.
+        Currently supported methods are:
+        - 5pt_stencil
+        - numdifftools
+        - derivkit
+        """
+        # derivative method
+        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        self.derivative_args = self.config.get('derivative_args', {})
+        # step size
+        self.step_size = float(self.config.get('step', 0.01))
+
+    def _unpack_ccl_accuracy_parameters(self, config):
+        """
+        Unpack options to set the accuracy parameters of ccl
+        (called when user passes pre-made likelihood, tools, and req_params).
+        """
+        # Pass along spline control parameters
+        if 'spline_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['spline_params'].keys():
+                try:
+                    type_here = type(ccl.spline_params[key])
+                    value = config['ccl_accuracy']['spline_params'][key]
+                    ccl.spline_params[key] = type_here(value)
+                except KeyError:
+                    logger.warning('The selected spline keyword `%s` is not recognized.',
+                                   key)
+                except ValueError:
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
+        # Pass along GSL control parameters
+        if 'gsl_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['gsl_params'].keys():
+                try:
+                    type_here = type(ccl.gsl_params[key])
+                    value = config['ccl_accuracy']['gsl_params'][key]
+                    ccl.gsl_params[key] = type_here(value)
+                except KeyError:
+                    logger.warning('The selected GSL keyword `%s` is not recognized.', key)
+                except ValueError:
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
+
+    def _unpack_norm_step(self):
+        """
+        Unpack options to normalize the step size for numerical derivatives.
+        """
+        if (len(self.par_bounds) < 1) & (self.norm_step):
+            self.norm_step = False
+            warnings.warn('Parameter bounds not provided -- the step will not be normalized')
+        # Normalize the pivot point given the sampling region
+        if self.norm_step:
+            self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
+                np.array(self.par_bounds[:, 0]).astype(np.float64)
+
+    def _unpack_parameters_and_var_pars(self):
+        """
+        Unpack options to load the parameters to vary.
+        """
         # We will allow 2 options -- one where we pass something
         # a la cosmosis with parameters and minimum, central, and max
         # we can also allow priors
@@ -195,25 +218,50 @@ class Analyze(object):
         # Cast to numpy array (this will be done later anyway)
         self.x = np.array(self.x).astype(np.float64)
         self.par_bounds = np.array(self.par_bounds)
-        if (len(self.par_bounds) < 1) & (self.norm_step):
-            self.norm_step = False
-            warnings.warn('Parameter bounds not provided -- the step will not be normalized')
-        # Normalize the pivot point given the sampling region
-        if self.norm_step:
-            self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
-                np.array(self.par_bounds[:, 0]).astype(np.float64)
 
-        # reads in associated gaussian prior width of parameters
-        if 'gaussian_priors' in self.config.keys():
-            self.gprior_pars = list(self.config['gaussian_priors'].keys())
-            for var in self.gprior_pars:
-                _val = self.config['gaussian_priors'][var]
-                self.gpriors.append(_val)
-        # derivative method
-        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
-        self.derivative_args = self.config.get('derivative_args', {})
-        # step size
-        self.step_size = float(self.config.get('step', 0.01))
+    def _unpack_mg_parameters(self):
+        """
+        Unpack options to load modified gravity parameters from the fiducial cosmology
+        and add them to the dictionary of fiducial parameters.
+        Currently, only the MuSigma parametrization is supported,
+        and the expected parameters are:
+        - mg_musigma_mu
+        - mg_musigma_sigma
+        - mg_musigma_c1
+        - mg_musigma_c2
+        - mg_musigma_lambda0
+        """
+        if self.pars_fid['mg_parametrization'] is not None:
+            warnings.warn("Modified gravity parametrizations are experimental and may not \
+                            be fully supported. Use with caution.")
+            mg = self.pars_fid.pop('mg_parametrization')
+            # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
+            from pyccl.modified_gravity import MuSigmaMG
+            if isinstance(mg, MuSigmaMG):
+                self.pars_fid['mg_musigma_mu'] = float(mg.mu_0)
+                self.pars_fid['mg_musigma_sigma'] = float(mg.sigma_0)
+                self.pars_fid['mg_musigma_c1'] = float(mg.c1_mg)
+                self.pars_fid['mg_musigma_c2'] = float(mg.c2_mg)
+                self.pars_fid['mg_musigma_lambda0'] = float(mg.lambda_mg)
+            elif isinstance(mg, dict):
+                musigma = mg.get('mu_Sigma', None)
+                if musigma is not None:
+                    self.pars_fid['mg_musigma_mu'] = float(musigma.get('mu_0', 0.0))
+                    self.pars_fid['mg_musigma_sigma'] = float(musigma.get('sigma_0', 0.0))
+                    self.pars_fid['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
+                    self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
+                    self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
+
+    def _unpack_baryonic_parameters(self):
+        """
+        Unpack options to load baryonic parameters from the fiducial cosmology
+        and add them to the dictionary of fiducial parameters.
+        Currently, baryonic parameters are not implemented.
+        """
+        if self.pars_fid['baryonic_effects'] is not None:
+            warnings.warn("Baryonic effects parameters specified \
+                            but not currently implemented. Ignoring these parameters.")
+        self.pars_fid.pop('baryonic_effects')
 
     def get_Om(self):
         """
@@ -350,6 +398,8 @@ class Analyze(object):
 
         x : float, list or np.ndarray
             Point at which to compute the theory vector.
+            If 1D, it should have the same length as `labels`.
+            If 2D, it should be square with the same width and length as `labels`.
         labels : list
             Names of parameters to vary.
         pars_fid : dict
@@ -515,6 +565,10 @@ class Analyze(object):
         -----------
         save_txt : bool
             Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
+
+        Returns:
+        Fij_with_gprior : np.ndarray
+            Fisher matrix with Gaussian priors added in.
         """
 
         # 1) transformed parameters are specified (Omega_m or S8)
