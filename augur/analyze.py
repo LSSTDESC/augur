@@ -93,6 +93,7 @@ class Analyze(object):
 
         self._unpack_transformations()
         self._unpack_parameters_and_var_pars()
+        self._unpack_gaussian_priors()
         self._unpack_norm_step()
         self._unpack_derivative_method()
 
