@@ -478,20 +478,20 @@ class Analyze(object):
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                _sys_pars[labels[i]] = x[i]
+                                # This is probably not needed (as it might just be ignored by tools)
+                                # but we add it so both CCL Cosmology and ModelingTools are updated
+                                _sys_pars[labels[i]] = x[i]  
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
                 f_out = self.compute_new_theory_vector(_sys_pars, _pars)
 
             elif x.ndim == 2:
-                # This will be used by five-point stencil to evaluate the function at multiple
                 if (x.shape != (len(labels), len(labels))):
                     raise ValueError('The labels should have the same length as the parameters!')
                 f_out = []
                 for i in range(len(labels)):
                     _pars = deepcopy(pars_fid)
-                    # sys_fid is a ParamsMap object
                     _sys_pars = deepcopy(sys_fid)
                     xi = x[i]
                     for j in range(len(labels)):
@@ -503,7 +503,9 @@ class Analyze(object):
                             if 'camb' in pars_fid['extra_parameters'].keys():
                                 if labels[j] in pars_fid['extra_parameters']['camb'].keys():
                                     _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
-                                    _sys_pars[labels[j]] = x[j]
+                                    # This is probably not needed (as it might just be ignored by tools)
+                                    # but we add it so both CCL Cosmology and ModelingTools are updated
+                                    _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
