@@ -480,8 +480,7 @@ class Analyze(object):
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                # This is probably not needed (currently ignored by ModelingTools)
-                                # but we add it just to be consistent.
+                                # Updating _sys_pars for consistency
                                 _sys_pars[labels[i]] = x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
@@ -505,6 +504,7 @@ class Analyze(object):
                             if 'camb' in pars_fid['extra_parameters'].keys():
                                 if labels[j] in pars_fid['extra_parameters']['camb'].keys():
                                     _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
+                                    # Updating _sys_pars for consistency
                                     _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
