@@ -522,8 +522,8 @@ class Analyze(object):
         force : bool
             If `True` force recalculation of the derivatives.
         method : str
-            Method to compute derivatives, currently only `5pt_stencil` or `numdifftools`
-            are allowed.
+            Method to compute derivatives, currently only `5pt_stencil`, `numdifftools`
+            or `derivkit` are allowed.
         step : float
             Step size for numerical differentiation
         """

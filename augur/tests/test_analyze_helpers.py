@@ -236,7 +236,7 @@ def test_unpack_gaussian_priors_extracts_all_priors():
 def test_unpack_derivative_method_default():
     pars = {'Omega_c': 0.2, 'h': 0.7}
     a = make_analyze(['Omega_c', 'h'], pars)
-    assert a.derivative_method == '5pt_stencil'
+    assert a.derivative_method == 'numdifftools'
     assert a.step_size == 0.01
     assert a.derivative_args == {}
 
