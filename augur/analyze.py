@@ -142,7 +142,7 @@ class Analyze(object):
         - derivkit
         """
         # derivative method
-        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        self.derivative_method = self.config.get('derivative_method', 'numdifftools')
         self.derivative_args = self.config.get('derivative_args', {})
         # step size
         self.step_size = float(self.config.get('step', 0.01))
@@ -434,7 +434,9 @@ class Analyze(object):
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
-        Labels are the name of the parameters x (with the same length and order)
+        Labels are the name of the parameters x (with the same length and order).
+        Basically it unpacks x, given its labels, into two different dictionaries,
+        and then calls compute_new_theory_vector to get the theory vector at x.
 
         Parameters:
         -----------
@@ -478,9 +480,9 @@ class Analyze(object):
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                # This is probably not needed (as it might just be ignored by tools)
-                                # but we add it so both CCL Cosmology and ModelingTools are updated
-                                _sys_pars[labels[i]] = x[i]  
+                                # This is probably not needed (currently ignored by ModelingTools)
+                                # but we add it just to be consistent.
+                                _sys_pars[labels[i]] = x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
 
@@ -503,8 +505,6 @@ class Analyze(object):
                             if 'camb' in pars_fid['extra_parameters'].keys():
                                 if labels[j] in pars_fid['extra_parameters']['camb'].keys():
                                     _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
-                                    # This is probably not needed (as it might just be ignored by tools)
-                                    # but we add it so both CCL Cosmology and ModelingTools are updated
                                     _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
