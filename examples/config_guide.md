@@ -43,7 +43,7 @@ lk = generate('config.yml', return_all_outputs=False)
 
 # Run Fisher analysis
 ao = Analyze('config.yml')
-ao.get_fisher_bias(method='5pt_stencil')
+ao.get_fisher_bias(method='numdifftools')
 
 # Postprocess results
 postprocess('config.yml')
@@ -498,7 +498,7 @@ stepping. A scalar value can also be given as the fiducial.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `step` | `float` | `0.01` | Step size for numerical differentiation. |
-| `derivative_method` | `str` | `'5pt_stencil'` | Method for numerical derivatives. Options: `'5pt_stencil'`, `'numdifftools'`, `'derivkit'`. |
+| `derivative_method` | `str` | `'numdifftools'` | Method for numerical derivatives. Options: `'5pt_stencil'`, `'numdifftools'`, `'derivkit'`. |
 | `derivative_args` | `dict` | `{}` | Extra keyword arguments passed to the derivative calculator (used with `'derivkit'`). |
 
 #### Parameter transformations
