@@ -96,18 +96,59 @@ def test_Jacobian_transform_entries():
     assert pytest.approx(J[ind_sigma8][ind_sigma8], rel=1e-8) == expected_s8_diag
 
 
-def test_add_gaussian_priors_preserves_width_order_with_unrecognized_entries():
+def test_add_gaussian_priors_preserves_width_order():
     pars = {'Omega_c': 0.2, 'h': 0.7}
     var_pars = ['Omega_c', 'h']
-    extra_cfg = {'gaussian_priors': {'unrecognized': 0.2, 'Omega_c': 0.1}}
+    extra_cfg = {'gaussian_priors': {'h': 0.2, 'Omega_c': 0.1}}
     a = make_analyze(var_pars, pars, extra_fisher_cfg=extra_cfg)
     a.Fij = np.zeros((len(var_pars), len(var_pars)))
 
     gprior_only = a.add_gaussian_priors(save_txt=False)
 
     assert gprior_only.shape == (2, 2)
-    assert gprior_only[0, 0] == pytest.approx(1.0 / 0.1**2)
-    assert np.allclose(gprior_only[1], 0.0)
+    ind_c = var_pars.index('Omega_c')
+    ind_h = var_pars.index('h')
+    assert gprior_only[ind_c, ind_c] == pytest.approx(1.0 / 0.1**2)
+    assert gprior_only[ind_h, ind_h] == pytest.approx(1.0 / 0.2**2)
+
+
+def test_unpack_gaussian_priors_nonexistent_parameter_raises():
+    # A prior on a parameter not in var_pars should raise at init time
+    pars = {'Omega_c': 0.2, 'h': 0.7}
+    extra_cfg = {'gaussian_priors': {'Omega_b': 0.05}}
+    with pytest.raises(ValueError, match='not in var_pars'):
+        make_analyze(['Omega_c', 'h'], pars, extra_fisher_cfg=extra_cfg)
+
+
+def test_unpack_gaussian_priors_transform_Omega_m_allowed():
+    # A prior on Omega_m is valid when transform_Omega_m is active,
+    # even though Omega_m is not literally in var_pars
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7}
+    extra_cfg = {
+        'transform_Omega_m': True,
+        'gaussian_priors': {'Omega_m': 0.01},
+    }
+    a = make_analyze(['Omega_c', 'Omega_b', 'h'], pars, extra_fisher_cfg=extra_cfg)
+    assert 'Omega_m' in a.gprior_pars
+
+
+def test_unpack_gaussian_priors_transform_S8_allowed():
+    # A prior on S8 is valid when transform_S8 is active
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'sigma8': 0.8}
+    extra_cfg = {
+        'transform_S8': True,
+        'gaussian_priors': {'S8': 0.02},
+    }
+    a = make_analyze(['Omega_c', 'h', 'sigma8'], pars, extra_fisher_cfg=extra_cfg)
+    assert 'S8' in a.gprior_pars
+
+
+def test_unpack_gaussian_priors_Omega_m_without_transform_raises():
+    # Omega_m prior without transform_Omega_m active should raise
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7}
+    extra_cfg = {'gaussian_priors': {'Omega_m': 0.01}}
+    with pytest.raises(ValueError, match='not in var_pars'):
+        make_analyze(['Omega_c', 'h'], pars, extra_fisher_cfg=extra_cfg)
 
 
 # Tests for _unpack_transformations
@@ -332,6 +373,58 @@ def test_unpack_parameters_and_var_pars_precedence_warns():
     # When both parameters and var_pars are present, parameters takes precedence
     # and a warning is issued indicating var_pars is ignored
     assert list(a.var_pars) == ['Omega_c']
+
+
+# Tests for _validate_amplitude_in_var_pars
+def test_validate_amplitude_sigma8_active_and_varied():
+    # sigma8 is the active amplitude (non-None), can be varied
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': 0.8, 'A_s': None}
+    a = make_analyze(['Omega_c', 'sigma8'], pars)  # Should not raise
+    assert 'sigma8' in list(a.var_pars)
+
+
+def test_validate_amplitude_As_active_and_varied():
+    # A_s is the active amplitude (non-None), can be varied
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': None, 'A_s': 2.1e-9}
+    a = make_analyze(['Omega_c', 'A_s'], pars)  # Should not raise
+    assert 'A_s' in list(a.var_pars)
+
+
+def test_validate_amplitude_both_in_var_pars_raises():
+    # Both sigma8 and A_s in var_pars is always wrong
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': 0.8, 'A_s': 2.1e-9}
+    with pytest.raises(ValueError, match='mutually exclusive'):
+        make_analyze(['Omega_c', 'sigma8', 'A_s'], pars)
+
+
+def test_validate_amplitude_sigma8_varied_but_inactive_raises():
+    # sigma8 is in var_pars but fiducial was built with A_s (sigma8 is None)
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': None, 'A_s': 2.1e-9}
+    with pytest.raises(ValueError, match='sigma8.*A_s|A_s.*sigma8'):
+        make_analyze(['Omega_c', 'sigma8'], pars)
+
+
+def test_validate_amplitude_As_varied_but_inactive_raises():
+    # A_s is in var_pars but fiducial was built with sigma8 (A_s is None)
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': 0.8, 'A_s': None}
+    with pytest.raises(ValueError, match='A_s.*sigma8|sigma8.*A_s'):
+        make_analyze(['Omega_c', 'A_s'], pars)
+
+
+def test_validate_amplitude_in_var_pars_via_parameters_key_both_raises():
+    # Same check applies when using the 'parameters' config key
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': 0.8, 'A_s': None}
+    extra_cfg = {'parameters': {'sigma8': 0.8, 'A_s': 2.1e-9, 'Omega_c': 0.2}}
+    with pytest.raises(ValueError, match='mutually exclusive'):
+        make_analyze([], pars, extra_fisher_cfg=extra_cfg)
+
+
+def test_validate_amplitude_in_var_pars_via_parameters_key_As_inactive_raises():
+    # Using 'parameters' path: A_s is None in fiducial, cannot vary it
+    pars = {'Omega_c': 0.2, 'h': 0.7, 'sigma8': 0.8, 'A_s': None}
+    extra_cfg = {'parameters': {'A_s': 2.1e-9, 'Omega_c': 0.2}}
+    with pytest.raises(ValueError, match='A_s'):
+        make_analyze([], pars, extra_fisher_cfg=extra_cfg)
 
 
 # Tests for _unpack_mg_parameters

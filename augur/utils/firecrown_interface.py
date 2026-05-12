@@ -19,6 +19,8 @@ from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFil
 from copy import deepcopy
 import warnings
 
+from augur.utils.config_io import validate_amplitude_parameter
+
 TRANSFER_FUNCTION_REGISTRY = {
     "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
     "boltzmann_class": CCLPureModeTransferFunction.BOLTZMANN_CLASS,
@@ -87,6 +89,7 @@ def _create_ccl_factory(config):
                                      halofit_version must be specified \
                                      in extra_parameters.camb.')
 
+    validate_amplitude_parameter(cosmo_cfg)
     amplitude = None
     if cosmo_cfg.get("A_s", None) is not None:
         amplitude = PoweSpecAmplitudeParameter.AS
