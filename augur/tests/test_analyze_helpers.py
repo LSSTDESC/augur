@@ -604,7 +604,7 @@ def test_f_2d_input_with_wrong_shape_raises():
 
 
 def test_f_2d_input_returns_correct_shape():
-    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0}
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0, 'h': 0.7}
     sys_fid = {}
     a = make_analyze(['Omega_c'], pars)
 
@@ -621,3 +621,14 @@ def test_f_2d_input_returns_correct_shape():
 
     assert result.shape == (1, 1)
     assert len(captured) == 1
+
+    labels = ['Omega_c', 'h']
+    captured = []
+    a = make_analyze(labels, pars)
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+    x = np.array([[0.3, 0.7],
+                  [0.3, 0.7]])  # 2x2 for 2 parameters
+    result = a.f(x, labels, pars, sys_fid)
+
+    assert result.shape == (2, 1)
+    assert len(captured) == 2
