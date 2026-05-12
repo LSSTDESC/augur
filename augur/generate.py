@@ -24,7 +24,7 @@ from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 import warnings
-from augur.utils.config_io import parse_array
+from augur.utils.config_io import parse_array, validate_amplitude_parameter
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +263,7 @@ def generate_sacc_and_stats(config):
                                         casted to `float`.', mu_sig[key], key)
 
             cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
+    validate_amplitude_parameter(cosmo_cfg)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:

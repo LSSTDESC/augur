@@ -121,6 +121,15 @@ class Analyze(object):
         if 'gaussian_priors' in self.config.keys():
             self.gprior_pars = list(self.config['gaussian_priors'].keys())
             for var in self.gprior_pars:
+                in_var_pars = var in self.var_pars
+                is_transform_Omega_m = (var == 'Omega_m' and self.transform_Omega_m)
+                is_transform_S8 = (var == 'S8' and self.transform_S8)
+                if not (in_var_pars or is_transform_Omega_m or is_transform_S8):
+                    raise ValueError(
+                        f'Gaussian prior requested for `{var}`, but it is not in '
+                        f'var_pars and is not a recognised transform parameter. '
+                        f'Remove it from gaussian_priors or add it to var_pars.'
+                    )
                 _val = self.config['gaussian_priors'][var]
                 self.gpriors.append(_val)
 
@@ -195,6 +204,7 @@ class Analyze(object):
 
         if 'parameters' in self.config.keys():
             self.var_pars = list(self.config['parameters'].keys())
+            self._validate_amplitude_in_var_pars()
             for var in self.var_pars:
                 _val = self.config['parameters'][var]
                 if isinstance(_val, list):
@@ -207,6 +217,7 @@ class Analyze(object):
         # the fiducial values
         elif 'var_pars' in self.config.keys():
             self.var_pars = self.config['var_pars']
+            self._validate_amplitude_in_var_pars()
             for var in self.var_pars:
                 if var in self.pars_fid.keys():
                     self.x.append(self.pars_fid[var])
@@ -218,6 +229,38 @@ class Analyze(object):
         # Cast to numpy array (this will be done later anyway)
         self.x = np.array(self.x).astype(np.float64)
         self.par_bounds = np.array(self.par_bounds)
+
+    def _validate_amplitude_in_var_pars(self):
+        """
+        Check that the varied parameters are consistent with the fiducial
+        cosmology's amplitude parameter choice.
+
+        Raises ValueError if:
+        - Both sigma8 and A_s are in var_pars (mutually exclusive)
+        - sigma8 is in var_pars but A_s was used to build the fiducial cosmology
+          (sigma8 is None in pars_fid)
+        - A_s is in var_pars but sigma8 was used to build the fiducial cosmology
+          (A_s is None in pars_fid)
+        """
+        if 'sigma8' in self.var_pars and 'A_s' in self.var_pars:
+            raise ValueError(
+                'Both sigma8 and A_s are listed in var_pars. '
+                'These are mutually exclusive amplitude parameters; vary only one.'
+            )
+        if 'sigma8' in self.var_pars and self.pars_fid.get('sigma8') is None:
+            raise ValueError(
+                'sigma8 is listed in var_pars but the fiducial cosmology was '
+                'constructed with A_s as the amplitude parameter (sigma8 is None '
+                'in the fiducial). Remove sigma8 from var_pars or reconstruct '
+                'the fiducial cosmology using sigma8.'
+            )
+        if 'A_s' in self.var_pars and self.pars_fid.get('A_s') is None:
+            raise ValueError(
+                'A_s is listed in var_pars but the fiducial cosmology was '
+                'constructed with sigma8 as the amplitude parameter (A_s is None '
+                'in the fiducial). Remove A_s from var_pars or reconstruct '
+                'the fiducial cosmology using A_s.'
+            )
 
     def _unpack_mg_parameters(self):
         """
