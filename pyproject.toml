@@ -44,4 +44,4 @@ exclude = ["examples*", "tests*"]
 augur = ["*"]
 
 [tool.setuptools.dynamic]
-version = {attr = "my_package._version.__version__"}
+version = {attr = "augur._version.__version__"}
