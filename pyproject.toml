@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "augur"
-version = "1.2.2"
+dynamic = ["version"]
+
 authors = [
     {name = "DESC Team"},
 ]
@@ -41,3 +42,6 @@ exclude = ["examples*", "tests*"]
 
 [tool.setuptools.package-data]
 augur = ["*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "my_package._version.__version__"}
