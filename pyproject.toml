@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "augur"
-version = "1.2.1"
+dynamic = ["version"]
+
 authors = [
     {name = "DESC Team"},
 ]
 description = "DESC Cosmology Forecasting Tool"
 readme = "README.md"
 license = {file = "LICENSE"}
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -23,10 +24,11 @@ dependencies = [
     "healpy",
     "numpydoc",
     "qp-prob",
-    "scipy<1.14.0",
+    "scipy>1.12",
     "numdifftools",
     "tjpcov",
     "pyccl>=3.3.1",
+    "numpy>=2.0",
 ]
 
 [project.urls]
@@ -40,3 +42,6 @@ exclude = ["examples*", "tests*"]
 
 [tool.setuptools.package-data]
 augur = ["*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "augur._version.__version__"}

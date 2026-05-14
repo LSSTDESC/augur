@@ -142,7 +142,7 @@ class Analyze(object):
         - derivkit
         """
         # derivative method
-        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
+        self.derivative_method = self.config.get('derivative_method', 'numdifftools')
         self.derivative_args = self.config.get('derivative_args', {})
         # step size
         self.step_size = float(self.config.get('step', 0.01))
@@ -434,7 +434,9 @@ class Analyze(object):
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
-        Labels are the name of the parameters x (with the same length and order)
+        Labels are the name of the parameters x (with the same length and order).
+        Basically it unpacks x, given its labels, into two different dictionaries,
+        and then calls compute_new_theory_vector to get the theory vector at x.
 
         Parameters:
         -----------
@@ -478,6 +480,7 @@ class Analyze(object):
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
+                                # Updating _sys_pars for consistency
                                 _sys_pars[labels[i]] = x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
@@ -485,13 +488,11 @@ class Analyze(object):
                 f_out = self.compute_new_theory_vector(_sys_pars, _pars)
 
             elif x.ndim == 2:
-                # This will be used by five-point stencil to evaluate the function at multiple
                 if (x.shape != (len(labels), len(labels))):
                     raise ValueError('The labels should have the same length as the parameters!')
                 f_out = []
                 for i in range(len(labels)):
                     _pars = deepcopy(pars_fid)
-                    # sys_fid is a ParamsMap object
                     _sys_pars = deepcopy(sys_fid)
                     xi = x[i]
                     for j in range(len(labels)):
@@ -503,7 +504,8 @@ class Analyze(object):
                             if 'camb' in pars_fid['extra_parameters'].keys():
                                 if labels[j] in pars_fid['extra_parameters']['camb'].keys():
                                     _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
-                                    _sys_pars[labels[j]] = x[j]
+                                    # Updating _sys_pars for consistency
+                                    _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
@@ -520,8 +522,8 @@ class Analyze(object):
         force : bool
             If `True` force recalculation of the derivatives.
         method : str
-            Method to compute derivatives, currently only `5pt_stencil` or `numdifftools`
-            are allowed.
+            Method to compute derivatives, currently only `5pt_stencil`, `numdifftools`
+            or `derivkit` are allowed.
         step : float
             Step size for numerical differentiation
         """

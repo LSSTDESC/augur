@@ -28,14 +28,15 @@ class DummyTools:
         return self._cosmo
 
 
-def make_analyze(var_pars, pars_fid, extra_fisher_cfg=None):
+def make_analyze(var_pars, pars_fid, extra_fisher_cfg=None, req_params=None):
     fisher_cfg = {'var_pars': var_pars, 'output': 'out', 'fid_output': 'fid'}
     if extra_fisher_cfg:
         fisher_cfg.update(extra_fisher_cfg)
     config = {'fisher': fisher_cfg}
     lk = DummyLikelihood()
     tools = DummyTools(pars_fid)
-    req_params = {}
+    if req_params is None:
+        req_params = {}
     return Analyze(config, likelihood=lk, tools=tools, req_params=req_params)
 
 
@@ -236,7 +237,7 @@ def test_unpack_gaussian_priors_extracts_all_priors():
 def test_unpack_derivative_method_default():
     pars = {'Omega_c': 0.2, 'h': 0.7}
     a = make_analyze(['Omega_c', 'h'], pars)
-    assert a.derivative_method == '5pt_stencil'
+    assert a.derivative_method == 'numdifftools'
     assert a.step_size == 0.01
     assert a.derivative_args == {}
 
@@ -496,3 +497,138 @@ def test_unpack_baryonic_parameters_none():
     a = make_analyze(['Omega_c', 'h'], pars, extra_fisher_cfg=extra_cfg)
     # baryonic_effects should be removed from pars_fid when it's None
     assert 'baryonic_effects' not in a.pars_fid
+
+
+def test_f_handles_list_input_for_x():
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0}
+    sys_fid = {}
+    a = make_analyze(['Omega_c'], pars)
+
+    captured = {}
+
+    def fake_compute_new_theory_vector(sys_pars, pars_dict):
+        captured['pars'] = pars_dict
+        return np.array([0.0])
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+
+    labels = ['Omega_c']
+    x = [0.3]  # List input
+    a.f(x, labels, pars, sys_fid)
+
+    assert captured['pars']['Omega_c'] == 0.3
+
+
+def test_f_with_parameters_only_in_pars_fid():
+    pars = {'Omega_c': 0.25, 'sigma8': 0.8, 'A_s': 1e-9, 'mass_split': 0.0}
+    sys_fid = {}
+    a = make_analyze(['Omega_c', 'sigma8'], pars)
+
+    captured = {}
+
+    def fake_compute_new_theory_vector(sys_pars, pars_dict):
+        captured['sys_pars'] = sys_pars
+        captured['pars'] = pars_dict
+        return np.array([0.0])
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+
+    labels = ['Omega_c', 'sigma8']
+    x = np.array([0.3, 0.9])
+    a.f(x, labels, pars, sys_fid)
+
+    assert captured['sys_pars'] == {}
+    assert captured['pars']['Omega_c'] == 0.3
+    assert captured['pars']['sigma8'] == 0.9
+
+
+def test_f_with_parameters_only_in_sys_fid():
+    pars = {'A_s': 1e-9, 'mass_split': 0.0}
+    sys_fid = {'sys1': 0.1, 'sys2': 0.2}
+    a = make_analyze(['sys1', 'sys2'], pars, req_params=sys_fid)
+
+    captured = {}
+
+    def fake_compute_new_theory_vector(sys_pars, pars_dict):
+        captured['sys_pars'] = sys_pars
+        captured['pars'] = pars_dict
+        return np.array([0.0])
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+
+    labels = ['sys1', 'sys2']
+    x = np.array([0.15, 0.25])
+    a.f(x, labels, pars, sys_fid)
+
+    assert captured['sys_pars']['sys1'] == 0.15
+    assert captured['sys_pars']['sys2'] == 0.25
+    assert captured['pars'] == pars  # pars unchanged
+
+
+def test_f_with_mixed_parameters():
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0}
+    sys_fid = {'sys1': 0.1}
+    a = make_analyze(['Omega_c', 'sys1'], pars, req_params=sys_fid)
+
+    captured = {}
+
+    def fake_compute_new_theory_vector(sys_pars, pars_dict):
+        captured['sys_pars'] = sys_pars
+        captured['pars'] = pars_dict
+        return np.array([0.0])
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+
+    labels = ['Omega_c', 'sys1']
+    x = np.array([0.3, 0.15])
+    a.f(x, labels, pars, sys_fid)
+
+    assert captured['sys_pars']['sys1'] == 0.15
+    assert captured['pars']['Omega_c'] == 0.3
+
+
+def test_f_raises_for_unrecognized_parameter():
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0}
+    sys_fid = {}
+    a = make_analyze(['Omega_c'], pars)
+
+    with pytest.raises(ValueError, match='Parameter name unknown_param not recognized!'):
+        a.f(np.array([0.3]), ['unknown_param'], pars, sys_fid)
+
+
+def test_f_2d_input_with_wrong_shape_raises():
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0}
+    sys_fid = {}
+    a = make_analyze(['Omega_c'], pars)
+
+    with pytest.raises(ValueError,
+                       match='The labels should have the same length as the parameters!'):
+        x = np.array([[0.3, 0.2], [0.4, 0.3]])  # Wrong shape for 1 label
+        a.f(x, ['Omega_c'], pars, sys_fid)
+
+
+def test_f_2d_input_returns_correct_shape():
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0, 'h': 0.7}
+    sys_fid = {}
+    a = make_analyze(['Omega_c'], pars)
+
+    captured = []
+
+    def fake_compute_new_theory_vector(sys_pars, pars_dict):
+        captured.append((sys_pars, pars_dict))
+        return np.array([1.0])
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+
+    labels = ['Omega_c']
+    x = np.array([[0.3]])  # 1x1 for 1 parameter
+    result = a.f(x, labels, pars, sys_fid)
+
+    assert result.shape == (1, 1)
+    assert len(captured) == 1
+
+    labels = ['Omega_c', 'h']
+    captured = []
+    a = make_analyze(labels, pars)
+    a.compute_new_theory_vector = fake_compute_new_theory_vector
+    x = np.array([[0.3, 0.7],
+                  [0.3, 0.7]])  # 2x2 for 2 parameters
+    result = a.f(x, labels, pars, sys_fid)
+
+    assert result.shape == (2, 1)
+    assert len(captured) == 2
