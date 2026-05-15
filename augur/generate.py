@@ -180,6 +180,78 @@ def _get_scale_cuts(stat_cfg, comb):
     return lmax, kmax
 
 
+def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
+    """
+    Build TwoPointBinFilter objects for the Firecrown_Factory + use_sacc path.
+
+    Iterates over the nested statistics config and produces one filter per
+    tracer combination, encoding the ell range to use.  Combinations listed
+    in the config that are absent from the sacc (or whose ell vector cannot
+    be retrieved) are silently skipped with a warning.
+
+    Parameters
+    ----------
+    stat_cfg : dict
+        The 'statistics' section of the config (nested format only).
+    S : sacc.Sacc
+        Pre-existing sacc file supplying the data vector.
+    cosmo : ccl.Cosmology
+        Fiducial cosmology, used only for kmax -> lmax conversion.
+    ignore_sc_likelihood : bool
+        When True, ell cuts are suppressed and filters span the full sacc
+        ell range (tracer subsetting is still applied).
+
+    Returns
+    -------
+    tp_filters : list of TwoPointBinFilter
+    """
+    tp_filters = []
+    sacc_combs = set(S.get_tracer_combinations())
+
+    for key in stat_cfg.keys():
+        for comb in stat_cfg[key]['tracer_combs']:
+            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
+            tr1, tr2 = _get_tracers(key, comb)
+
+            # Skip combinations absent from the sacc
+            if (tr1, tr2) not in sacc_combs and (tr2, tr1) not in sacc_combs:
+                logger.warning(
+                    'Tracer combination (%s, %s) for %s not found in sacc; skipping.',
+                    tr1, tr2, key
+                )
+                continue
+
+            try:
+                ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
+            except Exception:
+                logger.warning(
+                    'Could not retrieve ells for (%s, %s) / %s from sacc; skipping.',
+                    tr1, tr2, key
+                )
+                continue
+
+            cut_low = float(ells_in_sacc[0])
+
+            if ignore_sc_likelihood:
+                cut_high = float(ells_in_sacc[-1])
+            elif kmax is not None and kmax != 'None':
+                t1, t2 = S.get_tracer(tr1), S.get_tracer(tr2)
+                zmean1 = np.average(t1.z, weights=t1.nz)
+                zmean2 = np.average(t2.z, weights=t2.nz)
+                a12 = np.array([1. / (1 + zmean1), 1. / (1 + zmean2)])
+                cut_high = float(np.min(kmax * ccl.comoving_radial_distance(cosmo, a12)))
+            elif lmax is not None and lmax != 'None':
+                cut_high = float(lmax)
+            else:
+                cut_high = float(ells_in_sacc[-1])
+
+            tp_filters.append(
+                create_twopoint_filter(key, tr1, tr2, cut_low=cut_low, cut_high=cut_high)
+            )
+
+    return tp_filters
+
+
 def generate_sacc_and_stats(config):
     """
     Routine to generate a placeholder SACC file containing the data-vector
@@ -451,6 +523,19 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             raise ValueError("Cannot ignore scale cuts in likelihood while \
                              applying them to the data vector.")
 
+        # Sys params
+        sys_params = config['systematics'] if 'systematics' in config.keys() else {}
+        if tools is None:
+            tools, cosmo = create_modeling_tools(config)
+        else:
+            if tools.ccl_cosmo is None:
+                # Build a cosmology from the factory
+                cosmo = tools.ccl_factory.build()
+                tools.set_ccl_cosmology(cosmo)
+            else:
+                # cosmo.compute_nonlin_power()
+                cosmo = tools.ccl_cosmo
+
         # Detect flat vs nested structure
         if 'tracer_combs' in stat_cfg:
             # Flat format (your custom shortcut)
@@ -491,19 +576,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                         )
                     )
 
-        # Sys params
-        sys_params = config['systematics'] if 'systematics' in config.keys() else {}
-        if tools is None:
-            tools, cosmo = create_modeling_tools(config)
-        else:
-            if tools.ccl_cosmo is None:
-                # Build a cosmology from the factory
-                cosmo = tools.ccl_factory.build()
-                tools.set_ccl_cosmology(cosmo)
-            else:
-                # cosmo.compute_nonlin_power()
-                cosmo = tools.ccl_cosmo
-
         # Build likelihood
         if lk is None:
             if "Firecrown_Factory" in config.keys():
@@ -511,7 +583,19 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 if sacc_path is None:
                     raise ValueError("Must include sacc_path when passing a sacc")
 
-                lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
+                if 'tracer_combs' not in stat_cfg:
+                    # Nested statistics format: build per-combination ell filters
+                    # for scale cuts.  Sacc combinations absent from statistics
+                    # are included unfiltered (require_filter_for_all stays False).
+                    tp_filters = _build_tp_filters_from_sacc(
+                        stat_cfg, S, cosmo, ignore_sc_likelihood
+                    )
+                    lk = load_likelihood_from_yaml(
+                        config, tools.ccl_factory, sacc_path, filters=tp_filters
+                    )
+                else:
+                    # Flat statistics format: sacc drives everything unchanged
+                    lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
                 # _pars = cosmo.__dict__['_params_init_kwargs']
                 _pars = deepcopy(config.get('cosmo', {}))
                 logger.debug(_pars)
