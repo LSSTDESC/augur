@@ -2,8 +2,13 @@ Installation
 ============
 
 Augur depends on `firecrown`, which must be installed in a conda environment.
-The recommended install path is to create a conda environment from `environment.yml`
-and then install Augur in editable mode.
+The recommended install path for developers is to create a conda environment
+from `environment.yml` and then install Augur in editable mode. 
+
+For regular users, Augur can be installed via conda:
+```
+conda install lsstdesc-augur -c conda-forge
+```
 
 Requirements
 ------------

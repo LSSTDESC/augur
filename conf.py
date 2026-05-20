@@ -18,7 +18,12 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
+    'myst_parser'
 ]
+
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',}
 
 
 templates_path = ['_templates']

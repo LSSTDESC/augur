@@ -20,6 +20,11 @@ conda activate forecasting
 pip install -e .
 ```
 
+Alternatively, `augur` is available via conda-forge:
+```
+conda install lsstdesc-augur -c conda-forge
+```
+
 ### Via pip (after conda setup)
 
 If you already have `firecrown` (version newer than 1.14) installed via conda, you can install Augur with pip:

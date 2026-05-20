@@ -17,4 +17,4 @@ of the installation process, usage instructions, and API reference for the packa
 
    installation
    api
-
+   ../examples/config_guide
