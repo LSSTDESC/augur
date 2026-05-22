@@ -606,10 +606,18 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                     and hasattr(use_sacc, 'covariance')
                     and use_sacc.covariance is not None
                 ):
+                    '''
                     lk.inv_cov = np.linalg.inv(S.covariance.covmat)
                     lk.cov = S.covariance.covmat  # just in case expected
                     # Ensure dv matches the SACC
                     lk.data_vector = S.mean
+                    '''
+                    n_lk = len(lk.get_data_vector())
+                    n_cov = S.covariance.covmat.shape[0]
+                    if n_lk == n_cov:
+                        lk.inv_cov = np.linalg.inv(S.covariance.covmat)
+                        lk.cov = S.covariance.covmat
+                        lk.data_vector = S.mean
 
                 _, lk, tools = compute_new_theory_vector(lk,
                                                          tools,
