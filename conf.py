@@ -20,7 +20,6 @@ extensions = [
     'sphinx.ext.autosummary',
 ]
 
-
 templates_path = ['_templates']
 exclude_patterns = ['Thumbs.db', '.DS_Store']
 
