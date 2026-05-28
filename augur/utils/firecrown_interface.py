@@ -39,7 +39,7 @@ BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead', 'mead2015', 'mead2016']
 
 TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
                       'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
-                      'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
+                      'galaxy_shearDensity_cl_e': [[Galaxies.SHEAR_E, Galaxies.COUNTS]],
                       }
 
 
