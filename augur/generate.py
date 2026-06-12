@@ -59,8 +59,8 @@ def _get_tracers(statistic, comb):
         tr1 = f'src{comb[0]}'
         tr2 = f'src{comb[1]}'
     elif 'galaxy_shearDensity_cl_e' in statistic:
-        tr1 = f'lens{comb[0]}'
-        tr2 = f'src{comb[1]}'
+        tr1 = f'src{comb[1]}'
+        tr2 = f'lens{comb[0]}'
     else:
         raise NotImplementedError('Only C_ls available')
     return tr1, tr2

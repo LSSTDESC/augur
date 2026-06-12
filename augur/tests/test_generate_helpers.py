@@ -39,7 +39,7 @@ def test_get_tracers_shear_ee():
 
 
 def test_get_tracers_shear_density():
-    assert _get_tracers('galaxy_shearDensity_cl_e', (1, 4)) == ('lens1', 'src4')
+    assert _get_tracers('galaxy_shearDensity_cl_e', (1, 4)) == ('src4', 'lens1')
 
 
 def test_get_tracers_unrecognized():
