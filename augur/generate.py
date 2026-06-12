@@ -66,7 +66,7 @@ def _get_tracers(statistic, comb):
     return tr1, tr2
 
 
-def _add_nz(cfg, nbins, src_root, S, dndz):
+def _add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
     """
     Auxiliary function to get the n(z) distribution for a given tracer
     in the configuration file.
@@ -138,7 +138,7 @@ def _add_nz(cfg, nbins, src_root, S, dndz):
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
-        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
+        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz, quantity=quantity)
     return dndz
 
 
@@ -361,7 +361,7 @@ def generate_sacc_and_stats(config):
         src_root = 'src'  # Root of sacc tracer name
 
         # Loop over bins
-        dndz = _add_nz(src_cfg, nbins, src_root, S, dndz)
+        dndz = _add_nz(src_cfg, nbins, src_root, S, dndz, quantity="galaxy_shear")
         for i in range(nbins):
             sacc_tracer = f'{src_root}{i}'
             sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer)
@@ -372,7 +372,7 @@ def generate_sacc_and_stats(config):
         nbins = lns_cfg['nbins']
         lns_root = 'lens'
 
-        dndz = _add_nz(lns_cfg, nbins, lns_root, S, dndz)
+        dndz = _add_nz(lns_cfg, nbins, lns_root, S, dndz, quantity="galaxy_density")
         for i in range(nbins):
             sacc_tracer = f'{lns_root}{i}'
             sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, derived_scale=True)

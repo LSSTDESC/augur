@@ -34,15 +34,15 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     tools.reset()
     dict_all = {**_sys_pars, **_pars}
     extra_dict = {}
-    if dict_all['A_s'] is None:
+    if dict_all.get('A_s') is None:
         extra_dict['amplitude_parameter'] = 'sigma8'
-        dict_all.pop('A_s')
+        dict_all.pop('A_s', None)
     else:
         extra_dict['amplitude_parameter'] = 'as'
-        dict_all.pop('sigma8')
+        dict_all.pop('sigma8', None)
 
-    extra_dict['mass_split'] = dict_all['mass_split']
-    dict_all.pop('mass_split')
+    extra_dict['mass_split'] = dict_all.get('mass_split')
+    dict_all.pop('mass_split', None)
 
     hm = dict_all.pop('extra_parameters', None)
     if hm is not None and 'camb' in hm.keys():
