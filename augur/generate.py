@@ -138,7 +138,12 @@ def _add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
-        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz, quantity=quantity)
+        S.add_tracer('NZ',
+                     sacc_tracer,
+                     dndz[sacc_tracer].z,
+                     dndz[sacc_tracer].Nz,
+                     quantity=quantity
+                     )
     return dndz
 
 
