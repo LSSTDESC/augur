@@ -11,6 +11,13 @@ cosmo:
     h: 0.6727
     n_s: 0.9645
     sigma8: 0.831
+    Omega_k: 0.0
+    w0: -1.0
+    wa: 0.0
+    Neff: 3.046
+    mass_split: 'equal'
+    m_nu: 0.0
+    T_CMB: 2.7255
     extra_parameters:
         camb:
             dark_energy_model: 'ppf'
@@ -136,7 +143,7 @@ statistics:
         ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
         kmax: 0.201
 
-fiducial_sacc_path: test_sacc.sacc
+fiducial_sacc_path: "{{ env['AUGUR_DIR'] }}/examples/test_sacc.sacc"
 
 # See README section "cov_options" for gaus_internal and tjpcov alternatives.
 cov_options:
