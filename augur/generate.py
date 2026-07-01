@@ -236,7 +236,14 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 )
                 continue
 
-            cut_low = float(ells_in_sacc[0])
+            # No lower scale cut is applied in this path (only kmax/lmax upper
+            # cuts exist).  cut_low is just the floor of the kept range and must
+            # sit below the lowest bin's full support: with bandpower windows and
+            # the default SUPPORT filter method, a bin is kept only if its whole
+            # window lies within [cut_low, cut_high].  Using the lowest bin
+            # CENTER would straddle its window and silently drop that bin, so we
+            # floor at 0.
+            cut_low = 0.0
 
             if ignore_sc_likelihood:
                 cut_high = float(ells_in_sacc[-1])
@@ -440,8 +447,14 @@ def generate_sacc_and_stats(config):
                 lmax = ells_here[-1]
 
             if not ignore_sc_likelihood:
+                # cut_low is the floor of the kept range, not a lower scale cut.
+                # It must sit below the lowest bin's full support: with bandpower
+                # windows and the default SUPPORT filter method, a bin is kept
+                # only if its whole window lies within [cut_low, cut_high].  Using
+                # the lowest bin CENTER would straddle its window and silently
+                # drop that bin, so we floor at 0.
                 tp_filters.append(create_twopoint_filter(key, tr1, tr2,
-                                                         cut_low=ells_here[0],
+                                                         cut_low=0.0,
                                                          cut_high=lmax)
                                   )
             # User may want likelihood cuts but not generated DV cuts,
