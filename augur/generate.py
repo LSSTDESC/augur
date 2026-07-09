@@ -281,7 +281,6 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                     create_twopoint_filter(key, tr1, tr2, cut_low=cut_high+1, cut_high=cut_high+2)
                 )
 
-
     return tp_filters
 
 
