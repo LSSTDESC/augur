@@ -4,7 +4,7 @@ channels:
 dependencies:
   - numpy >= 2.0
   - lsstdesc-crow
-  - firecrown >= 1.14.0 < 1.15.1
+  - firecrown >= 1.14.0, < 1.15.1
   - flake8
   - scipy > 1.12
   - healpy
