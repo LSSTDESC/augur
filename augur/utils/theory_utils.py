@@ -40,8 +40,6 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
         dict_all['A_s'] = None
     if 'sigma8' not in dict_all:
         dict_all['sigma8'] = None
-    # else:
-     # raise ValueError("Input parameter dictionary must contain either A_s or sigma8.")
 
     # Ensure required CCLFactory sampler parameters are present even when
     # callers provide a partial cosmology dictionary (common in use_sacc paths).

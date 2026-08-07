@@ -148,8 +148,15 @@ def _create_ccl_factory(config):
         factory.cosmo = cosmo
         return factory, cosmo
 
-    # Build cosmology
-    cosmo = ccl.Cosmology(**cosmo_cfg)
+    # Build cosmology. Re-inject transfer_function / matter_power_spectrum which
+    # were popped above to configure the CCLFactory; otherwise this standalone
+    # cosmo silently defaults to CCL's boltzmann_camb + camb, which (a) ignores
+    # the requested model and (b) fails for w crossing -1 unless ppf is set.
+    cosmo = ccl.Cosmology(
+        **cosmo_cfg,
+        transfer_function=tf_name,
+        **({"matter_power_spectrum": mps_name} if mps_name is not None else {}),
+    )
 
     factory = CCLFactory(
         creation_mode=CCLCreationMode.PURE_CCL_MODE,

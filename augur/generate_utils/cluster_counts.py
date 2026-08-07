@@ -27,7 +27,6 @@ See :func:`setup_cluster_sacc_tracers_for_tjpcov` for tracer setup.
 """
 
 import numpy as np
-import sacc
 
 from augur.utils.config_io import parse_array
 import warnings

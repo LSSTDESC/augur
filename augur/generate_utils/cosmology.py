@@ -1,7 +1,6 @@
 """Cosmology initialisation from an Augur config dict."""
 
 import pyccl as ccl
-import warnings
 
 
 def initialize_cosmology(config):

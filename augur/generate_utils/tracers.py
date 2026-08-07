@@ -60,7 +60,7 @@ def get_tracers(statistic, comb):
     return tr1, tr2
 
 
-def add_nz(cfg, nbins, src_root, S, dndz):
+def add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
     """
     Add N(z) distributions for a set of tomographic bins to a SACC object.
 
@@ -130,7 +130,8 @@ def add_nz(cfg, nbins, src_root, S, dndz):
                     dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
-        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz)
+        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz,
+                     quantity=quantity)
     return dndz
 
 
@@ -159,7 +160,7 @@ def setup_sources(config, S):
         src_cfg = config['sources']
         nbins = src_cfg['nbins']
         src_root = 'src'
-        dndz = add_nz(src_cfg, nbins, src_root, S, dndz)
+        dndz = add_nz(src_cfg, nbins, src_root, S, dndz, quantity="galaxy_shear")
         for i in range(nbins):
             sacc_tracer = f'{src_root}{i}'
             sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer)
@@ -193,7 +194,7 @@ def setup_lenses(config, S, sources, dndz):
         lns_cfg = config['lenses']
         nbins = lns_cfg['nbins']
         lns_root = 'lens'
-        dndz = add_nz(lns_cfg, nbins, lns_root, S, dndz)
+        dndz = add_nz(lns_cfg, nbins, lns_root, S, dndz, quantity="galaxy_density")
         for i in range(nbins):
             sacc_tracer = f'{lns_root}{i}'
             sources[sacc_tracer] = nc.NumberCounts(

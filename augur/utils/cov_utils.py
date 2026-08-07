@@ -121,7 +121,7 @@ def get_cluster_noise_power(config, S, cluster_tracer_name, return_cluster_densi
     # This function exists as an interface for future cluster-specific
     # configuration (e.g., if Augur needs to override TJPCov defaults).
 
-    tracer_obj = S.get_tracer(cluster_tracer_name)
+    # tracer_obj = S.get_tracer(cluster_tracer_name)
 
     # Estimate cluster density if available from config
     cluster_density = config.get('cluster_counts', {}).get('ndens', 0.0)
@@ -160,7 +160,7 @@ def get_cluster_properties(config, S):
     cluster_info = {}
 
     # Find all cluster tracers and bin definitions
-    cluster_tracers = []
+    # cluster_tracers = []
     z_bins = []
     richness_bins = []
 

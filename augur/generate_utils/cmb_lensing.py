@@ -5,7 +5,6 @@ SACC data vector and builds matching firecrown ``TwoPoint`` statistics.
 """
 
 import numpy as np
-import sacc
 import warnings
 
 from firecrown.likelihood.cmb import CMBConvergence

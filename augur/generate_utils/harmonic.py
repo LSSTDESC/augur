@@ -99,10 +99,15 @@ def add_harmonic_two_point(config, S, sources, dndz, cosmo):
                 lmax = ells_here[-1]
 
             if not ignore_sc_likelihood:
+                # cut_low is the floor of the kept range, not a lower scale cut.
+                # With bandpower windows and the default SUPPORT filter method a
+                # bin is kept only if its whole window lies within
+                # [cut_low, cut_high]; using the lowest bin CENTRE would straddle
+                # its window and silently drop that bin, so we floor at 0.
                 tp_filters.append(
                     create_twopoint_filter(
                         key, tr1, tr2,
-                        cut_low=ells_here[0],
+                        cut_low=0.0,
                         cut_high=lmax,
                     )
                 )
