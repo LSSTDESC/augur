@@ -662,8 +662,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             import tempfile
             import os
             tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
-            tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.fits")
-            S.save_fits(tmp_sacc_path, overwrite=True)
+            tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.hdf5")
+            S.save_hdf5(tmp_sacc_path)
 
             from augur.utils.firecrown_interface import load_likelihood_from_yaml
             lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
@@ -782,7 +782,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                          cov_type is not understood. Using identity matrix as covariance.''')
     if write_sacc:
         logger.debug(config['fiducial_sacc_path'])
-        S.save_fits(config['fiducial_sacc_path'], overwrite=True)
+        S.save_hdf5(config['fiducial_sacc_path'], overwrite=True)
     # Update covariance and inverse -- TODO need to update cholesky!!
 
     # add two-point filters here to the likelihood, in case of scale cuts
