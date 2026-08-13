@@ -214,7 +214,8 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
     sacc_combs = set(S.get_tracer_combinations())
 
     for key in stat_cfg.keys():
-        for comb in stat_cfg[key]['tracer_combs']:
+        config_stats = stat_cfg[key]['tracer_combs']
+        for comb in config_stats:
             lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
             tr1, tr2 = _get_tracers(key, comb)
 
@@ -235,7 +236,14 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 )
                 continue
 
-            cut_low = float(ells_in_sacc[0])
+            # No lower scale cut is applied in this path (only kmax/lmax upper
+            # cuts exist).  cut_low is just the floor of the kept range and must
+            # sit below the lowest bin's full support: with bandpower windows and
+            # the default SUPPORT filter method, a bin is kept only if its whole
+            # window lies within [cut_low, cut_high].  Using the lowest bin
+            # CENTER would straddle its window and silently drop that bin, so we
+            # floor at 0.
+            cut_low = 0.0
 
             if ignore_sc_likelihood:
                 cut_high = float(ells_in_sacc[-1])
@@ -253,6 +261,25 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
             tp_filters.append(
                 create_twopoint_filter(key, tr1, tr2, cut_low=cut_low, cut_high=cut_high)
             )
+
+        config_tracer_pairs = set()
+        for c in config_stats:
+            t1, t2 = _get_tracers(key, c)
+            config_tracer_pairs.add((t1, t2))
+
+        for comb in sacc_combs:
+            tr1, tr2 = comb
+            if (tr1, tr2) not in config_tracer_pairs and (tr2, tr1) not in config_tracer_pairs:
+                logger.warning(
+                    'Tracer combination (%s, %s) found in sacc but not in config; '
+                    'it will NOT be included in the likelihood.',
+                    tr1, tr2
+                )
+                ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
+                cut_high = float(ells_in_sacc[-1])
+                tp_filters.append(
+                    create_twopoint_filter(key, tr1, tr2, cut_low=cut_high+1, cut_high=cut_high+2)
+                )
 
     return tp_filters
 
@@ -419,8 +446,14 @@ def generate_sacc_and_stats(config):
                 lmax = ells_here[-1]
 
             if not ignore_sc_likelihood:
+                # cut_low is the floor of the kept range, not a lower scale cut.
+                # It must sit below the lowest bin's full support: with bandpower
+                # windows and the default SUPPORT filter method, a bin is kept
+                # only if its whole window lies within [cut_low, cut_high].  Using
+                # the lowest bin CENTER would straddle its window and silently
+                # drop that bin, so we floor at 0.
                 tp_filters.append(create_twopoint_filter(key, tr1, tr2,
-                                                         cut_low=ells_here[0],
+                                                         cut_low=0.0,
                                                          cut_high=lmax)
                                   )
             # User may want likelihood cuts but not generated DV cuts,

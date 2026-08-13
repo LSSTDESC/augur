@@ -501,6 +501,40 @@ stepping. A scalar value can also be given as the fiducial.
 | `derivative_method` | `str` | `'numdifftools'` | Method for numerical derivatives. Options: `'5pt_stencil'`, `'numdifftools'`, `'derivkit'`. |
 | `derivative_args` | `dict` | `{}` | Extra keyword arguments passed to the derivative calculator (used with `'derivkit'`). |
 
+##### Using `derivkit`
+
+When `derivative_method: 'derivkit'`, Augur computes the Jacobian of the theory
+vector with respect to the varied parameters using `derivkit`'s `CalculusKit.jacobian()` Augur reads the `method` key before the rest of `derivative_args` is passed through, where this denotes the derivkit differentiation engine: `'adaptive'` (default; a local Chebyshev polynomial fit), `'finite'` (central finite differences), `'local_polynomial'`, or `'fornberg'`. |
+
+If `derivative_args` is omitted (or empty), Augur falls back to these defaults:
+
+```yaml
+fisher:
+    derivative_method: 'derivkit'
+    derivative_args:
+        method: 'adaptive'
+        n_points: 27       # points in the local sampling grid used for the polynomial fit
+        spacing: '1%'      # half-width of the sampling grid, as a % of each fiducial value
+        base_abs: 1.e-3    # absolute floor on spacing, used when a fiducial value is near 0
+        ridge: 1.e-8       # ridge regularization for the polynomial fit
+```
+
+For `method: 'adaptive'` (the default engine), the most commonly-used remaining keys are:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `n_points` | `int` | Number of points in the local sampling grid used to fit the polynomial. |
+| `spacing` | `float` or `str` | Half-width of the sample grid around each parameter's fiducial value: an absolute float, a percentage string (e.g. `'1%'`), or `'auto'` (derivkit picks a scale from `x0`). |
+| `base_abs` | `float` | Absolute floor for `spacing` when a fiducial value is close to zero. |
+| `ridge` | `float` | Ridge regularization added to the polynomial fit to stabilize it when the fit is ill-conditioned; `0.0` disables it. |
+| `domain` | `tuple` | Optional `(lo, hi)` bounds so the sample grid stays inside a valid parameter range. |
+| `return_error` | `bool` | If `True`, also returns an RMS-residual error estimate alongside each derivative. |
+
+If you switch `method` to `'finite'` for plain central finite differences, the relevant
+keys change to `stepsize` (step size), `num_points` (stencil size: 3, 5, 7, or 9), and
+`extrapolation` (`None`, `'richardson'`, or `'ridders'`)—the adaptive-fit keys above no
+longer apply.
+
 #### Parameter transformations
 
 | Key | Type | Default | Description |
