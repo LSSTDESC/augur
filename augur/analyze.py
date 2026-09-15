@@ -802,6 +802,13 @@ class Analyze(object):
                               }
                     method_here = 'adaptive'
 
+                if isinstance(kwargs.get('base_abs'), dict):
+                    # A per-parameter floor: CalculusKit hands one set of keyword
+                    # arguments to every column, so it cannot take this. norm_step is
+                    # already off for derivkit, so there is nothing left to undo below.
+                    self.derivatives = self._derivkit_per_parameter(x_here, kwargs)
+                    return self.derivatives
+
                 method_here = kwargs.pop('method', 'adaptive')
                 n_workers = kwargs.pop('n_workers', 1)
                 calc_kit = CalculusKit(function=lambda y: self.f(y, self.var_pars,
@@ -820,6 +827,55 @@ class Analyze(object):
             return self.derivatives
         else:
             return self.derivatives
+
+    def _derivkit_per_parameter(self, x_here, kwargs):
+        """
+        Jacobian from derivkit one parameter at a time, each with its own `base_abs`.
+
+        derivkit's adaptive half-width is `max(frac * |x0|, base_abs)`, and
+        `CalculusKit.jacobian` passes the same `base_abs` to every parameter. No single
+        value suits parameters whose scales differ by orders of magnitude: a floor small
+        enough for `A_s ~ 2e-9` also becomes the half-width of every parameter whose
+        fiducial is zero -- `wa`, photo-z shifts, multiplicative biases -- which puts the
+        step deep inside the numerical noise of the C_ell. Passing `base_abs` as a mapping
+        (see `_resolve_base_abs`) builds each column with its own floor instead.
+
+        Parameters:
+        -----------
+        x_here : np.ndarray
+            Pivot point, in the order of `var_pars`.
+        kwargs : dict
+            derivkit keyword arguments, with `base_abs` a mapping. Not modified.
+
+        Returns:
+        --------
+        derivatives : np.ndarray
+            Array of shape (len(var_pars), len(data vector)), as the CalculusKit path returns.
+        """
+        from derivkit.derivative_kit import DerivativeKit
+
+        dk_kwargs = dict(kwargs)
+        method_here = dk_kwargs.pop('method', 'adaptive')
+        n_workers = dk_kwargs.pop('n_workers', 1)
+        base_abs = _resolve_base_abs(dk_kwargs.pop('base_abs'), self.var_pars)
+        x0 = np.asarray(x_here, dtype=np.float64)
+
+        columns = []
+        for j, par in enumerate(self.var_pars):
+            def f_j(t, j=j):
+                y = x0.copy()
+                y[j] = t
+                return self.f(y, self.var_pars, self.pars_fid, self.req_params,
+                              donorm=self.norm_step)
+
+            kit = DerivativeKit(f_j, float(x0[j]))
+            column = kit.differentiate(method=method_here, order=1, n_workers=n_workers,
+                                       base_abs=base_abs[j], **dk_kwargs)
+            column = np.atleast_1d(np.asarray(column, dtype=np.float64)).reshape(-1)
+            if not np.all(np.isfinite(column)):
+                raise FloatingPointError(f'Non-finite derivkit derivative with respect to {par}.')
+            columns.append(column)
+        return np.array(columns)
 
     def add_gaussian_priors(self, save_txt=True):
         """
@@ -1123,3 +1179,41 @@ class Analyze(object):
         f_out = compute_new_theory_vector(self.lk, self.tools, _sys_pars, _pars)
 
         return f_out
+
+
+def _resolve_base_abs(base_abs, var_pars):
+    """
+    Expand a per-parameter derivkit `base_abs` into one value per varied parameter.
+
+    Written in the config as, for example::
+
+        derivative_args:
+            spacing: '1%'
+            base_abs: {A_s: 1.e-12, default: 1.e-3}
+
+    Parameters:
+    -----------
+    base_abs : dict
+        Absolute floor on the derivkit half-width, keyed by parameter name, plus a
+        required `default` for every parameter not named.
+    var_pars : list of str
+        Varied parameters, in Fisher-matrix order.
+
+    Returns:
+    --------
+    values : list of float
+        One floor per entry of `var_pars`.
+    """
+    if 'default' not in base_abs:
+        raise ValueError("A per-parameter derivkit base_abs needs a 'default' entry, used "
+                         "for every varied parameter it does not name.")
+    # A misspelt name would otherwise quietly get the default.
+    unknown = sorted(set(base_abs) - set(var_pars) - {'default'})
+    if unknown:
+        raise ValueError(f'derivkit base_abs names {unknown}, which are not in var_pars '
+                         f'{list(var_pars)}.')
+    values = [float(base_abs.get(par, base_abs['default'])) for par in var_pars]
+    bad = {par: v for par, v in zip(var_pars, values) if not (np.isfinite(v) and v > 0)}
+    if bad or not (np.isfinite(float(base_abs['default'])) and float(base_abs['default']) > 0):
+        raise ValueError(f'derivkit base_abs must be positive and finite; got {base_abs}.')
+    return values

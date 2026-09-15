@@ -525,7 +525,7 @@ For `method: 'adaptive'` (the default engine), the most commonly-used remaining 
 |-----|------|-------------|
 | `n_points` | `int` | Number of points in the local sampling grid used to fit the polynomial. |
 | `spacing` | `float` or `str` | Half-width of the sample grid around each parameter's fiducial value: an absolute float, a percentage string (e.g. `'1%'`), or `'auto'` (derivkit picks a scale from `x0`). |
-| `base_abs` | `float` | Absolute floor for `spacing` when a fiducial value is close to zero. |
+| `base_abs` | `float` or `dict` | Absolute floor for `spacing` when a fiducial value is close to zero. A float applies to every parameter. A mapping gives each parameter its own floor and needs a `default` entry, e.g. `{A_s: 1.e-12, default: 1.e-3}` -- a floor small enough for `A_s` would otherwise also be the half-width of every parameter whose fiducial is zero (`wa`, photo-z shifts, multiplicative biases). With a mapping the Jacobian is built one parameter at a time. |
 | `ridge` | `float` | Ridge regularization added to the polynomial fit to stabilize it when the fit is ill-conditioned; `0.0` disables it. |
 | `domain` | `tuple` | Optional `(lo, hi)` bounds so the sample grid stays inside a valid parameter range. |
 | `return_error` | `bool` | If `True`, also returns an RMS-residual error estimate alongside each derivative. |
