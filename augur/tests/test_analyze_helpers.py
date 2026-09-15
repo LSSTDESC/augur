@@ -1,7 +1,9 @@
 import numpy as np
+import pyccl as ccl
 import pytest
 
-from augur.analyze import Analyze
+from augur.analyze import (Analyze, _sum_mnu, _dsum_dpar, _neutrino_mass_floor,
+                           _derivative_probe_drop)
 
 
 class DummyLikelihood:
@@ -54,6 +56,40 @@ def test_get_Om_with_mnu():
     assert pytest.approx(a.get_Om(), rel=1e-6) == expected
 
 
+def test_sum_mnu_every_convention():
+    # CCL's conventions come in two shapes: sum/normal/inverted/equal/single store
+    # Sum(m_nu) itself, 'list' stores one mass per species. Both must reduce to the
+    # same float without anyone having to look at mass_split.
+    assert _sum_mnu(0.06) == pytest.approx(0.06)
+    assert _sum_mnu([0.05, 0.01, 0.0]) == pytest.approx(0.06)
+    assert _sum_mnu(np.array([0.05, 0.01, 0.0])) == pytest.approx(0.06)
+    assert _sum_mnu(0.0) == 0.0
+    assert _sum_mnu([]) == 0.0
+    assert isinstance(_sum_mnu(np.float64(0.06)), float)
+
+
+def test_get_Om_list_mnu():
+    # Regression for analyze.py:329. Under mass_split 'list' the fiducial cosmology
+    # carries one mass per species, and `m_nu > 0.0` raised
+    # `TypeError: '>' not supported between instances of 'list' and 'float'`
+    # before the masses could be summed. The masses are held fixed here rather than
+    # varied: varying m_nu under 'list' is a separate, invalid configuration.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': [0.05, 0.01, 0.0]}
+    a = make_analyze(['Omega_c', 'Omega_b', 'h'], pars)
+    expected = 0.25 + 0.06 / 0.7 / 0.7 / 93.14
+    assert pytest.approx(a.get_Om(), rel=1e-6) == expected
+
+
+def test_get_Om_list_mnu_matches_scalar():
+    # The same total mass, written either way, has to give the same Omega_m.
+    scalar = make_analyze(['Omega_c', 'Omega_b', 'h'],
+                          {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.06})
+    listed = make_analyze(['Omega_c', 'Omega_b', 'h'],
+                          {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7,
+                           'm_nu': [0.02, 0.02, 0.02]})
+    assert pytest.approx(listed.get_Om(), rel=1e-12) == scalar.get_Om()
+
+
 def test_get_Om_requires_Omega_c():
     pars = {'sigma8': 0.8}
     a = make_analyze(['sigma8'], pars)
@@ -95,6 +131,222 @@ def test_Jacobian_transform_entries():
     # Check S8 diagonal scaling
     expected_s8_diag = 1.0 / np.sqrt(a.get_Om() / 0.3)
     assert pytest.approx(J[ind_sigma8][ind_sigma8], rel=1e-8) == expected_s8_diag
+
+
+def test_dsum_dpar_scalar_mnu():
+    # Every scalar split stores the total mass itself, so dSum/dm_nu is 1 by definition.
+    assert _dsum_dpar('m_nu') == 1.0
+
+
+def test_dsum_dpar_rejects_non_neutrino_parameter():
+    # A lightest-mass parametrization would register its own parameter here; until one
+    # exists, anything else is a caller error rather than a silent zero derivative.
+    for par in ['m_nu_lightest', 'Omega_c', 'h']:
+        with pytest.raises(ValueError, match='total neutrino mass'):
+            _dsum_dpar(par)
+
+
+def test_Jacobian_h_term_survives_fixed_mnu():
+    # Regression: Omega_m depends on h through Omega_nu = Sum(m_nu)/(93.14 h^2) whether
+    # or not the masses are varied. The h term used to be nested inside the m_nu guard,
+    # so holding the masses fixed dropped it silently.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.06, 'sigma8': 0.8}
+    var_pars = ['Omega_c', 'Omega_b', 'h', 'sigma8']
+    a = make_analyze(var_pars, pars, extra_fisher_cfg={'transform_Omega_m': True})
+    J = a.Jacobian_transform()
+    ind_c, ind_h = var_pars.index('Omega_c'), var_pars.index('h')
+    expected = 2.0 * 0.06 / (0.7 ** 3 * 93.14)
+    assert pytest.approx(J[ind_c][ind_h], rel=1e-8) == expected
+
+
+def test_Jacobian_h_term_survives_fixed_mnu_S8_row():
+    # The same hole in the sigma8 row, reachable when only S8 is transformed.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.06, 'sigma8': 0.8}
+    var_pars = ['Omega_c', 'Omega_b', 'h', 'sigma8']
+    a = make_analyze(var_pars, pars, extra_fisher_cfg={'transform_S8': True})
+    J = a.Jacobian_transform()
+    ind_8, ind_h = var_pars.index('sigma8'), var_pars.index('h')
+    expected = 0.8 * 0.06 / (a.get_Om() * 0.7 ** 3 * 93.14)
+    assert pytest.approx(J[ind_8][ind_h], rel=1e-8) == expected
+
+
+def test_Jacobian_neutrino_terms_absent_when_massless():
+    # No neutrino mass, no neutrino coupling: h must not pick up a spurious entry.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.0, 'sigma8': 0.8}
+    var_pars = ['Omega_c', 'Omega_b', 'h', 'sigma8']
+    a = make_analyze(var_pars, pars, extra_fisher_cfg={'transform_Omega_m': True})
+    J = a.Jacobian_transform()
+    ind_c, ind_h = var_pars.index('Omega_c'), var_pars.index('h')
+    assert J[ind_c][ind_h] == 0.0
+
+
+def test_Jacobian_list_mnu_matches_scalar():
+    # mass_split 'list' cannot vary its masses, so it always takes the fixed-mass path
+    # above. The same total mass, written either way, must give the same Jacobian.
+    var_pars = ['Omega_c', 'Omega_b', 'h', 'sigma8']
+    common = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'sigma8': 0.8}
+    cfg = {'transform_Omega_m': True}
+    scalar = make_analyze(var_pars, {**common, 'm_nu': 0.06}, extra_fisher_cfg=cfg)
+    listed = make_analyze(var_pars, {**common, 'm_nu': [0.02, 0.02, 0.02]},
+                          extra_fisher_cfg=cfg)
+    np.testing.assert_allclose(listed.Jacobian_transform(),
+                               scalar.Jacobian_transform(), rtol=1e-12)
+
+
+def test_neutrino_mass_floor_matches_ccl_constants():
+    # The floor is where the lightest mass reaches zero, built from CCL's own
+    # oscillation constants so it tracks them if they are ever updated.
+    c = ccl.physical_constants
+    nh = np.sqrt(c.DELTAM12_sq) + np.sqrt(c.DELTAM13_sq_pos)
+    d13 = abs(c.DELTAM13_sq_neg)
+    ih = np.sqrt(d13) + np.sqrt(d13 + c.DELTAM12_sq)
+    assert pytest.approx(_neutrino_mass_floor('normal'), rel=1e-12) == nh
+    assert pytest.approx(_neutrino_mass_floor('inverted'), rel=1e-12) == ih
+    # The degenerate splits have no hierarchy, but masses still cannot be negative.
+    for split in ['equal', 'single', 'sum']:
+        assert _neutrino_mass_floor(split) == 0.0
+    # 'list' has no scalar to step, and an unspecified split is unknown.
+    for split in ['list', None]:
+        assert _neutrino_mass_floor(split) is None
+
+
+def test_ccl_is_silently_flat_below_zero_mass():
+    # Why the degenerate floor is 0 and not None: CCL accepts a negative total under
+    # 'equal', clamps Omega_nu to zero and raises nothing, so the theory below zero is
+    # the massless one. A central difference straddling 0 then halves the derivative.
+    def pk(m_nu):
+        c = ccl.Cosmology(Omega_c=0.25, Omega_b=0.05, h=0.7, n_s=0.96, sigma8=0.8,
+                          m_nu=m_nu, mass_split='equal',
+                          transfer_function='eisenstein_hu')
+        return ccl.linear_matter_power(c, 0.5, 1.0)
+    assert pk(-0.006) == pk(0.0)
+    assert pk(0.006) != pk(0.0)
+
+
+def test_neutrino_mass_floor_is_where_ccl_stops_being_physical():
+    # CCL raises at the right place for the normal hierarchy, but for inverted it
+    # raises 1.5 meV too low and quietly returns a negative lightest mass in between.
+    # The guard must not delegate to it.
+    for split in ['normal', 'inverted']:
+        floor = _neutrino_mass_floor(split)
+        # At the floor the lightest species is massless; just above it, all positive.
+        assert np.min(ccl.nu_masses(m_nu=floor*(1+1e-9), mass_split=split)) >= 0.0
+
+    # Normal: CCL refuses below the floor, which is the correct behaviour.
+    with pytest.raises(ValueError):
+        ccl.nu_masses(m_nu=_neutrino_mass_floor('normal')*(1-1e-6), mass_split='normal')
+
+    # Inverted: CCL only refuses ~1.5 meV lower, and in between returns a negative
+    # lightest mass with no error at all. That window is why the floor is enforced here.
+    ih = _neutrino_mass_floor('inverted')
+    assert np.min(ccl.nu_masses(m_nu=ih*(1-1e-6), mass_split='inverted')) < 0.0
+    assert np.min(ccl.nu_masses(m_nu=0.0985, mass_split='inverted')) < 0.0
+    with pytest.raises(ValueError):
+        ccl.nu_masses(m_nu=0.0977, mass_split='inverted')
+
+
+def test_derivative_probe_drop_per_method():
+    # five_pt_stencil samples x0 - 2h; numdifftools' step can be widened through
+    # derivative_args, so it takes the same margin.
+    assert _derivative_probe_drop('5pt_stencil', 0.006, {}, 0.12) == pytest.approx(0.012)
+    assert _derivative_probe_drop('numdifftools', 0.006, {}, 0.12) == pytest.approx(0.012)
+    # derivkit ignores `step` entirely: its half-width is max(frac*|x0|, base_abs).
+    assert _derivative_probe_drop('derivkit', 0.006, {}, 0.12) == pytest.approx(0.0012)
+    assert _derivative_probe_drop('derivkit', 0.006, {}, 0.06) == pytest.approx(0.001)
+    assert _derivative_probe_drop('derivkit', 0.006, {'spacing': '5%'}, 0.12) \
+        == pytest.approx(0.006)
+
+
+def test_derivative_probe_drop_reads_per_parameter_base_abs():
+    # With base_abs given per parameter, the guard must use the floor the m_nu column
+    # is actually built with, not the default and not another parameter's value.
+    args = {'spacing': '1%', 'base_abs': {'m_nu': 5e-3, 'default': 1e-12}}
+    assert _derivative_probe_drop('derivkit', 0.006, args, 0.06, par='m_nu') \
+        == pytest.approx(5e-3)
+    args = {'spacing': '1%', 'base_abs': {'A_s': 1e-12, 'default': 1e-3}}
+    assert _derivative_probe_drop('derivkit', 0.006, args, 0.06, par='m_nu') \
+        == pytest.approx(1e-3)
+
+
+def test_per_parameter_base_abs_below_floor_raises():
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.004,
+            'mass_split': 'equal'}
+    cfg = {'derivative_method': 'derivkit',
+           'derivative_args': {'spacing': '1%',
+                               'base_abs': {'m_nu': 5e-3, 'default': 1e-12}}}
+    with pytest.raises(ValueError, match='admits no total neutrino mass'):
+        make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg=cfg)
+
+
+def test_varying_list_valued_mnu_raises_clearly():
+    # Regression: this used to die in the pivot-vector cast with a numpy message
+    # naming neither m_nu nor the split.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': [0.05, 0.01, 0.0],
+            'mass_split': 'list'}
+    with pytest.raises(ValueError, match='m_nu'):
+        make_analyze(['Omega_c', 'm_nu'], pars)
+
+
+def test_step_below_hierarchy_floor_raises():
+    # Sum = 0.06 under the normal hierarchy: a 0.006 step reaches 0.048, well under
+    # the 0.0592 floor, and CCL would abort the run partway through the derivatives.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.06,
+            'mass_split': 'normal'}
+    with pytest.raises(ValueError, match='admits no total neutrino mass'):
+        make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg={'step': 0.006})
+
+
+def test_step_above_hierarchy_floor_is_accepted():
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.12,
+            'mass_split': 'normal'}
+    a = make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg={'step': 0.006})
+    assert a.var_pars == ['Omega_c', 'm_nu']
+
+
+def test_derivkit_step_below_floor_raises():
+    # The case a `Sum - 2*step` rule misses: derivkit never reads `step`, and its
+    # 1e-3 default floor on the half-width reaches 0.059 from a 0.06 fiducial.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.06,
+            'mass_split': 'normal'}
+    cfg = {'derivative_method': 'derivkit', 'step': 1e-8}
+    with pytest.raises(ValueError, match='admits no total neutrino mass'):
+        make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg=cfg)
+
+
+def test_inverted_floor_guards_ccl_silent_window():
+    # Sum = 0.0995 with derivkit reaches 0.0985: CCL does not raise there, it returns
+    # a negative lightest mass. Enforcing the true floor is the whole point.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.0995,
+            'mass_split': 'inverted'}
+    cfg = {'derivative_method': 'derivkit', 'step': 1e-8}
+    with pytest.raises(ValueError, match='admits no total neutrino mass'):
+        make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg=cfg)
+
+
+def test_degenerate_split_step_below_zero_raises():
+    # Regression: Sum = 0.01 under 'equal' with a 0.006 step reaches -0.002, where CCL
+    # silently returns the massless theory. This used to pass unchecked.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.01,
+            'mass_split': 'equal'}
+    with pytest.raises(ValueError, match='admits no total neutrino mass'):
+        make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg={'step': 0.006})
+
+
+def test_degenerate_split_small_fiducial_accepted():
+    # No hierarchy, so a fiducial far below the normal floor is fine while every
+    # sample stays non-negative: 0.02 - 2*0.006 = 0.008.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.02,
+            'mass_split': 'equal'}
+    a = make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg={'step': 0.006})
+    assert a.var_pars == ['Omega_c', 'm_nu']
+
+
+def test_no_floor_check_when_mnu_is_not_varied():
+    # Nothing steps the masses, so the floor cannot be crossed.
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.06,
+            'mass_split': 'normal'}
+    a = make_analyze(['Omega_c', 'h'], pars, extra_fisher_cfg={'step': 0.006})
+    assert 'm_nu' not in a.var_pars
 
 
 def test_add_gaussian_priors_preserves_width_order():

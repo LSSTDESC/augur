@@ -33,15 +33,14 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
     lk.reset()
     tools.reset()
     dict_all = {**_sys_pars, **_pars}
-    extra_dict = {}
+    # Only the amplitude parameter the factory was built with may reach the ParamsMap.
     if dict_all.get('A_s') is None:
-        extra_dict['amplitude_parameter'] = 'sigma8'
         dict_all.pop('A_s', None)
     else:
-        extra_dict['amplitude_parameter'] = 'as'
         dict_all.pop('sigma8', None)
 
-    extra_dict['mass_split'] = dict_all.get('mass_split')
+    # mass_split is a string, and it is a frozen field of the CCLFactory (set in
+    # _create_ccl_factory) rather than a sampler parameter: no place for it in a ParamsMap.
     dict_all.pop('mass_split', None)
 
     hm = dict_all.pop('extra_parameters', None)
