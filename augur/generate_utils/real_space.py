@@ -14,7 +14,12 @@ import sacc
 import sacc.windows
 import warnings
 
-from firecrown.generators.two_point import LogLinearElls
+# firecrown 1.15 re-exports LogLinearElls from firecrown.generators; earlier
+# versions only expose it via the two_point submodule.
+try:
+    from firecrown.generators import LogLinearElls
+except ImportError:
+    from firecrown.generators.two_point import LogLinearElls
 from firecrown.likelihood.two_point import TwoPoint
 from augur.utils.firecrown_interface import create_twopoint_filter
 from augur.generate_utils.scale_cuts import parse_combination_scale_cut

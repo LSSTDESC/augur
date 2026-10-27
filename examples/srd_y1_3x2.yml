@@ -137,7 +137,8 @@ cov_options:
 # and the alternative `parameters` mode with explicit bounds.
 fisher:
     var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h',
-               'lens0_bias', 'lens1_bias']
+               'lens0_bias', 'lens1_bias', 'lens2_bias', 'lens3_bias', 
+               'lens4_bias', 'ia_bias', 'alphaz']
     step: 1e-5
     output: 'output/fisher.dat'
     fid_output: 'output/fiducials.dat'

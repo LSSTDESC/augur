@@ -173,20 +173,52 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
 
             cov_calc = TJPCovGaus(tjpcov_config)
 
-            if config['general']['ignore_scale_cuts']:
-                cov_fourier = cov_calc.get_covariance()
+            # if config['general']['ignore_scale_cuts']:
+            #     cov_fourier = cov_calc.get_covariance()
+            # else:
+            #     cov_fourier = np.zeros((ndata, ndata))
+            #     for i, trcombs1 in enumerate(S.get_tracer_combinations()):
+            #         ii = S.indices(tracers=trcombs1)
+            #         for trcombs2 in S.get_tracer_combinations()[i:]:
+            #             jj = S.indices(tracers=trcombs2)
+            #             ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
+            #             cov_here = cov_calc.get_covariance_block(
+            #                 trcombs1, trcombs2, include_b_modes=False
+            #             )
+            #             cov_fourier[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
+            #             cov_fourier[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
+
+            def _covariance_block(tracer_comb1, tracer_comb2):
+                """Worker entry point for the covariance pool.
+                """
+                return _POOL_CALC.get_covariance_block(
+                    tracer_comb1, tracer_comb2, include_b_modes=False
+                )
+
+            nproc = int(config['cov_options'].get('nproc', 1))
+            combs = list(S.get_tracer_combinations())
+            pairs = [(combs[i], combs[j])
+                     for i in range(len(combs)) for j in range(i, len(combs))]
+            global _POOL_CALC
+            _POOL_CALC = cov_calc
+            if nproc == 1:
+                blocks = [_covariance_block(*p) for p in pairs]
             else:
-                cov_fourier = np.zeros((ndata, ndata))
-                for i, trcombs1 in enumerate(S.get_tracer_combinations()):
-                    ii = S.indices(tracers=trcombs1)
-                    for trcombs2 in S.get_tracer_combinations()[i:]:
-                        jj = S.indices(tracers=trcombs2)
-                        ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
-                        cov_here = cov_calc.get_covariance_block(
-                            trcombs1, trcombs2, include_b_modes=False
-                        )
-                        cov_fourier[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
-                        cov_fourier[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
+                # limits=1 is required, not an optimisation: forking a process
+                # with live BLAS threads deadlocks.
+                import multiprocessing as mp
+                from threadpoolctl import threadpool_limits
+                with threadpool_limits(limits=1), \
+                        mp.get_context('fork').Pool(nproc) as pool:
+                    blocks = pool.starmap(_covariance_block, pairs)
+
+            cov_fourier = np.zeros((ndata, ndata))
+            # scale-cuts taken into account here
+            for (t1, t2), blk in zip(pairs, blocks):
+                ii, jj = S.indices(tracers=t1), S.indices(tracers=t2)
+                ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
+                cov_fourier[ii_all, jj_all] = blk[:len(ii), :len(jj)]
+                cov_fourier[jj_all.T, ii_all.T] = blk[:len(ii), :len(jj)].T
 
             cov_all += cov_fourier
 

@@ -7,7 +7,16 @@ SACC data vector and builds matching firecrown ``TwoPoint`` statistics.
 import numpy as np
 import warnings
 
-from firecrown.likelihood.cmb import CMBConvergence
+# firecrown 1.16 re-exports CMBConvergence from firecrown.likelihood, 1.15 keeps
+# it in the private _cmb submodule, and earlier versions expose it as
+# firecrown.likelihood.cmb.
+try:
+    from firecrown.likelihood import CMBConvergence
+except ImportError:
+    try:
+        from firecrown.likelihood._cmb import CMBConvergence
+    except ImportError:
+        from firecrown.likelihood.cmb import CMBConvergence
 from firecrown.likelihood.two_point import TwoPoint
 
 from augur.utils.firecrown_interface import create_twopoint_filter
