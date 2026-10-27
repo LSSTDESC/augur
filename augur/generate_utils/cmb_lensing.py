@@ -23,6 +23,15 @@ from augur.utils.firecrown_interface import create_twopoint_filter
 from augur.utils.config_io import parse_array
 
 
+def _beam_ell_max(cmb_cfg, default=10000.0):
+    """Largest ell edge across the CMB statistics, used to span the unit beam."""
+    ell_max = 0.0
+    for stat_cfg in cmb_cfg.get('statistics', {}).values():
+        if 'ell_edges' in stat_cfg:
+            ell_max = max(ell_max, float(np.max(parse_array(stat_cfg['ell_edges']))))
+    return ell_max if ell_max > 0 else default
+
+
 def add_cmb_lensing(config, S, sources, dndz, cosmo):
     """
     Populate a SACC object with harmonic CMB-lensing data points.
@@ -61,14 +70,15 @@ def add_cmb_lensing(config, S, sources, dndz, cosmo):
             "applying them to the data vector."
         )
 
-    # NOTE: For current Firecrown factory metadata extraction, CMB convergence
-    # is represented with an NZ-like tracer entry carrying a delta-function
-    # source distribution at z_source.
+    # Firecrown (>=1.16) builds a CMBLensing field only from a SACC MapTracer
+    # (spin-0, unit beam) and reads the source redshift from metadata['z_lss'];
+    # an NZ tracer would be treated as a galaxy tomographic bin.
     z_source = cmb_cfg.get('z_source', 1100.0)
     if 'cmb_convergence' not in S.tracers:
+        beam_ells = np.array([0.0, _beam_ell_max(cmb_cfg)])
         S.add_tracer(
-            'NZ', 'cmb_convergence', np.array([z_source]), np.array([1.0]),
-            quantity='cmb_convergence',
+            'Map', 'cmb_convergence', 0, beam_ells, np.ones_like(beam_ells),
+            quantity='cmb_convergence', metadata={'z_lss': z_source},
         )
     if 'cmb_convergence' not in sources:
         sources['cmb_convergence'] = CMBConvergence(
