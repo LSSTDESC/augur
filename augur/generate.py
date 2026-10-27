@@ -19,6 +19,7 @@ import sacc
 import warnings
 import tempfile
 import os
+from copy import deepcopy
 
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
@@ -604,7 +605,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 if tools.ccl_cosmo is not None:
                     _pars = tools.ccl_cosmo.to_dict()
                 else:
-                    _pars = config.get('cosmo', {}).copy()
+                    _pars = deepcopy(config.get('cosmo', {}))
                 logger.debug("use_sacc cosmo params: %s", _pars)
                 if (
                     hasattr(S, 'covariance')

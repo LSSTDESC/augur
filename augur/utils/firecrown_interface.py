@@ -16,8 +16,10 @@ from firecrown.ccl_factory import (
 )
 from firecrown.metadata_types import Galaxies, CMB
 from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFilter
-
+from copy import deepcopy
 import warnings
+
+from augur.utils.config_io import validate_amplitude_parameter
 
 TRANSFER_FUNCTION_REGISTRY = {
     "boltzmann_camb": CCLPureModeTransferFunction.BOLTZMANN_CAMB,
@@ -38,12 +40,12 @@ BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead', 'mead2015', 'mead2016']
 TP_FILTER_REGISTRY = {
     'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
     'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
-    'galaxy_shearDensity_cl_e': [[Galaxies.COUNTS, Galaxies.SHEAR_E]],
+    'galaxy_shearDensity_cl_e': [[Galaxies.SHEAR_E, Galaxies.COUNTS]],
     # Real-space aliases used by TwoPointFactory(correlation_space='real')
     'galaxy_shear_xi_plus': [[Galaxies.PART_OF_XI_PLUS, Galaxies.PART_OF_XI_PLUS]],
     'galaxy_shear_xi_minus': [[Galaxies.PART_OF_XI_MINUS, Galaxies.PART_OF_XI_MINUS]],
     'galaxy_density_xi': [[Galaxies.COUNTS, Galaxies.COUNTS]],
-    'galaxy_shearDensity_xi_t': [[Galaxies.COUNTS, Galaxies.SHEAR_T]],
+    'galaxy_shearDensity_xi_t': [[Galaxies.SHEAR_T, Galaxies.COUNTS]],
     # CMB lensing harmonic correlations
     'cmb_convergence_cl': [[CMB.CONVERGENCE, CMB.CONVERGENCE]],
     'cmbGalaxy_convergenceDensity_cl': [[CMB.CONVERGENCE, Galaxies.COUNTS]],
@@ -100,6 +102,7 @@ def _create_ccl_factory(config):
                                      halofit_version must be specified \
                                      in extra_parameters.camb.')
 
+    validate_amplitude_parameter(cosmo_cfg)
     amplitude = None
     if cosmo_cfg.get("A_s", None) is not None:
         amplitude = PoweSpecAmplitudeParameter.AS
@@ -183,7 +186,7 @@ def _create_pt_calculator(config, cosmo):
     if pt_cfg is None or pt_cfg == {}:
         return None
 
-    cfg = dict(pt_cfg)  # shallow copy
+    cfg = dict(deepcopy(pt_cfg))
     calc_type = cfg.pop("type", "eulerian_pt_calculator").lower()
     cls = PT_CALCULATOR_REGISTRY.get(calc_type)
     if cls is None:
@@ -207,7 +210,7 @@ def _create_hm_calculator(config, cosmo):
     if hm_cfg is None or hm_cfg == {}:
         return None
 
-    cfg = dict(hm_cfg)  # shallow copy
+    cfg = dict(deepcopy(hm_cfg))
     try:
         hm_calculator = ccl.hm.HaloModelCalculator(cosmo=cosmo, **cfg)
         return hm_calculator
@@ -293,11 +296,10 @@ def _create_clusterdeltasigma(config, cosmo):
 
 
 def create_modeling_tools(config):
-    import copy
     # Deepcopy to avoid mutating the caller's config dict.
     # The _create_* helpers use config.pop() internally to prevent
     # passing consumed keys to downstream constructors.
-    config = copy.deepcopy(config)
+    config = deepcopy(config)
 
     factory, cosmo = _create_ccl_factory(config)
     pt_calculator = _create_pt_calculator(config, cosmo)

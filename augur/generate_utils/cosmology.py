@@ -1,6 +1,13 @@
 """Cosmology initialisation from an Augur config dict."""
 
+import logging
+import warnings
+
 import pyccl as ccl
+
+from augur.utils.config_io import validate_amplitude_parameter
+
+logger = logging.getLogger(__name__)
 
 
 def initialize_cosmology(config):
@@ -38,9 +45,10 @@ def initialize_cosmology(config):
                     value = config['ccl_accuracy']['spline_params'][key]
                     ccl.spline_params[key] = type_here(value)
                 except KeyError:
-                    print(f'The selected spline keyword `{key}` is not recognized.')
+                    logger.warning('The selected spline keyword `%s` is not recognized.', key)
                 except ValueError:
-                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
         if 'gsl_params' in config['ccl_accuracy'].keys():
             for key in config['ccl_accuracy']['gsl_params'].keys():
                 try:
@@ -48,12 +56,15 @@ def initialize_cosmology(config):
                     value = config['ccl_accuracy']['gsl_params'][key]
                     ccl.gsl_params[key] = type_here(value)
                 except KeyError:
-                    print(f'The selected GSL keyword `{key}` is not recognized.')
+                    logger.warning('The selected GSL keyword `%s` is not recognized.', key)
                 except ValueError:
-                    print(f'The selected value `{value}` could not be casted to `{type_here}`.')
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
 
     # ---- Modified gravity ----
     if cosmo_cfg.get('mg_parametrization', None) is not None:
+        warnings.warn("Modified gravity parametrizations are experimental and may not be \
+                      fully supported. Use with caution.")
         mg_cfg = cosmo_cfg['mg_parametrization']
         if mg_cfg.get('mu_Sigma', None) is not None:
             mu_sig = mg_cfg['mu_Sigma']
@@ -68,17 +79,16 @@ def initialize_cosmology(config):
                     try:
                         mu_sig[key] = float(mu_sig[key])
                     except ValueError:
-                        print(
-                            f'The selected value `{mu_sig[key]}` '
-                            f'for `{key}` could not be casted to `float`.'
-                        )
+                        logger.warning('The selected value `%s` for `%s` could not be '
+                                       'casted to `float`.', mu_sig[key], key)
             cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
 
     # ---- Build cosmology object ----
+    validate_amplitude_parameter(cosmo_cfg)
     try:
         cosmo = ccl.Cosmology(**cosmo_cfg)
     except (KeyError, TypeError, ValueError) as e:
-        print('Error in cosmology configuration. Check the config file.')
+        logger.error('Error in cosmology configuration. Check the config file.')
         raise e
 
     return cosmo, cosmo_cfg

@@ -1,4 +1,4 @@
-import copy
+from copy import deepcopy
 import pytest
 
 from augur.utils import firecrown_interface as fci
@@ -6,7 +6,7 @@ from augur.utils import firecrown_interface as fci
 
 def test_create_cM_relation_none():
     cfg = {}
-    cfg_copy = copy.deepcopy(cfg)
+    cfg_copy = deepcopy(cfg)
     assert fci._create_cM_relation(cfg_copy) is None
 
 

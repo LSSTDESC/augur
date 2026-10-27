@@ -53,6 +53,27 @@ def parse_array(value):
     return np.asarray(result)
 
 
+def validate_amplitude_parameter(cosmo_cfg):
+    """
+    Validate that exactly one of sigma8 or A_s is specified in the cosmology config.
+    Raises ValueError if both are defined as non-None values, which is ambiguous.
+    """
+    has_sigma8 = cosmo_cfg.get('sigma8') is not None
+    has_A_s = cosmo_cfg.get('A_s') is not None
+    if has_sigma8 and has_A_s:
+        raise ValueError(
+            'Both sigma8 and A_s are specified in the cosmo config. '
+            'These parameters are mutually exclusive: use sigma8 (RMS matter '
+            'fluctuation in 8 h^-1 Mpc spheres) OR A_s (scalar amplitude of '
+            'the primordial power spectrum), not both.'
+        )
+    if not has_sigma8 and not has_A_s:
+        raise ValueError(
+            'Neither sigma8 nor A_s is specified in the cosmo config. '
+            'Exactly one amplitude parameter must be provided.'
+        )
+
+
 def parse_config(config):
     """
     Utility to parse configuration file

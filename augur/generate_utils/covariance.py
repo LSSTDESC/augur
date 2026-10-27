@@ -7,6 +7,20 @@ from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus, TJPCovClusterGaus, TJPCovClusterSSC
 from augur.utils.config_io import parse_array
 
+# TJPCov calculator shared with forked covariance workers. Set before the pool
+# is created so children inherit it instead of pickling it per task.
+_POOL_CALC = None
+
+
+def _covariance_block(tracer_comb1, tracer_comb2):
+    """Worker entry point for the covariance pool.
+
+    Defined at module level so ``multiprocessing`` can pickle it by reference.
+    """
+    return _POOL_CALC.get_covariance_block(
+        tracer_comb1, tracer_comb2, include_b_modes=False
+    )
+
 
 def compute_covariance(config, S, lk, cosmo, tools, probes=None):
     """
@@ -187,13 +201,6 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
             #             )
             #             cov_fourier[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
             #             cov_fourier[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
-
-            def _covariance_block(tracer_comb1, tracer_comb2):
-                """Worker entry point for the covariance pool.
-                """
-                return _POOL_CALC.get_covariance_block(
-                    tracer_comb1, tracer_comb2, include_b_modes=False
-                )
 
             nproc = int(config['cov_options'].get('nproc', 1))
             combs = list(S.get_tracer_combinations())
