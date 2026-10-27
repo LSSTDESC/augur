@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
@@ -7,6 +8,11 @@ from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
 import pandas as pd
+import astropy.table
+import os
+from copy import deepcopy
+
+logger = logging.getLogger(__name__)
 
 mnu_norm = 93.14  # eV
 
@@ -46,9 +52,10 @@ class Analyze(object):
         # Load the likelihood if no likelihood is passed along
 
         config = parse_config(config)  # Load full config
+
         if likelihood is None:
-            likelihood, S, tools, req_params = generate(config, return_all_outputs=True)
-        config = parse_config(config)  # Load full config
+            # Making a copy of the config to avoid modifying the original config dictionary
+            likelihood, S, tools, req_params = generate(deepcopy(config), return_all_outputs=True)
 
         if (tools is None) or (req_params is None):
             raise ValueError('If a likelihood is passed tools and req_params are required! \
@@ -56,42 +63,220 @@ class Analyze(object):
         else:
             # Load the ccl accuracy parameters if `generate` is not run
             if 'ccl_accuracy' in config.keys():
-                # Pass along spline control parameters
-                if 'spline_params' in config['ccl_accuracy'].keys():
-                    for key in config['ccl_accuracy']['spline_params'].keys():
-                        try:
-                            type_here = type(ccl.spline_params[key])
-                            value = config['ccl_accuracy']['spline_params'][key]
-                            ccl.spline_params[key] = type_here(value)
-                        except KeyError:
-                            print(f'The selected spline keyword `{key}` is not recognized.')
-                        except ValueError:
-                            print(f'The selected value `{value}` could not be casted to \
-                                    `{type_here}`.')
-                # Pass along GSL control parameters
-                if 'gsl_params' in config['ccl_accuracy'].keys():
-                    for key in config['ccl_accuracy']['gsl_params'].keys():
-                        try:
-                            type_here = type(ccl.gsl_params[key])
-                            value = config['ccl_accuracy']['gsl_params'][key]
-                            ccl.gsl_params[key] = type_here(value)
-                        except KeyError:
-                            print(f'The selected GSL keyword `{key}` is not recognized.')
-                        except ValueError:
-                            print(f'The selected value `{value}` could not be casted to \
-                                    `{type_here}`.')
+                self._unpack_ccl_accuracy_parameters(config)
 
-        self.lk = likelihood  # Just to save some typing
-        self.tools = tools
-        self.req_params = req_params
+        self.lk, self.tools = likelihood, tools
+        self.req_params, self.norm_step = req_params, norm_step
         self.data_fid = self.lk.get_data_vector()
-        self.norm_step = norm_step
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().to_dict()
-        # need to potentially extract modified gravity parameters here
-        # and remove superfluous parameters
-        if 'mg_parametrization' in self.pars_fid.keys() \
-            and self.pars_fid['mg_parametrization'] is not None:
+        self.cf = tools.ccl_factory
+
+        # Load the relevant section of the configuration file
+        self.config = config['fisher']
+
+        # Initialize pivot point
+        self.x, self.par_bounds, self.gpriors = [], [], []
+        self.var_pars = self.derivatives = self.gprior_pars = None
+        self.Fij = self.Fij_with_gprior = None
+        self.Fij_df = self.Fij_with_gprior_df = None
+        self.biased_cls = self.bi = self.J = None
+        self.norm = self.derivative_method = self.step_size = None
+        self.transform_Omega_m, self.Om = False, None
+        self.transform_S8, self.S8 = False, None
+        self.derivative_args = {}
+
+        if 'mg_parametrization' in self.pars_fid.keys():
+            self._unpack_mg_parameters()
+        if 'baryonic_effects' in self.pars_fid.keys():
+            self._unpack_baryonic_parameters()
+
+        self._unpack_transformations()
+        self._unpack_parameters_and_var_pars()
+        self._unpack_gaussian_priors()
+        self._unpack_norm_step()
+        self._unpack_derivative_method()
+
+    def _unpack_transformations(self):
+        """
+        Unpack options to transform the Fisher matrix to different parameter bases.
+        Currently supported transformations are:
+        - Omega_c -> Omega_m
+        - sigma8 -> S8
+        """
+        transform_options = ['transform_S8', 'transform_Omega_m']
+        for option in transform_options:
+            if option in self.config.keys():
+                if type(self.config[option]) is not bool:
+                    warnings.warn(f'{option} not a boolean, therefore \
+                                    not transforming Fisher to {option.split("_")[1]}')
+                else:
+                    setattr(self, option, self.config[option])
+
+    def _unpack_gaussian_priors(self):
+        """
+        Unpack options to add Gaussian priors to the diagonal of the Fisher matrix.
+        """
+        # reads in associated gaussian prior width of parameters
+        if 'gaussian_priors' in self.config.keys():
+            self.gprior_pars = list(self.config['gaussian_priors'].keys())
+            for var in self.gprior_pars:
+                in_var_pars = var in self.var_pars
+                is_transform_Omega_m = (var == 'Omega_m' and self.transform_Omega_m)
+                is_transform_S8 = (var == 'S8' and self.transform_S8)
+                if not (in_var_pars or is_transform_Omega_m or is_transform_S8):
+                    raise ValueError(
+                        f'Gaussian prior requested for `{var}`, but it is not in '
+                        f'var_pars and is not a recognised transform parameter. '
+                        f'Remove it from gaussian_priors or add it to var_pars.'
+                    )
+                _val = self.config['gaussian_priors'][var]
+                self.gpriors.append(_val)
+
+    def _unpack_derivative_method(self):
+        """
+        Unpack options to compute numerical derivatives.
+        Currently supported methods are:
+        - 5pt_stencil
+        - numdifftools
+        - derivkit
+        """
+        # derivative method
+        self.derivative_method = self.config.get('derivative_method', 'numdifftools')
+        self.derivative_args = self.config.get('derivative_args', {})
+        # step size
+        self.step_size = float(self.config.get('step', 0.01))
+
+    def _unpack_ccl_accuracy_parameters(self, config):
+        """
+        Unpack options to set the accuracy parameters of ccl
+        (called when user passes pre-made likelihood, tools, and req_params).
+        """
+        # Pass along spline control parameters
+        if 'spline_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['spline_params'].keys():
+                try:
+                    type_here = type(ccl.spline_params[key])
+                    value = config['ccl_accuracy']['spline_params'][key]
+                    ccl.spline_params[key] = type_here(value)
+                except KeyError:
+                    logger.warning('The selected spline keyword `%s` is not recognized.',
+                                   key)
+                except ValueError:
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
+        # Pass along GSL control parameters
+        if 'gsl_params' in config['ccl_accuracy'].keys():
+            for key in config['ccl_accuracy']['gsl_params'].keys():
+                try:
+                    type_here = type(ccl.gsl_params[key])
+                    value = config['ccl_accuracy']['gsl_params'][key]
+                    ccl.gsl_params[key] = type_here(value)
+                except KeyError:
+                    logger.warning('The selected GSL keyword `%s` is not recognized.', key)
+                except ValueError:
+                    logger.warning('The selected value `%s` could not be casted to `%s`.',
+                                   value, type_here)
+
+    def _unpack_norm_step(self):
+        """
+        Unpack options to normalize the step size for numerical derivatives.
+        """
+        if (len(self.par_bounds) < 1) & (self.norm_step):
+            self.norm_step = False
+            warnings.warn('Parameter bounds not provided -- the step will not be normalized')
+        # Normalize the pivot point given the sampling region
+        if self.norm_step:
+            self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
+                np.array(self.par_bounds[:, 0]).astype(np.float64)
+
+    def _unpack_parameters_and_var_pars(self):
+        """
+        Unpack options to load the parameters to vary.
+        """
+        # We will allow 2 options -- one where we pass something
+        # a la cosmosis with parameters and minimum, central, and max
+        # we can also allow priors
+        if set(['parameters', 'var_pars']).issubset(set(self.config.keys())):
+            warnings.warn('Both `parameters` and `var_pars` found in Fisher. \
+                        Ignoring `parameters and using fiducial cosmology \
+                        as pivot.`')
+
+        if 'parameters' in self.config.keys():
+            self.var_pars = list(self.config['parameters'].keys())
+            self._validate_amplitude_in_var_pars()
+            for var in self.var_pars:
+                _val = self.config['parameters'][var]
+                if isinstance(_val, list):
+                    self.x.append(_val[1])
+                    self.par_bounds.append([_val[0], _val[-1]])
+                else:
+                    self.x.append(_val)
+
+        # The other option is to pass just the parameter names and evaluate around
+        # the fiducial values
+        elif 'var_pars' in self.config.keys():
+            self.var_pars = self.config['var_pars']
+            self._validate_amplitude_in_var_pars()
+            for var in self.var_pars:
+                if var in self.pars_fid.keys():
+                    self.x.append(self.pars_fid[var])
+                elif var in self.req_params.keys():
+                    self.x.append(self.req_params[var])
+                else:
+                    raise ValueError(f'The requested parameter {var} is not \
+                                    in the list of parameters in the likelihood.')
+        # Cast to numpy array (this will be done later anyway)
+        self.x = np.array(self.x).astype(np.float64)
+        self.par_bounds = np.array(self.par_bounds)
+
+    def _validate_amplitude_in_var_pars(self):
+        """
+        Check that the varied parameters are consistent with the fiducial
+        cosmology's amplitude parameter choice.
+
+        Raises ValueError if:
+        - Both sigma8 and A_s are in var_pars (mutually exclusive)
+        - sigma8 is in var_pars but A_s was used to build the fiducial cosmology
+          (sigma8 is None in pars_fid)
+        - A_s is in var_pars but sigma8 was used to build the fiducial cosmology
+          (A_s is None in pars_fid)
+        """
+        if 'sigma8' in self.var_pars and 'A_s' in self.var_pars:
+            raise ValueError(
+                'Both sigma8 and A_s are listed in var_pars. '
+                'These are mutually exclusive amplitude parameters; vary only one.'
+            )
+        if 'sigma8' in self.var_pars and self.pars_fid.get('sigma8') is None:
+            raise ValueError(
+                'sigma8 is listed in var_pars but the fiducial cosmology was '
+                'constructed with A_s as the amplitude parameter (sigma8 is None '
+                'in the fiducial). Remove sigma8 from var_pars or reconstruct '
+                'the fiducial cosmology using sigma8.'
+            )
+        if 'A_s' in self.var_pars and self.pars_fid.get('A_s') is None:
+            raise ValueError(
+                'A_s is listed in var_pars but the fiducial cosmology was '
+                'constructed with sigma8 as the amplitude parameter (A_s is None '
+                'in the fiducial). Remove A_s from var_pars or reconstruct '
+                'the fiducial cosmology using A_s.'
+            )
+
+    def _unpack_mg_parameters(self):
+        """
+        Unpack options to load modified gravity parameters from the fiducial cosmology
+        and add them to the dictionary of fiducial parameters.
+        Currently, only the MuSigma parametrization is supported,
+        and the expected parameters are:
+        - mg_musigma_mu
+        - mg_musigma_sigma
+        - mg_musigma_c1
+        - mg_musigma_c2
+        - mg_musigma_lambda0
+        """
+        if self.pars_fid['mg_parametrization'] is not None:
+            warnings.warn("Modified gravity parametrizations are experimental and may not \
+                            be fully supported. Use with caution.")
             mg = self.pars_fid.pop('mg_parametrization')
             # mg is a MuSigmaMG object (from cosmo.to_dict()), not a raw dict
             from pyccl.modified_gravity import MuSigmaMG
@@ -109,100 +294,17 @@ class Analyze(object):
                     self.pars_fid['mg_musigma_c1'] = float(musigma.get('c1_mg', 1.0))
                     self.pars_fid['mg_musigma_c2'] = float(musigma.get('c2_mg', 1.0))
                     self.pars_fid['mg_musigma_lambda0'] = float(musigma.get('lambda_mg', 0.0))
-        if 'baryonic_effects' in self.pars_fid.keys() and self.pars_fid['baryonic_effects'] is not None:
+
+    def _unpack_baryonic_parameters(self):
+        """
+        Unpack options to load baryonic parameters from the fiducial cosmology
+        and add them to the dictionary of fiducial parameters.
+        Currently, baryonic parameters are not implemented.
+        """
+        if self.pars_fid['baryonic_effects'] is not None:
             warnings.warn("Baryonic effects parameters specified \
-                           but not currently implemented. Ignoring these parameters.")
-            self.pars_fid.pop('baryonic_effects')
-
-        self.cf = tools.ccl_factory
-
-        # Load the relevant section of the configuration file
-        self.config = config['fisher']
-
-        # Initialize pivot point
-        self.x = []
-        self.var_pars = None
-        self.derivatives = None
-        self.Fij = None
-        self.Fij_with_gprior = None
-        self.Fij_df = None
-        self.Fij_with_gprior_df = None
-        self.biased_cls, self.bi = None, None
-        self.par_bounds = []
-        self.norm = None
-        self.gpriors = []
-        self.gprior_pars = None
-        self.transform_Omega_m, self.Om = False, None
-        self.transform_S8, self.S8 = False, None
-        self.J = None
-        self.derivative_method = None
-        self.derivative_args = {}
-        self.step_size = None
-        if 'transform_S8' in self.config.keys():
-            if type(self.config['transform_S8']) is not bool:
-                warnings.warn('transform_S8 not a boolean, therefore \
-                                not transforming Fisher to S8')
-            else:
-                self.transform_S8 = self.config['transform_S8']
-        if 'transform_Omega_m' in self.config.keys():
-            if type(self.config['transform_Omega_m']) is not bool:
-                warnings.warn('transform_Omega_m not a boolean, therefore \
-                                not transforming Fisher to Omega_m')
-            else:
-                self.transform_Omega_m = self.config['transform_Omega_m']
-        # Load the parameters to vary
-        # We will allow 2 options -- one where we pass something
-        # a la cosmosis with parameters and minimum, central, and max
-        # we can also allow priors
-        if set(['parameters', 'var_pars']).issubset(set(self.config.keys())):
-            warnings.warn('Both `parameters` and `var_pars` found in Fisher. \
-                        Ignoring `parameters and using fiducial cosmology \
-                        as pivot.`')
-
-        if 'parameters' in self.config.keys():
-            self.var_pars = list(self.config['parameters'].keys())
-            for var in self.var_pars:
-                _val = self.config['parameters'][var]
-                if isinstance(_val, list):
-                    self.x.append(_val[1])
-                    self.par_bounds.append([_val[0], _val[-1]])
-                else:
-                    self.x.append(_val)
-
-        # The other option is to pass just the parameter names and evaluate around
-        # the fiducial values
-        elif 'var_pars' in self.config.keys():
-            self.var_pars = self.config['var_pars']
-            for var in self.var_pars:
-                if var in self.pars_fid.keys():
-                    self.x.append(self.pars_fid[var])
-                elif var in self.req_params.keys():
-                    self.x.append(self.req_params[var])
-                else:
-                    raise ValueError(f'The requested parameter {var} is not \
-                                    in the list of parameters in the likelihood.')
-        # Cast to numpy array (this will be done later anyway)
-        self.x = np.array(self.x).astype(np.float64)
-        self.par_bounds = np.array(self.par_bounds)
-        if (len(self.par_bounds) < 1) & (self.norm_step):
-            self.norm_step = False
-            warnings.warn('Parameter bounds not provided -- the step will not be normalized')
-        # Normalize the pivot point given the sampling region
-        if self.norm_step:
-            self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
-                np.array(self.par_bounds[:, 0]).astype(np.float64)
-
-        # reads in associated gaussian prior width of parameters
-        if 'gaussian_priors' in self.config.keys():
-            self.gprior_pars = list(self.config['gaussian_priors'].keys())
-            for var in self.gprior_pars:
-                _val = self.config['gaussian_priors'][var]
-                self.gpriors.append(_val)
-        # derivative method
-        self.derivative_method = self.config.get('derivative_method', '5pt_stencil')
-        self.derivative_args = self.config.get('derivative_args', {})
-        # step size
-        self.step_size = float(self.config.get('step', 0.01))
+                            but not currently implemented. Ignoring these parameters.")
+        self.pars_fid.pop('baryonic_effects')
 
     def get_Om(self):
         """
@@ -293,7 +395,7 @@ class Analyze(object):
                         ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                         J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*mnu_norm)
 
-                print('Replaced Omega_c with Omega_m in Jacobian')
+                logger.info('Replaced Omega_c with Omega_m in Jacobian')
 
             if self.transform_S8:
                 Om = self.get_Om()
@@ -324,7 +426,7 @@ class Analyze(object):
                         if 'h' in self.var_pars:
                             ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
                             J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 * mnu_norm)
-                print("Replaced sigma8 with S8 in Jacobian")
+                logger.info("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
         return self.J
@@ -332,13 +434,17 @@ class Analyze(object):
     def f(self, x, labels, pars_fid, sys_fid, donorm=False):
         """
         Auxiliary Function that returns a theory vector evaluated at x.
-        Labels are the name of the parameters x (with the same length and order)
+        Labels are the name of the parameters x (with the same length and order).
+        Basically it unpacks x, given its labels, into two different dictionaries,
+        and then calls compute_new_theory_vector to get the theory vector at x.
 
         Parameters:
         -----------
 
         x : float, list or np.ndarray
             Point at which to compute the theory vector.
+            If 1D, it should have the same length as `labels`.
+            If 2D, it should be square with the same width and length as `labels`.
         labels : list
             Names of parameters to vary.
         pars_fid : dict
@@ -363,8 +469,8 @@ class Analyze(object):
                 x = self.norm * x + np.array(self.par_bounds[:, 0]).astype(np.float64)
 
             if x.ndim == 1:
-                _pars = pars_fid.copy()
-                _sys_pars = sys_fid.copy()
+                _pars = deepcopy(pars_fid)
+                _sys_pars = deepcopy(sys_fid)
                 for i in range(len(labels)):
                     if labels[i] in pars_fid.keys():
                         _pars.update({labels[i]: x[i]})
@@ -374,6 +480,7 @@ class Analyze(object):
                         if 'camb' in pars_fid['extra_parameters'].keys():
                             if labels[i] in pars_fid['extra_parameters']['camb'].keys():
                                 _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
+                                # Updating _sys_pars for consistency
                                 _sys_pars[labels[i]] = x[i]
                     else:
                         raise ValueError(f'Parameter name {labels[i]} not recognized!')
@@ -381,20 +488,29 @@ class Analyze(object):
                 f_out = self.compute_new_theory_vector(_sys_pars, _pars)
 
             elif x.ndim == 2:
+                if (x.shape != (len(labels), len(labels))):
+                    raise ValueError('The labels should have the same length as the parameters!')
                 f_out = []
                 for i in range(len(labels)):
-                    _pars = pars_fid.copy()
-                    # sys_fid is a ParamsMap object
-                    _sys_pars = sys_fid.copy()
+                    _pars = deepcopy(pars_fid)
+                    _sys_pars = deepcopy(sys_fid)
                     xi = x[i]
                     for j in range(len(labels)):
                         if labels[j] in pars_fid.keys():
                             _pars.update({labels[j]: xi[j]})
                         elif labels[j] in sys_fid.keys():
                             _sys_pars[labels[j]] = xi[j]
+                        elif 'extra_parameters' in pars_fid.keys():
+                            if 'camb' in pars_fid['extra_parameters'].keys():
+                                if labels[j] in pars_fid['extra_parameters']['camb'].keys():
+                                    _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
+                                    # Updating _sys_pars for consistency
+                                    _sys_pars[labels[j]] = xi[j]
                         else:
                             raise ValueError(f'Parameter name {labels[j]} not recognized')
                     f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
+            else:
+                raise ValueError('x should be either 1D or 2D array!')
             return np.array(f_out)
 
     def get_derivatives(self, force=False, method=None, step=None, **kwargs):
@@ -406,8 +522,8 @@ class Analyze(object):
         force : bool
             If `True` force recalculation of the derivatives.
         method : str
-            Method to compute derivatives, currently only `5pt_stencil` or `numdifftools`
-            are allowed.
+            Method to compute derivatives, currently only `5pt_stencil`, `numdifftools`
+            or `derivkit` are allowed.
         step : float
             Step size for numerical differentiation
         """
@@ -436,7 +552,7 @@ class Analyze(object):
             elif 'numdifftools' in method:
                 import numdifftools as nd
                 if kwargs != {}:
-                    print('Overwriting config-specified numdifftools kwargs')
+                    logger.info('Overwriting config-specified numdifftools kwargs')
                     kwargs = kwargs
                 else:
                     kwargs = self.derivative_args
@@ -450,12 +566,12 @@ class Analyze(object):
             elif 'derivkit' in method:
                 from derivkit.calculus_kit import CalculusKit
                 if kwargs != {}:
-                    print('Overwriting config-specified derivkit kwargs')
+                    logger.info('Overwriting config-specified derivkit kwargs')
                     kwargs = kwargs
                 elif self.derivative_args != {}:
                     kwargs = self.derivative_args
                 else:
-                    print('Using default Augur derivkit kwargs')
+                    logger.info('Using default Augur derivkit kwargs')
                     kwargs = {'method': 'adaptive',
                               'n_workers': 1,
                               'n_points': 27,
@@ -494,6 +610,10 @@ class Analyze(object):
         -----------
         save_txt : bool
             Save files of the Fisher + Gaussian prior matrix and Gaussian prior-only
+
+        Returns:
+        Fij_with_gprior : np.ndarray
+            Fisher matrix with Gaussian priors added in.
         """
 
         # 1) transformed parameters are specified (Omega_m or S8)
@@ -503,40 +623,42 @@ class Analyze(object):
         if self.Fij_with_gprior is None:
 
             indices = []
+            prior_widths = {gvar: self.gpriors[i] for i, gvar in enumerate(self.gprior_pars)}
+            direct_prior_widths = []
             ind_sigma8 = None
             ind_c = None
             ind_m = None
             ind_S8 = None
-            # TODO: check logic here to make sure transformed parameters handled correctly
             for gvar in self.gprior_pars:
                 if gvar in self.var_pars:
                     indices.append(np.where(np.array(self.var_pars) == gvar)[0][0])
+                    direct_prior_widths.append(prior_widths[gvar])
                 elif gvar == 'Omega_m' and self.transform_Omega_m:
                     ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                    ind_m = np.where(np.array(self.gprior_pars) == 'Omega_m')[0][0]
+                    ind_m = self.gprior_pars.index(gvar)
                     if 'Omega_c' in self.gprior_pars:
                         raise ValueError('Cannot set priors for both Omega_c and Omega_m')
                 elif gvar == 'S8' and self.transform_S8:
                     ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
-                    ind_S8 = np.where(np.array(self.gprior_pars) == 'S8')[0][0]
+                    ind_S8 = self.gprior_pars.index(gvar)
                     if 'sigma8' in self.gprior_pars:
                         raise ValueError('Cannot set priors for both sigma8 and S8')
                 else:
                     warnings.warn(f'The requested prior `{gvar}` is not recognized. \
                                        Please make sure that it is part of your model.')
 
-            self.Fij_with_gprior = np.copy(self.Fij)
+            self.Fij_with_gprior = deepcopy(self.Fij)
             gprior_only = np.zeros((len(self.Fij), len(self.Fij)))
-            for i in range(len(indices)):
+            for i, width in enumerate(direct_prior_widths):
                 j = indices[i]
-                gprior_only[j][j] += 1.0/self.gpriors[i]**2
+                gprior_only[j][j] += 1.0/width**2
 
             J = self.Jacobian_transform()
             gprior_only = J.T @ gprior_only @ J
             if ind_sigma8 is not None and ind_S8 is not None:
-                gprior_only[ind_sigma8][ind_sigma8] = 1.0/self.gpriors[ind_S8]**2
+                gprior_only[ind_sigma8][ind_sigma8] = 1.0/prior_widths['S8']**2
             if ind_c is not None and ind_m is not None:
-                gprior_only[ind_c][ind_c] = 1.0/self.gpriors[ind_m]**2
+                gprior_only[ind_c][ind_c] = 1.0/prior_widths['Omega_m']**2
 
             self.Fij_with_gprior += gprior_only
 
@@ -563,10 +685,31 @@ class Analyze(object):
         # if it is a dataframe, then we read it in and add it directly
         # if not, we need a helper to read in the text files into a dataframe object to then sum.
         raise NotImplementedError("External fisher addition not yet implemented.")
-        # F_ext, fid_ext = read_fisher_from_file(external_fisher)
 
     def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
-        # Compute Fisher matrix assuming Gaussian likelihood (around self.x)
+        """
+        Method to compute the Fisher matrix. It will use the cached derivatives
+        and Fisher matrix if they are already computed, otherwise it will compute
+        them. self.Fij is always the Fisher matrix without priors,
+        self.Fij_with_gprior is the Fisher matrix with Gaussian priors added in, if specified.
+
+        Parameters:
+        -----------
+        method : str
+            Method to compute derivatives, `numdifftools` or `derivkit` are allowed.
+        save_txt : bool
+            If `True`, saves the Fisher matrix and derivatives to text files in the output
+            directory specified in the config.
+        **kwargs:
+            Additional keyword arguments to pass to the derivative method (e.g. numdifftools
+            or derivkit kwargs).
+
+        Returns:
+        --------
+        Fij : np.ndarray
+            Fisher matrix evaluated at the fiducial cosmology and transformed to the specified
+            parameter basis, without any additional priors.
+        """
         if self.derivatives is None:
             self.get_derivatives(method=method, **kwargs)
         if self.Fij is None:
@@ -582,8 +725,8 @@ class Analyze(object):
                 # Fallback in case var_pars is None or sizes mismatch
                 self.Fij_df = pd.DataFrame(self.Fij)
 
-            save_vals = np.copy(self.x.T)
-            save_names = np.copy(self.var_pars)
+            save_vals = deepcopy(self.x.T)
+            save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
                 # swap sigma8 with S8
@@ -604,21 +747,49 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".theory_vector", fid)
                 np.savetxt(self.config['output']+".derivatives", self.derivatives)
         if self.gprior_pars is not None:
-            print('adding priors')
+            logger.info('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
 
         return self.Fij
 
     def get_fisher_bias(self, force=False, method=None, save_txt=True, use_fid=False):
-        # Compute Fisher bias following the generalized Amara formalism
-        # More details in Bianca's thesis and the note here:
-        # https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
+        """
+        Compute Fisher bias following the generalized Amara formalism
+        More details in Bianca's thesis and the note here:
+        https://github.com/LSSTDESC/augur/blob/note_bianca/note/main.tex
 
-        # Allowing to provide externally calculated "systematics"
-        # They should have the same ells as the original data-vector
-        # and the same length
-        import os
+        This method always computes the bias using the Fisher matrix without priors, self.Fij.
 
+        The sign convention follows the note linked above, <theta_{i} - theta_{i}^{ref}> = bi,
+        where theta_{i} are the parameters of interest and theta_{i}^{ref} are the reference
+        parameters about which the Fisher matrix is evaluated (e.g. the fiducial cosmology).
+        The bias is then given by bi = F^-1 @ Bj, where Bj = biased_cls^T @ inv_cov @ derivatives.
+        The biased_cls are the differences between the biased theory vector and either the fiducial
+        theory vector or the original theory vector evaluated at the pivot point,
+        depending on the value of `use_fid`.
+
+        The method allows the usage of externally calculated "systematics"
+        They should have the same ells as the original data-vector
+        and the same length, and should be provided in the form of a text file with a column named
+        `dv_sys` and the same number of rows as the data vector. If no external systematics are
+        provided, the code will calculate the biased theory vector internally by evaluating the
+        theory at a new point in parameter space defined by `bias_params` in the config, which
+        should be a dictionary of parameter names and values to bias.
+
+        Paramters:
+        ----------
+        force : bool
+            If `True` force recalculation of the derivatives and Fisher matrix if they are
+            already cached.
+        method : str
+            Method to compute derivatives, `numdifftools` or `derivkit` are allowed.
+        save_txt : bool
+            If `True`, saves the biased parameter shifts and biased theory vector to text files.
+        use_fid : bool
+            If `True`, the bias will be calculated with respect to the fiducial theory vector
+            instead of the theory vector evaluated at the pivot point. This can be useful if the
+            pivot point is.
+        """
         if self.derivatives is None:
             self.get_derivatives(force=force, method=method)
 
@@ -637,7 +808,6 @@ class Analyze(object):
                 if (len(_sys_path) < 1) or (os.path.exists(_sys_path) is False):
                     _calculate_biased_cls = True
                 else:
-                    import astropy.table
                     if ('.dat' in _sys_path) or ('.txt' in _sys_path):
                         _format = 'ascii'
                     elif ('.fits' in _sys_path):
@@ -664,8 +834,8 @@ class Analyze(object):
                 if self.transform_S8 or self.transform_Omega_m:
                     raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
-                    _pars_here = self.pars_fid.copy()
-                    _sys_here = self.req_params.copy()
+                    _pars_here = deepcopy(self.pars_fid)
+                    _sys_here = deepcopy(self.req_params)
                     for key, value in self.config['fisher_bias']['bias_params'].items():
                         if key in _pars_here.keys():
                             _pars_here[key] = value
@@ -695,7 +865,7 @@ class Analyze(object):
 
             J = self.Jacobian_transform()
             self.bi = J.T @ self.bi
-            save_names = np.copy(self.var_pars)
+            save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
                 # swap sigma8 with S8

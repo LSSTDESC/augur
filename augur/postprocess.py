@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
@@ -5,6 +6,8 @@ from astropy.table import Table
 from scipy.stats import norm, chi2
 from augur.utils.config_io import parse_config
 import os
+
+logger = logging.getLogger(__name__)
 
 # prostprocess does not know about transformations, it just reads fisher file and
 # assumes var_pars is maintained. Look for pandas df?
@@ -19,21 +22,23 @@ def postprocess(config):
 
     Parameters:
     -------
-    config : dict
-        The yaml parsed dictional of the input yaml file
+    config : dict, str
+        The yaml parsed dictionary of the input yaml file or the path to the yaml file itself.
     """
     config = parse_config(config)
     pconfig = config["postprocess"]
     try:
         fid_params = Table.read(config["fisher"]["fid_output"], format='ascii')
     except FileNotFoundError:
-        print("Obtain a fiducial file first by running get_fisher_matrix \
-               or provide your own text file.")
+        logger.error("Obtain a fiducial file first by running get_fisher_matrix or provide \
+                     your own text file.")
+        return
     var_params = config["fisher"]["var_pars"]
     try:
         fisher = np.loadtxt(config["fisher"]["output"])
     except FileNotFoundError:
-        print("Obtain a Fisher matrix first via analyze or provide your own text file.")
+        logger.error("Obtain a Fisher matrix first via analyze or provide your own text file.")
+        return
     npars = fisher.shape[0]
     keys = np.array(var_params)
     outdir = config["postprocess"]["outdir"]
@@ -48,12 +53,11 @@ def postprocess(config):
         centers = pconfig["centers"]
     else:
         # Setting the centers at the fiducial values of the parameters
+        # Iterate over var_params to preserve ordering that matches the Fisher matrix
         centers = np.zeros(npars)
-        ind = 0
-        for key in fid_params.keys():
-            if key in var_params:
-                centers[ind] = fid_params[key]
-                ind += 1
+        for ind, key in enumerate(var_params):
+            if key in fid_params.keys():
+                centers[ind] = fid_params[key][0]
 
     lw = pconfig["linewidth"] if "linewidth" in pconfig.keys() else 1
     ls = pconfig["linestyle"] if "linestyle" in pconfig.keys() else "-"
@@ -67,32 +71,37 @@ def postprocess(config):
     try:
         inv_cache = np.linalg.inv(fisher)
     except np.linalg.LinAlgError:
-        print("Fisher matrix non-invertible -- quitting...")
+        logger.error("Fisher matrix non-invertible -- quitting...")
+        return
 
     for i in range(npars):
         i_key = labels[i]
         for j in range(i+1, npars):
             j_key = labels[j]
-            print(i_key, j_key)
+            logger.debug('%s %s', i_key, j_key)
             inv_fisher = np.zeros((2, 2))
             inv_fisher[0, 0] = inv_cache[i, i]
             inv_fisher[0, 1] = inv_cache[i, j]
             inv_fisher[1, 0] = inv_cache[j, i]
             inv_fisher[1, 1] = inv_cache[j, j]
             alpha_count = 1.0
+            max_sig0, max_sig1 = 0.0, 0.0
             for cl in CL:
                 sig0, sig1 = draw_fisher_ellipses(ax[j, i], inv_fisher, facecolors,
                                                   edgecolors, ls, lw,
                                                   mu=(centers[i], centers[j]),
                                                   CL=cl, alpha=alpha_count)
+                max_sig0 = max(max_sig0, sig0)
+                max_sig1 = max(max_sig1, sig1)
                 alpha_count -= 0.4
-            # Create the 1D histogram for i, i
+            # Create the 1D histogram for i, i using the true marginal 1-sigma
             if j == i+1:
-                xarr = np.linspace(centers[i]-5*sig0,
-                                   centers[i]+5*sig0, 200)
-                ax[i, i].plot(xarr, norm.pdf(xarr, centers[i], sig0))
-            ax[j, i].set_xlim(-sig0+centers[i], sig0+centers[i])
-            ax[j, i].set_ylim(-sig1+centers[j], sig1+centers[j])
+                true_sig0 = np.sqrt(inv_cache[i, i])
+                xarr = np.linspace(centers[i]-5*true_sig0,
+                                   centers[i]+5*true_sig0, 200)
+                ax[i, i].plot(xarr, norm.pdf(xarr, centers[i], true_sig0))
+            ax[j, i].set_xlim(-max_sig0+centers[i], max_sig0+centers[i])
+            ax[j, i].set_ylim(-max_sig1+centers[j], max_sig1+centers[j])
             ax[i, j].set_visible(False)
             if j == npars-1:
                 ax[j, i].set_xlabel(i_key)
@@ -150,9 +159,14 @@ def postprocess(config):
     column_names = ["CL", "FoM", "FoM (alt.)", "sigma_w0", "sigma_wa"]
     fisher_table = Table(names=column_names)
 
-    # Find indices for w0 and wa
-    iw = np.where(keys == "w0")[0][0]
-    iwa = np.where(keys == "wa")[0][0]
+    # Find indices for w0 and wa (only if both are varied parameters)
+    iw_arr = np.where(keys == "w0")[0]
+    iwa_arr = np.where(keys == "wa")[0]
+    if len(iw_arr) == 0 or len(iwa_arr) == 0:
+        logger.warning("w0 and/or wa not in var_pars; skipping FoM table.")
+        return
+    iw = iw_arr[0]
+    iwa = iwa_arr[0]
     # Iterate over each CL value
     for cl in CL:
         sig_w0 = np.sqrt(inv_cache[iw, iw])

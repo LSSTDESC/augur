@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from augur.utils.config_io import parse_config, read_fisher_from_file
+from augur.utils.config_io import parse_config, read_fisher_from_file, validate_amplitude_parameter
 
 
 class TestParseConfig:
@@ -217,6 +217,49 @@ class TestReadFisherFromFile:
         assert fisher_read[0, 0] == pytest.approx(1.5)
         assert fisher_read[1, 2] == pytest.approx(0.3)
         assert fisher_read[2, 1] == pytest.approx(0.3)
+
+
+class TestValidateAmplitudeParameter:
+    """Tests for the validate_amplitude_parameter function."""
+
+    def test_sigma8_only_passes(self):
+        cosmo_cfg = {'Omega_c': 0.27, 'sigma8': 0.8, 'A_s': None}
+        validate_amplitude_parameter(cosmo_cfg)  # Should not raise
+
+    def test_A_s_only_passes(self):
+        cosmo_cfg = {'Omega_c': 0.27, 'sigma8': None, 'A_s': 2.1e-9}
+        validate_amplitude_parameter(cosmo_cfg)  # Should not raise
+
+    def test_neither_defined_raises(self):
+        cosmo_cfg = {'Omega_c': 0.27}
+        with pytest.raises(ValueError, match='Neither sigma8 nor A_s'):
+            validate_amplitude_parameter(cosmo_cfg)
+
+    def test_both_defined_raises(self):
+        cosmo_cfg = {'Omega_c': 0.27, 'sigma8': 0.8, 'A_s': 2.1e-9}
+        with pytest.raises(ValueError, match='mutually exclusive'):
+            validate_amplitude_parameter(cosmo_cfg)
+
+    def test_error_message_mentions_both_parameters(self):
+        cosmo_cfg = {'sigma8': 0.831, 'A_s': 2.1e-9}
+        with pytest.raises(ValueError, match='sigma8') as exc_info:
+            validate_amplitude_parameter(cosmo_cfg)
+        assert 'A_s' in str(exc_info.value)
+
+    def test_sigma8_none_A_s_defined_passes(self):
+        # Explicit None for sigma8 is treated as not defined
+        cosmo_cfg = {'sigma8': None, 'A_s': 2.1e-9}
+        validate_amplitude_parameter(cosmo_cfg)  # Should not raise
+
+    def test_A_s_none_sigma8_defined_passes(self):
+        # Explicit None for A_s is treated as not defined
+        cosmo_cfg = {'sigma8': 0.8, 'A_s': None}
+        validate_amplitude_parameter(cosmo_cfg)  # Should not raise
+
+    def test_both_none_raises(self):
+        cosmo_cfg = {'sigma8': None, 'A_s': None}
+        with pytest.raises(ValueError, match='Neither sigma8 nor A_s'):
+            validate_amplitude_parameter(cosmo_cfg)
 
     def test_read_fisher_return_order(self, tmp_path):
         """Test that read_fisher_from_file returns (fisher, fiducials) in correct order"""

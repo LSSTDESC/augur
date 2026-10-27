@@ -3,11 +3,28 @@
 import numpy as np
 
 from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile
+from augur.utils.config_io import parse_array
 
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
 
 implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
+
+# Safe registry for N(z) classes - maps string names to actual classes
+NZ_CLASS_REGISTRY = {
+    'ZDist': ZDist,
+    'LensSRD2018': LensSRD2018,
+    'SourceSRD2018': SourceSRD2018,
+    'ZDistFromFile': ZDistFromFile,
+}
+
+
+def get_nz_class(class_name):
+    """Safely get N(z) class from registry."""
+    if class_name not in NZ_CLASS_REGISTRY:
+        raise ValueError(f"Unknown N(z) class '{class_name}'. \
+                         Available classes: {list(NZ_CLASS_REGISTRY.keys())}")
+    return NZ_CLASS_REGISTRY[class_name]
 
 
 def get_tracers(statistic, comb):
@@ -28,7 +45,9 @@ def get_tracers(statistic, comb):
     Returns
     -------
     tr1, tr2 : str
-        SACC tracer names (e.g. ``'lens0'``, ``'src1'``).
+        SACC tracer names (e.g. ``'lens0'``, ``'src1'``). Following the SACC
+        convention, the tracer order matches the data-type string, so
+        ``galaxy_shearDensity_*`` returns ``(src, lens)``.
     """
     stat_lower = str(statistic).lower()
 
@@ -45,8 +64,8 @@ def get_tracers(statistic, comb):
         )
 
     if 'galaxy_sheardensity' in stat_lower:
-        tr1 = f'lens{comb[0]}'
-        tr2 = f'src{comb[1]}'
+        tr1 = f'src{comb[1]}'
+        tr2 = f'lens{comb[0]}'
     elif 'galaxy_shear' in stat_lower:
         tr1 = f'src{comb[0]}'
         tr2 = f'src{comb[1]}'
@@ -87,11 +106,12 @@ def add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
 
     Nz_centers = None
     if 'Nz_center' in cfg['Nz_kwargs'].keys():
-        Nz_centers = eval(cfg['Nz_kwargs']['Nz_center'])
+        Nz_centers = parse_array(cfg['Nz_kwargs']['Nz_center'])
         cfg['Nz_kwargs'].pop('Nz_center')
 
-        if np.isscalar(Nz_centers):
-            Nz_centers = [Nz_centers]
+        # parse_array returns a 0-d array for scalar input
+        if np.ndim(Nz_centers) == 0:
+            Nz_centers = [Nz_centers.item()]
             if nbins != 1:
                 raise ValueError('Nz_centers should have the same length as the number of bins')
         else:
@@ -101,14 +121,15 @@ def add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
     for i in range(nbins):
         sacc_tracer = f'{src_root}{i}'
         if isinstance(cfg['Nz_type'], list):
-            if eval(cfg['Nz_type'][i]) in implemented_nzs:
+            nz_class = get_nz_class(cfg['Nz_type'][i])
+            if nz_class in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type'][i]:
                     if Nz_centers is not None:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(
+                        dndz[sacc_tracer] = nz_class(
                             z, Nz_center=Nz_centers[i], Nz_nbins=nbins,
                             **cfg['Nz_kwargs'])
                     else:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'][i])(
+                        dndz[sacc_tracer] = nz_class(
                             z, Nz_ibin=i, Nz_nbins=nbins,
                             **cfg['Nz_kwargs'])
                 else:
@@ -116,14 +137,15 @@ def add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
             else:
                 raise NotImplementedError('The selected N(z) is yet not implemented')
         else:
-            if eval(cfg['Nz_type']) in implemented_nzs:
+            nz_class = get_nz_class(cfg['Nz_type'])
+            if nz_class in implemented_nzs:
                 if 'ZDistFromFile' not in cfg['Nz_type']:
                     if Nz_centers is not None:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(
+                        dndz[sacc_tracer] = nz_class(
                             z, Nz_center=Nz_centers[i], Nz_nbins=nbins,
                             **cfg['Nz_kwargs'])
                     else:
-                        dndz[sacc_tracer] = eval(cfg['Nz_type'])(
+                        dndz[sacc_tracer] = nz_class(
                             z, Nz_ibin=i, Nz_nbins=nbins,
                             **cfg['Nz_kwargs'])
                 else:

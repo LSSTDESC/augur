@@ -1,9 +1,12 @@
+import logging
 import numpy as np
 import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 from tjpcov.covariance_cluster_counts_gaussian import ClusterCountsGaussian as BaseClusterGaussian
 from tjpcov.covariance_cluster_counts_ssc import ClusterCountsSSC as BaseClusterSSC
 from augur.utils.config_io import parse_array
+
+logger = logging.getLogger(__name__)
 
 
 def get_noise_power(config, S, tracer_name, return_ndens=False):
@@ -76,7 +79,7 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     elif 'lens' in tracer_name:
         noise_power = 1 / nbar
     else:
-        print("Cannot do error for source of kind %s." % tracer_prefix)
+        logger.error("Cannot do error for source of kind %s.", tracer_prefix)
         raise NotImplementedError
     if return_ndens:
         return noise_power, ndens
@@ -327,25 +330,25 @@ def get_SRD_cov(config, S):
                      ('src0', 'src4'), ('src1', 'src1'), ('src1', 'src2'), ('src1', 'src3'),
                      ('src1', 'src4'), ('src2', 'src2'), ('src2', 'src3'), ('src2', 'src4'),
                      ('src3', 'src3'), ('src3', 'src4'), ('src4', 'src4'),
-                     ('lens0', 'src2'), ('lens0', 'src3'), ('lens0', 'src4'),
-                     ('lens1', 'src3'), ('lens1', 'src4'), ('lens2', 'src4'),
-                     ('lens3', 'src4'), ('lens0', 'lens0'), ('lens1', 'lens1'),
+                     ('src2', 'lens0'), ('src3', 'lens0'), ('src4', 'lens0'),
+                     ('src3', 'lens1'), ('src4', 'lens1'), ('src4', 'lens2'),
+                     ('src4', 'lens3'), ('lens0', 'lens0'), ('lens1', 'lens1'),
                      ('lens2', 'lens2'), ('lens3', 'lens3'), ('lens4', 'lens4')]
     # Data combinations for Y10 as per SRD v1
     data_combs_y10 = [('src0', 'src0'), ('src0', 'src1'), ('src0', 'src2'), ('src0', 'src3'),
                       ('src0', 'src4'), ('src1', 'src1'), ('src1', 'src2'), ('src1', 'src3'),
                       ('src1', 'src4'), ('src2', 'src2'), ('src2', 'src3'), ('src2', 'src4'),
                       ('src3', 'src3'), ('src3', 'src4'), ('src4', 'src4'),
-                      ('lens0', 'src1'), ('lens0', 'src2'), ('lens0', 'src3'), ('lens0', 'src4'),
-                      ('lens1', 'src1'), ('lens1', 'src2'), ('lens1', 'src3'), ('lens1', 'src4'),
-                      ('lens2', 'src2'), ('lens2', 'src3'), ('lens2', 'src4'),
-                      ('lens3', 'src2'), ('lens3', 'src3'), ('lens3', 'src4'),
-                      ('lens4', 'src2'), ('lens4', 'src3'), ('lens4', 'src4'),
-                      ('lens5', 'src3'), ('lens5', 'src4'),
-                      ('lens6', 'src3'), ('lens6', 'src4'),
-                      ('lens7', 'src3'), ('lens7', 'src4'),
-                      ('lens8', 'src4'),
-                      ('lens9', 'src4'),
+                      ('src1', 'lens0'), ('src2', 'lens0'), ('src3', 'lens0'), ('src4', 'lens0'),
+                      ('src1', 'lens1'), ('src2', 'lens1'), ('src3', 'lens1'), ('src4', 'lens1'),
+                      ('src2', 'lens2'), ('src3', 'lens2'), ('src4', 'lens2'),
+                      ('src2', 'lens3'), ('src3', 'lens3'), ('src4', 'lens3'),
+                      ('src2', 'lens4'), ('src3', 'lens4'), ('src4', 'lens4'),
+                      ('src3', 'lens5'), ('src4', 'lens5'),
+                      ('src3', 'lens6'), ('src4', 'lens6'),
+                      ('src3', 'lens7'), ('src4', 'lens7'),
+                      ('src4', 'lens8'),
+                      ('src4', 'lens9'),
                       ('lens0', 'lens0'), ('lens1', 'lens1'), ('lens2', 'lens2'),
                       ('lens3', 'lens3'), ('lens4', 'lens4'), ('lens5', 'lens5'),
                       ('lens6', 'lens6'), ('lens7', 'lens7'), ('lens8', 'lens8'),

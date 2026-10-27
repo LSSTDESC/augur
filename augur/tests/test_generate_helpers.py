@@ -17,7 +17,31 @@ def test_get_tracers_shear_ee():
 
 
 def test_get_tracers_shear_density():
-    assert _get_tracers('galaxy_shearDensity_cl_e', (1, 4)) == ('lens1', 'src4')
+    assert _get_tracers('galaxy_shearDensity_cl_e', (1, 4)) == ('src4', 'lens1')
+
+
+def test_get_tracers_shear_density_real_space():
+    assert _get_tracers('galaxy_shearDensity_xi_t', (1, 4)) == ('src4', 'lens1')
+
+
+def test_tp_filter_registry_shear_density_order():
+    # SACC convention: tracer order matches the data-type string (shear first)
+    from firecrown.metadata_types import Galaxies
+    from augur.utils.firecrown_interface import TP_FILTER_REGISTRY
+    assert TP_FILTER_REGISTRY['galaxy_shearDensity_cl_e'] == [[Galaxies.SHEAR_E, Galaxies.COUNTS]]
+    assert TP_FILTER_REGISTRY['galaxy_shearDensity_xi_t'] == [[Galaxies.SHEAR_T, Galaxies.COUNTS]]
+
+
+def test_get_nz_class_known():
+    from augur.generate_utils.tracers import get_nz_class
+    from augur.tracers.two_point import SourceSRD2018
+    assert get_nz_class('SourceSRD2018') is SourceSRD2018
+
+
+def test_get_nz_class_unknown_raises():
+    from augur.generate_utils.tracers import get_nz_class
+    with pytest.raises(ValueError):
+        get_nz_class('__import__("os")')
 
 
 def test_get_tracers_unrecognized():
