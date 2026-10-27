@@ -173,9 +173,11 @@ def _derivative_probe_drop(method, step, derivative_args, x0, par=None):
             # Per-parameter floors: use the one this parameter's column is built with.
             base_abs = base_abs.get(par, base_abs.get('default', 1.e-3))
         return resolve_spacing(derivative_args.get('spacing', '1%'), x0, float(base_abs))
-    # five_pt_stencil evaluates at x0 - 2h. numdifftools' central difference only
-    # reaches x0 - h, but `derivative_args` can hand it a step generator that widens
-    # that, so it takes the same margin.
+    # five_pt_stencil evaluates at x0 - 2h. numdifftools' reach depends on the
+    # `method` and `order` in `derivative_args` (a `step` there is a TypeError, since
+    # it is already passed): the default central difference only reaches x0 - h,
+    # `backward` reaches x0 - 2h, and central `order=6` x0 - 4h. The same 2h margin
+    # is therefore conservative for the default and too small for order >= 6.
     return 2.0 * step
 
 
