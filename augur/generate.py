@@ -22,7 +22,16 @@ import os
 
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
-import firecrown.likelihood.cmb as cmb
+# firecrown 1.16 re-exports CMBConvergence from firecrown.likelihood, 1.15 keeps
+# it in the private _cmb submodule, and earlier versions expose it as
+# firecrown.likelihood.cmb.
+try:
+    from firecrown.likelihood import CMBConvergence
+except ImportError:
+    try:
+        from firecrown.likelihood._cmb import CMBConvergence
+    except ImportError:
+        from firecrown.likelihood.cmb import CMBConvergence
 from firecrown.likelihood.two_point import TwoPoint
 from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
@@ -244,7 +253,7 @@ def _build_sources_and_stats_from_sacc(config, S):
             )
         elif quantity == "cmb_convergence" or tracer_name == "cmb_convergence":
             z_source = config.get('cmb_lensing', {}).get('z_source', 1100.0)
-            sources[tracer_name] = cmb.CMBConvergence(
+            sources[tracer_name] = CMBConvergence(
                 sacc_tracer=tracer_name,
                 z_source=z_source,
             )
@@ -296,14 +305,26 @@ def _refill_sacc_with_theory(S, lk):
     storing them before clearing and re-appending after the refill.
     Mutates *S* in place.
     """
+    # Firecrown reports tracer pairs in SACC-convention order (shear before
+    # density) and silently re-orders inputs that do not follow it, so a
+    # statistic can come back as ('src2', 'lens0') where S holds
+    # ('lens0', 'src2').  Keep the orientation stored in S rather than
+    # reformatting the bins.
+    stored_pairs = {(dp.data_type, dp.tracers) for dp in S.data}
+
     lk_tracer_keys = set()
     x_dict = {}
     win_dict = {}
+    oriented_stats = []
     for st in lk.statistics:
         st = st.statistic
         tr1 = st.source0.sacc_tracer
         tr2 = st.source1.sacc_tracer
         dtype = st.sacc_data_type
+        if ((dtype, (tr1, tr2)) not in stored_pairs
+                and (dtype, (tr2, tr1)) in stored_pairs):
+            tr1, tr2 = tr2, tr1
+        oriented_stats.append((st, tr1, tr2))
         lk_tracer_keys.add((dtype, tr1, tr2))
         x_dict[(tr1, tr2)], win_dict[(tr1, tr2)] = extract_x_and_windows(
             S, dtype, tr1, tr2,
@@ -323,10 +344,7 @@ def _refill_sacc_with_theory(S, lk):
     S.covariance = None
     S.data = []
 
-    for st in lk.statistics:
-        st = st.statistic
-        tr1 = st.source0.sacc_tracer
-        tr2 = st.source1.sacc_tracer
+    for st, tr1, tr2 in oriented_stats:
         st.ready = False
         add_data_points(
             S, st.sacc_data_type, tr1, tr2,
