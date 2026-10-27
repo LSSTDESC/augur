@@ -253,7 +253,9 @@ def _build_sources_and_stats_from_sacc(config, S):
                 sacc_tracer=tracer_obj, derived_scale=True
             )
         elif quantity == "cmb_convergence" or tracer_name == "cmb_convergence":
-            z_source = config.get('cmb_lensing', {}).get('z_source', 1100.0)
+            z_source = getattr(tracer_obj, 'metadata', {}).get(
+                'z_lss', config.get('cmb_lensing', {}).get('z_source', 1100.0)
+            )
             sources[tracer_name] = CMBConvergence(
                 sacc_tracer=tracer_name,
                 z_source=z_source,

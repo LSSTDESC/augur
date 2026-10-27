@@ -1,0 +1,100 @@
+general:
+    ignore_scale_cuts: true
+    ignore_scale_cuts_likelihood: true
+    bandpower_windows: None
+
+cosmo:
+    Omega_c: 0.2664315
+    Omega_b: 0.0491685
+    h: 0.6727
+    n_s: 0.9645
+    sigma8: 0.831
+    extra_parameters:
+        camb:
+            dark_energy_model: 'ppf'
+            halofit_version: 'takahashi'
+
+Firecrown_Factory:
+    TwoPointFactory:
+        correlation_space: harmonic
+        number_counts_factories:
+            - type_source: default
+              global_systematics: []
+              include_rsd: false
+              per_bin_systematics:
+                - {type: PhotoZShiftandStretchFactory}
+                - {type: LinearBiasSystematicFactory}
+        weak_lensing_factories:
+            - type_source: default
+              global_systematics:
+                - {type: LinearAlignmentSystematicFactory, alphag: 1}
+              per_bin_systematics:
+                - {type: MultiplicativeShearBiasFactory}
+                - {type: PhotoZShiftFactory}
+        cmb_factories: []
+        int_options: null
+
+systematics:
+    src0_mult_bias: 0.0
+    src0_delta_z: 0.0
+    ia_bias: 0.0
+    alphaz: 0.0
+    z_piv: 1.0
+
+    lens0_bias: 1.6
+    lens0_alphaz: 0.0
+    lens0_z_piv: 0.0
+    lens0_alphag: 0.0
+    lens0_delta_z: 0.0
+    lens0_sigma_z: 1.0
+
+sources:
+    nbins: 1
+    ndens: 10
+    ellipticity_error: 0.26
+    Nz_type: 'SourceSRD2018'
+    Nz_kwargs:
+        Nz_alpha: 0.78
+        Nz_z0: 0.13
+        Nz_sigmaz: 0.05
+
+lenses:
+    nbins: 1
+    ndens: 18
+    Nz_type: 'LensSRD2018'
+    delta_z: 0
+    Nz_kwargs:
+        Nz_width: 0.2
+        Nz_center: '0.3'
+        Nz_sigmaz: 0.03
+        Nz_alpha: 0.94
+        Nz_z0: 0.26
+
+statistics:
+    galaxy_density_cl:
+        tracer_combs: [[0, 0]]
+        ell_edges: 'np.array([20, 22, 24], dtype=np.int32)'
+        kmax: None
+    galaxy_shear_cl_ee:
+        tracer_combs: [[0, 0]]
+        ell_edges: 'np.array([20, 22, 24], dtype=np.int32)'
+        kmax: None
+    galaxy_shearDensity_cl_e:
+        tracer_combs: [[0, 0]]
+        ell_edges: 'np.array([20, 22, 24], dtype=np.int32)'
+        kmax: None
+
+fiducial_sacc_path: test_sacc_tjpcov.sacc
+
+cov_options:
+    cov_type: 'tjpcov'
+    fsky: 0.3
+    IA: 0.0
+    binning_info:
+        ell_edges: 'np.array([20, 22, 24], dtype=np.int32)'
+
+fisher:
+    var_pars: ['Omega_c', 'sigma8', 'n_s']
+    step: 1e-2
+    output: 'fisher.dat'
+    fid_output: 'pars.dat'
