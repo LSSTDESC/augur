@@ -247,10 +247,10 @@ def _build_sources_and_stats_from_sacc(config, S):
         tracer_obj = S.get_tracer(tracer_name)
         quantity = getattr(tracer_obj, "quantity", None)
         if quantity == "galaxy_shear" or tracer_name.startswith("src"):
-            sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_obj)
+            sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_name)
         elif quantity == "galaxy_density" or tracer_name.startswith("lens"):
             sources[tracer_name] = nc.NumberCounts(
-                sacc_tracer=tracer_obj, derived_scale=True
+                sacc_tracer=tracer_name, derived_scale=True
             )
         elif quantity == "cmb_convergence" or tracer_name == "cmb_convergence":
             z_source = getattr(tracer_obj, 'metadata', {}).get(
@@ -604,10 +604,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                     )
                 # Use the built CCL cosmology dictionary so expected amplitude
                 # keys (A_s/sigma8) and extra parameters are always present.
-                if tools.ccl_cosmo is not None:
-                    _pars = tools.ccl_cosmo.to_dict()
-                else:
-                    _pars = deepcopy(config.get('cosmo', {}))
+                _pars = cosmo.to_dict()
                 logger.debug("use_sacc cosmo params: %s", _pars)
                 if (
                     hasattr(S, 'covariance')
