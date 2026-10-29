@@ -1,7 +1,7 @@
 
 name: flake8 pytest
 
-on: [push]
+on: [push, pull_request]
 
 env:
   AUGUR_DIR: ${{ github.workspace }}/augur
@@ -15,13 +15,14 @@ jobs:
         python-version: ['3.11']
 
     steps:
-    - uses: conda-incubator/setup-miniconda@v2
+    - uses: conda-incubator/setup-miniconda@v3
       with:
+        miniforge-version: latest
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
         
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         path: augur
         
