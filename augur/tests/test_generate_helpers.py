@@ -217,3 +217,80 @@ class TestBuildTpFiltersFromSacc:
             filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
         # No configured combo is present -> no real filters.
         assert _real_filters(filters) == []
+
+
+# ---------------------------------------------------------------------------
+# Multi-data-type saccs
+#
+# Every test above uses a sacc holding a single data type, which is why the
+# data-type scoping bug in the exclusion pass survived: `get_tracer_combinations()`
+# with no argument returns the union over all data types, so pairs belonging to
+# one statistic were tested against the configuration of another.
+# ---------------------------------------------------------------------------
+
+def _make_sacc_3x2pt():
+    """Sacc with shear, density and their cross -- three data types."""
+    S = sacc.Sacc()
+    z = np.linspace(0.1, 2.0, 20)
+    S.add_tracer('NZ', 'src0', z, np.exp(-0.5 * ((z - 0.5) / 0.2) ** 2))
+    S.add_tracer('NZ', 'src1', z, np.exp(-0.5 * ((z - 1.0) / 0.2) ** 2))
+    S.add_tracer('NZ', 'lens0', z, np.exp(-0.5 * ((z - 0.4) / 0.1) ** 2))
+    S.add_tracer('NZ', 'lens1', z, np.exp(-0.5 * ((z - 0.8) / 0.1) ** 2))
+    ells = np.array([10., 50., 100., 200., 500., 1000.])
+    cls = np.zeros(len(ells))
+    S.add_ell_cl('galaxy_shear_cl_ee', 'src0', 'src1', ells, cls)
+    S.add_ell_cl('galaxy_shear_cl_ee', 'src0', 'src0', ells, cls)
+    S.add_ell_cl('galaxy_density_cl', 'lens0', 'lens0', ells, cls)
+    S.add_ell_cl('galaxy_density_cl', 'lens1', 'lens1', ells, cls)
+    S.add_ell_cl('galaxy_shearDensity_cl_e', 'src1', 'lens0', ells, cls)
+    return S
+
+
+class TestMultipleDataTypes:
+
+    def test_fully_configured_sacc_produces_no_exclusion_filters(self):
+        """Every pair is listed under its own data type, so nothing is dropped."""
+        S = _make_sacc_3x2pt()
+        cosmo = _make_cosmo()
+        stat_cfg = {
+            'galaxy_shear_cl_ee': {'tracer_combs': [[0, 1], [0, 0]]},
+            'galaxy_density_cl': {'tracer_combs': [[0, 0], [1, 1]]},
+            'galaxy_shearDensity_cl_e': {'tracer_combs': [[0, 1]]},
+        }
+        filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
+        assert len(_real_filters(filters)) == 5
+        assert _exclusion_filters(filters) == []
+
+    def test_pair_of_another_data_type_is_not_treated_as_unconfigured(self):
+        """A shear pair must not be judged against the density configuration.
+
+        Before the data-type scoping fix this raised
+        `IndexError: index -1 is out of bounds for axis 0 with size 0`, because
+        the code looked up a shear pair under the density data type, and sacc
+        returns empty arrays rather than raising when nothing matches.
+        """
+        S = _make_sacc_3x2pt()
+        cosmo = _make_cosmo()
+        stat_cfg = {
+            'galaxy_density_cl': {'tracer_combs': [[0, 0], [1, 1]]},
+            'galaxy_shear_cl_ee': {'tracer_combs': [[0, 1], [0, 0]]},
+            'galaxy_shearDensity_cl_e': {'tracer_combs': [[0, 1]]},
+        }
+        filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
+        assert _exclusion_filters(filters) == []
+
+    def test_unconfigured_pair_still_gets_an_exclusion_filter(self):
+        """Scoping the pair set must not disable the exclusion feature."""
+        S = _make_sacc_3x2pt()
+        cosmo = _make_cosmo()
+        stat_cfg = {
+            # src0-src0 is in the sacc but deliberately left out here.
+            'galaxy_shear_cl_ee': {'tracer_combs': [[0, 1]]},
+            'galaxy_density_cl': {'tracer_combs': [[0, 0], [1, 1]]},
+            'galaxy_shearDensity_cl_e': {'tracer_combs': [[0, 1]]},
+        }
+        filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
+        excluded = _exclusion_filters(filters)
+        assert len(excluded) == 1
+        # Placed just above the last ell so no data survives.
+        assert excluded[0].interval == (1001.0, 1002.0)

@@ -15,7 +15,6 @@ from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from augur.utils.theory_utils import compute_new_theory_vector
-from copy import deepcopy
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
 from firecrown.likelihood.two_point import TwoPoint
@@ -211,9 +210,12 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
     tp_filters : list of TwoPointBinFilter
     """
     tp_filters = []
-    sacc_combs = set(S.get_tracer_combinations())
-
     for key in stat_cfg.keys():
+        # Scope the sacc pair set to THIS data type. `get_tracer_combinations()`
+        # with no argument returns the union over every data type in the file,
+        # which makes both passes below compare pairs of one statistic against
+        # the configuration of another.
+        sacc_combs = set(S.get_tracer_combinations(key))
         config_stats = stat_cfg[key]['tracer_combs']
         for comb in config_stats:
             lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
@@ -232,6 +234,14 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
             except Exception:
                 logger.warning(
                     'Could not retrieve ells for (%s, %s) / %s from sacc; skipping.',
+                    tr1, tr2, key
+                )
+                continue
+            if len(ells_in_sacc) == 0:
+                # sacc warns and returns empty arrays rather than raising, so the
+                # try/except above does not cover this case.
+                logger.warning(
+                    'No data points for (%s, %s) / %s in sacc; skipping.',
                     tr1, tr2, key
                 )
                 continue
@@ -271,11 +281,20 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
             tr1, tr2 = comb
             if (tr1, tr2) not in config_tracer_pairs and (tr2, tr1) not in config_tracer_pairs:
                 logger.warning(
-                    'Tracer combination (%s, %s) found in sacc but not in config; '
-                    'it will NOT be included in the likelihood.',
-                    tr1, tr2
+                    'Tracer combination (%s, %s) for %s found in sacc but not in '
+                    'config; it will NOT be included in the likelihood.',
+                    tr1, tr2, key
                 )
                 ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
+                if len(ells_in_sacc) == 0:
+                    # sacc returns empty arrays rather than raising when nothing
+                    # matches, so this has to be checked explicitly.
+                    raise ValueError(
+                        f"No data points in the sacc for `{key}` with tracers "
+                        f"({tr1}, {tr2}). If the sacc stores this pair in the "
+                        "opposite order, reorder it -- sacc matches tracer pairs "
+                        "exactly."
+                    )
                 cut_high = float(ells_in_sacc[-1])
                 tp_filters.append(
                     create_twopoint_filter(key, tr1, tr2, cut_low=cut_high+1, cut_high=cut_high+2)
@@ -543,11 +562,16 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         sources = {}
         for tracer_name in S.tracers:
             tracer_obj = S.get_tracer(tracer_name)
+            # firecrown declares `sacc_tracer: str` and resolves it with
+            # `sacc_data.get_tracer(self.sacc_tracer)` -- a dict lookup -- so it
+            # must be the name. Passing the tracer object raises
+            # `TypeError: unhashable type`, and would also have made every
+            # firecrown parameter prefix on this path derive from an object.
             if tracer_obj.quantity == "galaxy_shear":
-                sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_obj)
+                sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_name)
             elif tracer_obj.quantity == "galaxy_density":
                 sources[tracer_name] = nc.NumberCounts(
-                    sacc_tracer=tracer_obj,
+                    sacc_tracer=tracer_name,
                     derived_scale=True
                 )
 
@@ -634,8 +658,11 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 else:
                     # Flat statistics format: sacc drives everything unchanged
                     lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
-                # _pars = cosmo.__dict__['_params_init_kwargs']
-                _pars = deepcopy(config.get('cosmo', {}))
+                # Take the parameters from the built cosmology, not from the
+                # `cosmo` config block: firecrown requires the full CCL set
+                # (Omega_k, w0, wa ...) and a config need only list the ones it
+                # overrides. This mirrors the main generation path below.
+                _pars = cosmo.to_dict()
                 logger.debug(_pars)
 
                 # Make sure using YOUR covariance
