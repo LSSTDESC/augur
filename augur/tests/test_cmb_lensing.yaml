@@ -1,0 +1,129 @@
+# Small 6x2pt configuration: 3x2pt plus kappa x delta_g, kappa x gamma and the
+# kappa auto-spectrum. Deliberately tiny (2 source bins, 2 lens bins, 6 ell
+# bins) so it runs as a unit test rather than a forecast.
+
+general:
+    ignore_scale_cuts : False
+    ignore_scale_cuts_likelihood: False
+    bandpower_windows : None
+
+cosmo:
+    Omega_c : 0.2664315
+    Omega_b : 0.0491685
+    h : 0.6727
+    n_s : 0.9645
+    sigma8 : 0.831
+    transfer_function : 'eisenstein_hu'
+    matter_power_spectrum : 'halofit'
+
+Firecrown_Factory:
+    TwoPointFactory:
+        correlation_space: harmonic
+        number_counts_factories:
+            - type_source: default
+              global_systematics: []
+              include_rsd: false
+              per_bin_systematics:
+                -  {type: PhotoZShiftandStretchFactory}
+                -  {type: LinearBiasSystematicFactory}
+        weak_lensing_factories:
+            - type_source: default
+              global_systematics: []
+              per_bin_systematics:
+                - {type: MultiplicativeShearBiasFactory}
+                - {type: PhotoZShiftFactory}
+        cmb_factories:
+            # z_source must match `cmb_lensing.z_source` below and the `z_lss`
+            # written into the sacc tracer; the factory ignores the sacc value.
+            - type_source: default
+              z_source: 1100.0
+              scale: 1.0
+        int_options: null
+
+systematics:
+    src0_mult_bias: 0.0
+    src1_mult_bias: 0.0
+    src0_delta_z: 0.0
+    src1_delta_z: 0.0
+    lens0_bias: 1.562362
+    lens1_bias: 1.732963
+    lens0_alphaz: 0.0
+    lens1_alphaz: 0.0
+    lens0_z_piv: 0.0
+    lens1_z_piv: 0.0
+    lens0_alphag: 0.0
+    lens1_alphag: 0.0
+    lens0_delta_z: 0.0
+    lens1_delta_z: 0.0
+    lens0_sigma_z: 1.0
+    lens1_sigma_z: 1.0
+
+sources:
+    nbins : 2
+    ndens : 10
+    ellipticity_error : 0.26
+    Nz_type : 'SourceSRD2018'
+    Nz_kwargs :
+        Nz_alpha : 0.78
+        Nz_z0 : 0.13
+        Nz_sigmaz : 0.05
+
+lenses :
+    nbins : 2
+    ndens : 18
+    Nz_type : 'LensSRD2018'
+    delta_z : 0
+    Nz_kwargs :
+        Nz_width : 0.2
+        Nz_center : np.arange(1, 3)*0.2 + 0.1
+        Nz_sigmaz : 0.03
+        Nz_alpha : 0.94
+        Nz_z0 : 0.26
+
+statistics:
+    galaxy_density_cl :
+        tracer_combs : [[0, 0], [1, 1]]
+        ell_edges : np.geomspace(20, 2000, 7, endpoint=True)
+        kmax : 0.201
+    galaxy_shear_cl_ee :
+        tracer_combs : [[0, 0], [0, 1], [1, 1]]
+        ell_edges : np.geomspace(20, 2000, 7, endpoint=True)
+        kmax : None
+    galaxy_shearDensity_cl_e :
+        tracer_combs : [[0, 1]]
+        ell_edges : np.geomspace(20, 2000, 7, endpoint=True)
+        kmax : 0.201
+
+cmb_lensing:
+    z_source : 1100.0
+    # Scalar white-noise shorthand. A real forecast uses the `noise:` block with
+    # a tabulated N_L^kk curve instead; see get_cmb_noise.
+    noise_cl : 1.0e-8
+    statistics:
+        # kappa is implicit in every pair, so tracer_combs names only the galaxy
+        # bin -- and the auto-spectrum takes an empty combination.
+        cmb_convergence_cl :
+            tracer_combs : [[]]
+            ell_edges : np.geomspace(20, 2000, 7, endpoint=True)
+            lmax : 2000
+        cmbGalaxy_convergenceDensity_cl :
+            tracer_combs : [[0], [1]]
+            ell_edges : np.geomspace(20, 2000, 7, endpoint=True)
+            lmax : 2000
+        cmbGalaxy_convergenceShear_cl_e :
+            tracer_combs : [[0], [1]]
+            ell_edges : np.geomspace(20, 2000, 7, endpoint=True)
+            lmax : 2000
+
+fiducial_sacc_path : test_cmb_sacc.sacc
+cov_options:
+    # get_SRD_cov cannot cover kappa -- its hard-coded combination lists have no
+    # kappa pairs -- so a kappa run needs gaus_internal or tjpcov.
+    cov_type : 'gaus_internal'
+    fsky : 0.3
+
+fisher:
+    var_pars: ['Omega_c', 'sigma8', 'h']
+    step: 1e-2
+    output: 'fisher_cmb.dat'
+    fid_output: 'pars_cmb.dat'

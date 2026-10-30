@@ -3,6 +3,7 @@ import numpy as np
 import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 from augur.utils.config_io import parse_array
+from augur.generate_utils.cmb_lensing import CMB_TRACER_NAME, get_cmb_noise
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,12 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
         trobj = S.get_tracer(tr)
         # obtain some arbitrary number of bins
         prefix = tr.rstrip('0123456789')
+        # Skip tracers that carry no n(z) -- e.g. a CMB convergence Map tracer.
+        # This loop runs over every tracer in the file regardless of which one
+        # was asked about, so without this guard the mere presence of such a
+        # tracer breaks get_noise_power for `src`/`lens` too.
+        if prefix not in nz_all:
+            continue
         nz_all[prefix].append(trobj.nz)
     tracer_prefix = tracer_name.rstrip('0123456789')
     tracer_bin_str = tracer_name[len(tracer_prefix):]
@@ -113,11 +120,25 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
         stat_name: np.asarray(parse_array(stat_cfg['ell_edges']))
         for stat_name, stat_cfg in config['statistics'].items()
     }
+    # CMB lensing statistics live in their own config section but share the
+    # same ell-edge bookkeeping.
+    cmb_cfg = config.get('cmb_lensing', None)
+    if cmb_cfg is not None:
+        for stat_name, stat_cfg in cmb_cfg.get('statistics', {}).items():
+            ell_edges_by_stat[stat_name] = np.asarray(parse_array(stat_cfg['ell_edges']))
 
-    def _noise_between(tr_a_name, tr_b_name):
+    def _noise_between(tr_a_name, tr_b_name, ells):
         """Uncorrelated noise term N_ab (non-zero only for auto-tracer pairs)."""
         if tr_a_name != tr_b_name:
             return 0.0
+        if tr_a_name == CMB_TRACER_NAME:
+            if cmb_cfg is None:
+                raise ValueError(
+                    f"SACC contains the tracer '{CMB_TRACER_NAME}' but the config "
+                    "has no `cmb_lensing` section to take its reconstruction "
+                    "noise from."
+                )
+            return get_cmb_noise(cmb_cfg, ells)
         return get_noise_power(config, S, tr_a_name)
 
     # Loop over statistic in the likelihood (assuming 3x2pt so far)
@@ -153,12 +174,26 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
 
             # Add uncorrelated noise (shot/shape) terms for auto-tracer pairs:
             # C_ab -> C_ab + N_ab, where N_ab != 0 only if a == b.
-            cls13 += _noise_between(tr1_name, tr3_name)
-            cls24 += _noise_between(tr2_name, tr4_name)
-            cls14 += _noise_between(tr1_name, tr4_name)
-            cls23 += _noise_between(tr2_name, tr3_name)
+            cls13 += _noise_between(tr1_name, tr3_name, ells_here)
+            cls24 += _noise_between(tr2_name, tr4_name, ells_here)
+            cls14 += _noise_between(tr1_name, tr4_name, ells_here)
+            cls23 += _noise_between(tr2_name, tr3_name, ells_here)
 
-            # Normalization factor
+            # Normalization factor.
+            #
+            # One scalar fsky for every block, on purpose. It is tempting to
+            # give each block its own sky fraction -- the LSST footprint for
+            # 3x2pt blocks, the CMB footprint for the kappa auto, the overlap
+            # for the cross blocks. That is not positive-definite: a block's
+            # variance would use one area and its cross-covariance with another
+            # block a different (smaller) one, so the implied correlation
+            # exceeds 1 (Cauchy-Schwarz) and cholesky fails for every physical
+            # choice where the overlap is smaller than the autos. The fsky
+            # approximation only yields a valid covariance with a single shared
+            # value; use the LSST-CMB overlap (~ the LSST area, since LSST sits
+            # inside the SO/Planck footprints). A genuinely per-footprint
+            # covariance needs mask deconvolution (NaMaster / TJPCov's
+            # FourierGaussianNmt), not a per-block fsky.
             dell = np.diff(ell_edges_by_stat[stat_here])[:len(ells_here)]
             norm = dell*(2*ells_here+1)*fsky
             cov_here = cls13*cls24 + cls14*cls23
@@ -170,6 +205,49 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             cov_all[myst1.sacc_indices[:n_ells], myst2.sacc_indices[:n_ells]] = cov_here[:n_ells]
             cov_all[myst2.sacc_indices[:n_ells], myst1.sacc_indices[:n_ells]] = cov_here[:n_ells]
     return cov_all
+
+
+def _srd_data_type(S, comb):
+    """
+    The sacc data type carrying a tracer pair, or a message saying it is absent.
+
+    `S.get_data_types(tracers=...)[0]` raises a bare `IndexError: list index out
+    of range` when the pair has no data points, naming neither the pair nor the
+    caller, which is unhelpful when it fires from inside a 27-by-27 loop.
+    """
+    dtypes = S.get_data_types(tracers=comb)
+    if not dtypes:
+        raise ValueError(
+            f"The SRD covariance expects the tracer pair {comb}, but the sacc has no "
+            "data points for it. The SRD v1 combination lists are fixed, so the sacc "
+            "must contain every pair the chosen release defines -- check the bin "
+            "counts and the scale cuts, which can drop a pair entirely."
+        )
+    return dtypes[0]
+
+
+def cmb_lensing_tracers(S):
+    """
+    Names of the CMB lensing tracers in a sacc, if any.
+
+    Dispatches on `quantity`, not on the tracer name, so a sacc produced
+    elsewhere under a different name is still recognised. This is the same
+    test TJPCovGaus.get_tracer_info uses.
+
+    Parameters:
+    -----------
+    S : sacc.Sacc
+        Sacc object to inspect.
+
+    Returns:
+    --------
+    names : list of str
+        Sorted names of every tracer whose quantity is 'cmb_convergence'.
+    """
+    return sorted(
+        name for name, tracer in S.tracers.items()
+        if getattr(tracer, 'quantity', None) == 'cmb_convergence'
+    )
 
 
 def get_SRD_cov(config, S):
@@ -192,6 +270,23 @@ def get_SRD_cov(config, S):
     """
     if 'SRD_cov_path' not in config.keys():
         raise ValueError('SRD_cov_path is needed to use SRD covariance.')
+
+    # The SRD v1 covariance predates CMB lensing: its combination lists below
+    # name only src/lens pairs. A kappa sacc would therefore leave whole rows
+    # and columns of the returned matrix at zero -- no error, no warning --
+    # giving a singular covariance and, eventually, a NaN Fisher matrix. Refuse
+    # rather than return something silently unusable.
+    kappa_tracers = cmb_lensing_tracers(S)
+    if kappa_tracers:
+        raise ValueError(
+            f"The sacc contains CMB lensing tracer(s) {kappa_tracers}, which "
+            "`cov_options.cov_type: 'SRD'` cannot cover: the SRD v1 covariance "
+            "predates CMB lensing and its hard-coded combination lists contain no "
+            "kappa pairs, so those rows and columns would be left at zero and the "
+            "covariance would be singular. Use `cov_type: 'gaus_internal'` or "
+            "`cov_type: 'tjpcov'` instead."
+        )
+
     cov_in = np.load(config['SRD_cov_path'])
     ncls = 20
     # Data combinations for Y1 as per SRD v1
@@ -223,17 +318,55 @@ def get_SRD_cov(config, S):
                       ('lens6', 'lens6'), ('lens7', 'lens7'), ('lens8', 'lens8'),
                       ('lens9', 'lens9')]
 
+    # The release is chosen by sniffing the filename, so a Y10 covariance saved
+    # under a name without a literal 'Y10' would silently be read with the Y1
+    # combination list. Cross-check the choice against the sacc, which knows how
+    # many bins it actually has.
     if 'Y10' in config['SRD_cov_path']:
-        data_combs = data_combs_y10
+        data_combs, release, other = data_combs_y10, 'Y10', 'Y1'
     else:
-        data_combs = data_combs_y1
+        data_combs, release, other = data_combs_y1, 'Y1', 'Y10'
+
+    tracers_y1 = {tr for comb in data_combs_y1 for tr in comb}
+    tracers_y10 = {tr for comb in data_combs_y10 for tr in comb}
+    needed = tracers_y10 if release == 'Y10' else tracers_y1
+    other_needed = tracers_y1 if release == 'Y10' else tracers_y10
+    in_sacc = set(S.tracers)
+
+    rename_hint = (
+        " The release is chosen by looking for 'Y10' in the filename, so either "
+        "rename the file or point at the right one."
+    )
+    missing = sorted(needed - in_sacc)
+    if missing:
+        hint = (
+            f" The sacc does match the {other} layout, so `SRD_cov_path` is probably "
+            f"a {other} covariance." + rename_hint
+            if not (other_needed - in_sacc) else ""
+        )
+        raise ValueError(
+            f"`SRD_cov_path` was read as {release} (from its filename), but the sacc "
+            f"is missing tracer(s) {missing} that the {release} combination list "
+            f"requires.{hint}"
+        )
+    # The Y1 tracer names are a subset of the Y10 ones, so a Y10 sacc satisfies
+    # the Y1 list and the check above cannot see it. Catch that direction too,
+    # or the asymmetry leaves the more likely mistake -- a Y10 run reading a
+    # covariance whose filename lost its 'Y10' -- silently using 27 of the 50
+    # blocks.
+    if release == 'Y1' and not (tracers_y10 - in_sacc):
+        raise ValueError(
+            "`SRD_cov_path` was read as Y1 (from its filename), but the sacc carries "
+            "the full Y10 tracer set, so only the 27 Y1 blocks would be filled and "
+            "the rest of the covariance would be left at zero." + rename_hint
+        )
 
     cov_sacc_all = np.zeros((len(S.mean), len(S.mean)))
     for i, comb1 in enumerate(data_combs):
-        dtype_here1 = S.get_data_types(tracers=comb1)[0]
+        dtype_here1 = _srd_data_type(S, comb1)
         inds1 = S.indices(data_type=dtype_here1, tracers=comb1)
         for j, comb2 in enumerate(data_combs):
-            dtype_here2 = S.get_data_types(tracers=comb2)[0]
+            dtype_here2 = _srd_data_type(S, comb2)
             inds2 = S.indices(data_type=dtype_here2, tracers=comb2)
             inds_all = np.meshgrid(inds1, inds2)
             cov_sacc_all[inds_all[0].T, inds_all[1].T] = cov_in[ncls*i:ncls*i+len(inds1),
@@ -249,6 +382,86 @@ class TJPCovGaus(FourierGaussianFsky):
     def __init__(self, config):
         super().__init__(config)
         # self.tracer_Noise = self.tracer_Noise_coupled
+
+    def get_tracer_info(self, return_noise_coupled=False):
+        """Return tracer info, supplying the CMB convergence noise TJPCov omits.
+
+        TJPCov builds a ``CMBLensingTracer`` for ``quantity == 'cmb_convergence'``
+        but never assigns it a ``tracer_Noise`` entry, so
+        ``FourierGaussianFsky.get_covariance_block`` raises ``KeyError``. That
+        hits 5x2pt as well as 6x2pt, because the guard compares the *first*
+        tracer of each pair and so the ``(kappa, lens_i) x (kappa, lens_j)``
+        cross-block trips it even with no kappa auto-spectrum present.
+
+        TEMPORARY. The real fix belongs upstream in TJPCov
+        (https://github.com/LSSTDESC/TJPCov/issues/124); remove this override
+        once that lands rather than leaving CMB-lensing knowledge about another
+        package sitting in augur.
+
+        ``tjpcov.cmb_noise`` may be a scalar or an array on the binning grid.
+        """
+        ccl_tracers, tracer_Noise, tracer_Noise_coupled = super().get_tracer_info(
+            return_noise_coupled=True
+        )
+
+        cmb_noise_cfg = self.config['tjpcov'].get('cmb_noise', 0.0)
+        ell, _, _ = self.get_binning_info()
+        if isinstance(cmb_noise_cfg, dict):
+            # A `cmb_lensing` config section: evaluate the curve on TJPCov's own
+            # integration grid, which is the only way to be sure of the length.
+            cmb_noise = get_cmb_noise(cmb_noise_cfg, ell)
+        else:
+            cmb_noise = np.asarray(cmb_noise_cfg, dtype=float)
+            if cmb_noise.ndim > 1:
+                raise ValueError(
+                    "`tjpcov.cmb_noise` must be a scalar, a 1D array or a "
+                    f"`cmb_lensing` config dict, got shape {cmb_noise.shape}."
+                )
+            if cmb_noise.ndim == 1 and cmb_noise.size != len(ell):
+                # A silent length mismatch would broadcast into a wrong
+                # covariance rather than fail, so check it here.
+                raise ValueError(
+                    f"`tjpcov.cmb_noise` has {cmb_noise.size} entries but "
+                    f"TJPCov integrates over {len(ell)} ells. Pass the "
+                    "`cmb_lensing` config section instead and let it be "
+                    "evaluated on the right grid."
+                )
+            if cmb_noise.ndim == 0:
+                cmb_noise = float(cmb_noise)
+
+        # Outside the reconstruction band get_cmb_noise returns inf, which is
+        # the honest answer but would make the covariance non-invertible. Give
+        # those modes a large finite noise instead: the weight is ~0 either way.
+        if np.ndim(cmb_noise) > 0 and not np.all(np.isfinite(cmb_noise)):
+            finite = cmb_noise[np.isfinite(cmb_noise)]
+            if finite.size == 0:
+                raise ValueError(
+                    "The CMB lensing noise curve is infinite across the whole "
+                    "TJPCov ell range; check the reconstruction band against "
+                    "`tjpcov.binning_info.ell_edges`."
+                )
+            big = 1e6 * float(np.max(finite))
+            n_bad = int(np.sum(~np.isfinite(cmb_noise)))
+            logger.warning(
+                "%d of %d ells lie outside the CMB lensing reconstruction band; "
+                "their noise is set to %g so the covariance stays invertible.",
+                n_bad, cmb_noise.size, big,
+            )
+            cmb_noise = np.where(np.isfinite(cmb_noise), cmb_noise, big)
+
+        sacc_file = self.io.get_sacc_file()
+        for tracer in sacc_file.tracers:
+            tracer_dat = sacc_file.get_tracer(tracer)
+            if getattr(tracer_dat, 'quantity', None) == 'cmb_convergence':
+                tracer_Noise.setdefault(tracer, cmb_noise)
+
+        self.ccl_tracers = ccl_tracers
+        self.tracer_Noise = tracer_Noise
+        self.tracer_Noise_coupled = tracer_Noise_coupled
+
+        if return_noise_coupled:
+            return ccl_tracers, tracer_Noise, tracer_Noise_coupled
+        return ccl_tracers, tracer_Noise
 
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()

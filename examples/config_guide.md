@@ -209,7 +209,7 @@ Firecrown_Factory:
 | `correlation_space` | `'harmonic'` (Fourier / $C_\ell$ space). |
 | `number_counts_factories` | List of factory configs for galaxy number counts probes. |
 | `weak_lensing_factories` | List of factory configs for weak lensing probes. |
-| `cmb_factories` | List of CMB lensing factories (currently `[]`). |
+| `cmb_factories` | List of CMB lensing factories. Leave as `[]` unless the optional [`cmb_lensing`](#cmb_lensing) section is present. |
 | `int_options` | Integration options (`null` for defaults). |
 
 #### Per-factory keys
@@ -402,6 +402,84 @@ statistics:
         ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
         kmax: 0.201
 ```
+
+---
+
+### `cmb_lensing`
+
+**Optional.** Adds CMB lensing convergence (kappa) auto- and cross-spectra to the
+data vector, turning a 3x2pt forecast into 5x2pt or 6x2pt. Omit the section
+entirely and nothing changes.
+
+Requires a matching entry under `Firecrown_Factory.TwoPointFactory.cmb_factories`,
+whose `z_source` must agree with `cmb_lensing.z_source` -- the factory ignores the
+value stored in the SACC file.
+
+```yaml
+cmb_lensing:
+    z_source: 1100.0
+    noise:
+        file: nlkk_so_lat_baseline.dat
+        ell_col: 0
+        nl_col: 7              # N_lensing_MV for the SO curves
+        convention: kappa      # kappa | phi | dd
+    statistics:
+        cmb_convergence_cl:
+            tracer_combs: [[]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+        cmbGalaxy_convergenceDensity_cl:
+            tracer_combs: [[0], [1], [2], [3], [4]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+        cmbGalaxy_convergenceShear_cl_e:
+            tracer_combs: [[0], [1], [2], [3], [4]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+```
+
+| Key | Description |
+|-----|-------------|
+| `z_source` | Redshift of the source plane. Default `1100.0`. |
+| `noise` | Tabulated reconstruction-noise curve (see below). |
+| `noise_cl` | Scalar white-noise shorthand, used only if `noise` is absent. |
+| `statistics` | Per-data-type `tracer_combs`, `ell_edges` and `lmax`, as in `statistics`. |
+
+#### Statistics and `tracer_combs`
+
+kappa is implicit in every pair, so a combination names only the **galaxy** bin:
+
+| Data type | `tracer_combs` entry | Pair |
+|-----------|----------------------|------|
+| `cmb_convergence_cl` | `[]` | (kappa, kappa) |
+| `cmbGalaxy_convergenceDensity_cl` | `[i]` | (kappa, `lens{i}`) |
+| `cmbGalaxy_convergenceShear_cl_e` | `[i]` | (kappa, `src{i}`) |
+
+Probe combinations therefore follow from the config alone: 3x2pt is the absence of
+the section, 5x2pt adds the two crosses, and 6x2pt adds the kappa auto-spectrum.
+
+kappa has no n(z), so the `kmax` -> `lmax` conversion used for galaxy tracers does
+not apply; give each kappa statistic an explicit `lmax` for the reconstruction band.
+
+#### `noise`
+
+| Key | Description |
+|-----|-------------|
+| `file` | Text table of multipoles and noise. |
+| `ell_col` | Column holding the multipole. Default `0`. |
+| `nl_col` | Column holding the noise. Default `1`. |
+| `convention` | `kappa` (default), `phi` or `dd`; converted to the convergence convention. |
+
+The curve is interpolated in log-log space onto the multipoles in use -- these
+tables are `(L, N_L)` pairs, and the row index is not the multipole. Outside the
+tabulated band the noise is infinite, so those modes carry no weight; a zero there
+would silently make the reconstruction look noiseless.
+
+#### Covariance
+
+Use `gaus_internal` or `tjpcov`. **`cov_type: 'SRD'` cannot cover kappa** -- its
+hard-coded combination lists contain no kappa pairs, so it would leave whole rows
+and columns at zero.
 
 ---
 

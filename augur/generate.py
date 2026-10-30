@@ -14,6 +14,9 @@ from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
 from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
+from augur.generate_utils.cmb_lensing import add_cmb_lensing, add_cmb_tracer
+from augur.generate_utils.cmb_lensing import CMB_TRACER_NAME
+from augur.generate_utils.cmb_lensing import _tracer_pair as _cmb_tracer_pair
 from augur.utils.theory_utils import compute_new_theory_vector
 from copy import deepcopy
 import firecrown.likelihood.weak_lensing as wl
@@ -25,6 +28,7 @@ from augur.utils.config_io import parse_config
 from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
 import warnings
 from augur.utils.config_io import parse_array, validate_amplitude_parameter
+from augur.utils.config_io import validate_cmb_z_source, CMB_Z_SOURCE_DEFAULT
 
 logger = logging.getLogger(__name__)
 
@@ -409,9 +413,6 @@ def generate_sacc_and_stats(config):
             sacc_tracer = f'{lns_root}{i}'
             sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, derived_scale=True)
 
-    if 'cmb_lensing' in config.keys():
-        raise NotImplementedError("CMB lensing not yet implemented in Augur generation.")
-
     # Read data vector combinations
     if 'statistics' not in config.keys():
         raise ValueError('statistics key is required in config file')
@@ -423,6 +424,14 @@ def generate_sacc_and_stats(config):
         raise ValueError("Cannot ignore scale cuts in likelihood while \
                          applying them to the data vector.")
     tp_filters = []
+
+    # CMB lensing is gated entirely on the presence of its config section, so
+    # the 3x2pt path below stays bit-identical. It has to come after `stats`
+    # and `tp_filters` exist, hence here rather than beside the sources.
+    if 'cmb_lensing' in config.keys():
+        stats_cmb, filters_cmb = add_cmb_lensing(config, S, sources, dndz, cosmo)
+        stats.extend(stats_cmb)
+        tp_filters.extend(filters_cmb)
 
     Bandpower = config['general'].get('bandpower_windows', 'None')
     for key in stat_cfg.keys():
@@ -550,6 +559,33 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                     sacc_tracer=tracer_obj,
                     derived_scale=True
                 )
+            elif tracer_obj.quantity == "cmb_convergence":
+                # z_source is carried in the sacc tracer metadata, so a sacc
+                # read back here does not need the cmb_lensing config section.
+                _meta = getattr(tracer_obj, 'metadata', None) or {}
+                if 'z_lss' in _meta:
+                    z_lss = float(_meta['z_lss'])
+                else:
+                    # Absence is not evidence of the default -- an externally
+                    # produced sacc may simply not record it. Say so rather
+                    # than silently assuming, and keep today's behaviour.
+                    z_lss = CMB_Z_SOURCE_DEFAULT
+                    warnings.warn(
+                        f"The sacc tracer '{tracer_name}' carries no `z_lss` metadata, so "
+                        f"its source redshift cannot be cross-checked; assuming "
+                        f"{CMB_Z_SOURCE_DEFAULT}. The theory prediction will use "
+                        "`Firecrown_Factory.TwoPointFactory.cmb_factories[].z_source` "
+                        "regardless."
+                    )
+                add_cmb_tracer(S, sources, z_lss)
+                # The sacc wins on this path, so it -- not cmb_lensing.z_source --
+                # is what must agree with the firecrown factory. No covariance is
+                # computed here, so the TJPCov guard does not apply.
+                validate_cmb_z_source(
+                    config, z_source=z_lss,
+                    origin=f"the sacc tracer '{tracer_name}' metadata `z_lss`",
+                    check_cov_type=False,
+                )
 
         if 'statistics' not in config.keys():
             raise ValueError('statistics key is required in config file')
@@ -614,6 +650,40 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                         )
                     )
 
+            # CMB lensing statistics live in their own config section, so they
+            # need building here too -- otherwise a sacc containing kappa data
+            # points would be paired with a likelihood that has no kappa
+            # statistics, and those points would be silently dropped.
+            # NOTE: this whole `use_sacc` path is currently broken on master,
+            # independently of CMB lensing -- see the two pre-existing failures
+            # noted in _build_tp_filters_from_sacc and in the source
+            # construction above, both of which reproduce with a plain 3x2pt
+            # sacc. The kappa wiring below is therefore written but not
+            # exercised end-to-end.
+            if 'cmb_lensing' in config.keys():
+                cmb_stat_cfg = config['cmb_lensing'].get('statistics', {})
+                if cmb_stat_cfg and not ignore_sc_likelihood:
+                    warnings.warn(
+                        "Scale cuts on CMB lensing statistics are not applied "
+                        "when reading a pre-made sacc; the `lmax` entries under "
+                        "`cmb_lensing.statistics` are ignored on this path."
+                    )
+                for key in cmb_stat_cfg:
+                    for comb in cmb_stat_cfg[key]['tracer_combs']:
+                        tr1, tr2 = _cmb_tracer_pair(key, comb)
+                        if tr1 not in sources:
+                            raise ValueError(
+                                f"'{key}' is configured but the sacc has no "
+                                f"'{CMB_TRACER_NAME}' tracer."
+                            )
+                        stats.append(
+                            TwoPoint(
+                                source0=sources[tr1],
+                                source1=sources[tr2],
+                                sacc_data_type=key
+                            )
+                        )
+
         # Build likelihood
         if lk is None:
             if "Firecrown_Factory" in config.keys():
@@ -675,6 +745,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             return lk
 
     # Rest of function is only triggered when use_sacc is None
+
+    # Fails before any cosmology or tracer is built, so a config whose kappa
+    # source redshift disagrees between sections costs nothing to reject.
+    validate_cmb_z_source(config)
 
     # Generate placeholders
     S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
@@ -749,7 +823,14 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         tjpcov_ell_edges = np.asarray(
             parse_array(config['cov_options']['binning_info']['ell_edges'])
         )
-        for stat_name, stat_info in config['statistics'].items():
+        # The kappa statistics live in their own config section, and were
+        # skipped here: a mismatch on a galaxy statistic raised while the same
+        # mismatch on a kappa one went through silently.
+        dv_statistics = dict(config['statistics'])
+        dv_statistics.update(
+            (config.get('cmb_lensing', None) or {}).get('statistics', {})
+        )
+        for stat_name, stat_info in dv_statistics.items():
             dv_ell_edges = np.asarray(parse_array(stat_info['ell_edges']))
             if (
                 tjpcov_ell_edges.shape != dv_ell_edges.shape
@@ -787,10 +868,25 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         tjpcov_config['tjpcov']['binning_info'] = dict()
         tjpcov_config['tjpcov']['binning_info']['ell_edges'] = tjpcov_ell_edges
         for tr in S.tracers:
+            if 'src' not in tr and 'lens' not in tr:
+                # e.g. the CMB convergence tracer, which has no n(z) and whose
+                # noise is supplied through TJPCovGaus.get_tracer_info instead.
+                continue
             _, ndens = get_noise_power(config, S, tr, return_ndens=True)
             tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
             if 'src' in tr:
                 tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
+        if CMB_TRACER_NAME in S.tracers:
+            if 'cmb_lensing' not in config:
+                raise ValueError(
+                    f"The sacc contains the `{CMB_TRACER_NAME}` tracer but the config has "
+                    "no `cmb_lensing` section, so TJPCov has no reconstruction-noise "
+                    "curve for it and the kappa blocks would be noiseless. Please add a "
+                    "`cmb_lensing` section with a `noise_cl` or `noise` entry."
+                )
+            # Pass the config section, not an evaluated curve: TJPCovGaus
+            # evaluates it on TJPCov's own integration grid.
+            tjpcov_config['tjpcov']['cmb_noise'] = config['cmb_lensing']
 
         cov_calc = TJPCovGaus(tjpcov_config)
         if config['general']['ignore_scale_cuts']:

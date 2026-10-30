@@ -1,6 +1,11 @@
 import numpy as np
 import pytest
 from augur.utils.config_io import parse_config, read_fisher_from_file, validate_amplitude_parameter
+from augur.utils.config_io import (
+    validate_cmb_z_source,
+    CMB_Z_SOURCE_DEFAULT,
+    TJPCOV_CMB_Z_SOURCE,
+)
 
 
 class TestParseConfig:
@@ -293,3 +298,168 @@ class TestValidateAmplitudeParameter:
 
         assert np.allclose(fisher_read, fisher)
         assert np.allclose(fid_read, fiducials)
+
+
+_SENTINEL = object()
+
+
+def _cmb_cfg(z_cfg=_SENTINEL, z_fac=_SENTINEL, n_fac=1, cov_type='gaus_internal',
+             cmb_lensing=True, factory=True):
+    """
+    Build a minimal config exercising the z_source cross-check.
+
+    `_SENTINEL` means "omit the key entirely", which is distinct from setting
+    it -- omission is what makes firecrown's own default apply, and that
+    distinction is the whole point of several of these tests.
+    """
+    config = {'cov_options': {'cov_type': cov_type}}
+    if cmb_lensing:
+        config['cmb_lensing'] = {} if z_cfg is _SENTINEL else {'z_source': z_cfg}
+    if factory:
+        facs = []
+        for _ in range(n_fac):
+            facs.append({'type_source': 'default'} if z_fac is _SENTINEL
+                        else {'type_source': 'default', 'z_source': z_fac})
+        config['Firecrown_Factory'] = {'TwoPointFactory': {'cmb_factories': facs}}
+    return config
+
+
+class TestValidateCMBZSource:
+    """Tests for validate_cmb_z_source -- see the case table in the D5 plan."""
+
+    # -- agreement -------------------------------------------------------
+    def test_matching_z_source_passes(self):
+        validate_cmb_z_source(_cmb_cfg(z_cfg=1100.0, z_fac=1100.0))
+
+    def test_matching_non_default_z_source_passes(self):
+        validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=950.0,
+                                       cov_type='gaus_internal'))
+
+    def test_int_and_float_z_source_compare_equal(self):
+        # YAML happily yields an int here; it must not read as a mismatch.
+        validate_cmb_z_source(_cmb_cfg(z_cfg=1100, z_fac=1100.0))
+
+    # -- disagreement ----------------------------------------------------
+    def test_mismatched_z_source_raises(self):
+        with pytest.raises(ValueError, match='cmb_factories'):
+            validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=1100.0))
+
+    def test_error_message_names_both_values(self):
+        with pytest.raises(ValueError) as exc_info:
+            validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=1100.0))
+        msg = str(exc_info.value)
+        assert '950.0' in msg and '1100.0' in msg
+
+    def test_factory_omitting_z_source_matches_default_passes(self):
+        # Case 3b: absent key means firecrown's default, which agrees here.
+        validate_cmb_z_source(_cmb_cfg(z_cfg=CMB_Z_SOURCE_DEFAULT))
+
+    def test_factory_omitting_z_source_raises_against_non_default(self):
+        # Case 3: the headline failure -- z_source moved, factory forgotten.
+        with pytest.raises(ValueError, match="firecrown's default"):
+            validate_cmb_z_source(_cmb_cfg(z_cfg=950.0))
+
+    def test_cmb_lensing_omitting_z_source_matches_factory_default_passes(self):
+        validate_cmb_z_source(_cmb_cfg(z_fac=CMB_Z_SOURCE_DEFAULT))
+
+    def test_cmb_lensing_omitting_z_source_raises_against_non_default(self):
+        with pytest.raises(ValueError, match='cmb_factories'):
+            validate_cmb_z_source(_cmb_cfg(z_fac=950.0))
+
+    # -- factory list shape ----------------------------------------------
+    def test_multiple_factories_all_agreeing_passes(self):
+        validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=950.0, n_fac=3))
+
+    def test_multiple_factories_one_disagreeing_raises(self):
+        config = _cmb_cfg(z_cfg=950.0, z_fac=950.0, n_fac=3)
+        config['Firecrown_Factory']['TwoPointFactory']['cmb_factories'][2]['z_source'] = 1100.0
+        with pytest.raises(ValueError) as exc_info:
+            validate_cmb_z_source(config)
+        assert 'cmb_factories[2]' in str(exc_info.value)
+
+    def test_empty_cmb_factories_raises(self):
+        config = _cmb_cfg(z_cfg=1100.0, n_fac=0)
+        with pytest.raises(ValueError, match='empty or absent'):
+            validate_cmb_z_source(config)
+
+    def test_missing_cmb_factories_key_raises(self):
+        config = _cmb_cfg(z_cfg=1100.0, factory=False)
+        config['Firecrown_Factory'] = {'TwoPointFactory': {}}
+        with pytest.raises(ValueError, match='empty or absent'):
+            validate_cmb_z_source(config)
+
+    def test_no_firecrown_factory_passes(self):
+        # Case 6: the ConstGaussian path uses augur's own CMBConvergence,
+        # which does carry the configured value. Nothing to disagree with.
+        validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, factory=False))
+
+    def test_unknown_factory_type_stays_quiet(self):
+        # load_likelihood_from_yaml raises its own NameError for this; a
+        # second, more confusing message here would not help.
+        config = _cmb_cfg(z_cfg=950.0, factory=False)
+        config['Firecrown_Factory'] = {'SomeOtherFactory': {}}
+        validate_cmb_z_source(config)
+
+    # -- kappa configured on only one side --------------------------------
+    def test_cmb_factories_without_cmb_lensing_warns(self):
+        # Case 5: no kappa tracer is written, so the factories are inert.
+        # Warn -- raising would break configs that work today.
+        with pytest.warns(UserWarning, match='inert'):
+            validate_cmb_z_source(_cmb_cfg(z_fac=1100.0, cmb_lensing=False))
+
+    def test_no_cmb_lensing_and_no_cmb_factories_passes(self):
+        validate_cmb_z_source(_cmb_cfg(cmb_lensing=False, n_fac=0))
+
+    # -- the TJPCov guard --------------------------------------------------
+    def test_tjpcov_with_default_z_source_passes(self):
+        validate_cmb_z_source(_cmb_cfg(z_cfg=TJPCOV_CMB_Z_SOURCE,
+                                       z_fac=TJPCOV_CMB_Z_SOURCE,
+                                       cov_type='tjpcov'))
+
+    def test_tjpcov_with_non_default_z_source_raises(self):
+        with pytest.raises(ValueError, match='124'):
+            validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=950.0,
+                                           cov_type='tjpcov'))
+
+    def test_tjpcov_without_cmb_lensing_passes(self):
+        # Case 9c: TJPCov never reaches its kappa branch without a kappa tracer.
+        validate_cmb_z_source(_cmb_cfg(cmb_lensing=False, n_fac=0,
+                                       cov_type='tjpcov'))
+
+    def test_gaus_internal_with_non_default_z_source_passes(self):
+        # Case 9d: proves the guard is scoped to tjpcov and does not quietly
+        # narrow which configs augur accepts.
+        validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=950.0,
+                                       cov_type='gaus_internal'))
+
+    def test_srd_with_non_default_z_source_passes(self):
+        validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=950.0, cov_type='SRD'))
+
+    def test_check_cov_type_false_skips_tjpcov_guard(self):
+        # The use_sacc path returns before any covariance is computed.
+        validate_cmb_z_source(_cmb_cfg(z_cfg=950.0, z_fac=950.0, cov_type='tjpcov'),
+                              check_cov_type=False)
+
+    # -- the use_sacc signature -------------------------------------------
+    def test_explicit_z_source_overrides_config(self):
+        # On the use_sacc path the sacc wins; cmb_lensing.z_source is inert.
+        config = _cmb_cfg(z_cfg=1100.0, z_fac=950.0)
+        validate_cmb_z_source(config, z_source=950.0, check_cov_type=False)
+
+    def test_explicit_z_source_mismatch_raises(self):
+        config = _cmb_cfg(z_cfg=950.0, z_fac=950.0)
+        with pytest.raises(ValueError, match='cmb_factories'):
+            validate_cmb_z_source(config, z_source=1100.0, check_cov_type=False)
+
+    def test_explicit_z_source_disagreeing_with_config_warns(self):
+        # Case 13: the sacc wins, but a user who set both is confused.
+        config = _cmb_cfg(z_cfg=1100.0, z_fac=950.0)
+        with pytest.warns(UserWarning, match='stale'):
+            validate_cmb_z_source(config, z_source=950.0, check_cov_type=False)
+
+    def test_origin_appears_in_the_message(self):
+        config = _cmb_cfg(z_cfg=950.0, z_fac=950.0)
+        with pytest.raises(ValueError) as exc_info:
+            validate_cmb_z_source(config, z_source=1100.0,
+                                  origin='the sacc metadata', check_cov_type=False)
+        assert 'the sacc metadata' in str(exc_info.value)
