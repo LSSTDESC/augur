@@ -7,6 +7,7 @@ and then convincing it to generate data.
 """
 
 import logging
+from copy import deepcopy
 import numpy as np
 import pyccl as ccl
 import sacc
@@ -211,10 +212,6 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
     """
     tp_filters = []
     for key in stat_cfg.keys():
-        # Scope the sacc pair set to THIS data type. `get_tracer_combinations()`
-        # with no argument returns the union over every data type in the file,
-        # which makes both passes below compare pairs of one statistic against
-        # the configuration of another.
         sacc_combs = set(S.get_tracer_combinations(key))
         config_stats = stat_cfg[key]['tracer_combs']
         for comb in config_stats:
@@ -246,13 +243,6 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 )
                 continue
 
-            # No lower scale cut is applied in this path (only kmax/lmax upper
-            # cuts exist).  cut_low is just the floor of the kept range and must
-            # sit below the lowest bin's full support: with bandpower windows and
-            # the default SUPPORT filter method, a bin is kept only if its whole
-            # window lies within [cut_low, cut_high].  Using the lowest bin
-            # CENTER would straddle its window and silently drop that bin, so we
-            # floor at 0.
             cut_low = 0.0
 
             if ignore_sc_likelihood:
@@ -277,9 +267,11 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
             t1, t2 = _get_tracers(key, c)
             config_tracer_pairs.add((t1, t2))
 
+        sacc_only = []
         for comb in sacc_combs:
             tr1, tr2 = comb
             if (tr1, tr2) not in config_tracer_pairs and (tr2, tr1) not in config_tracer_pairs:
+                sacc_only.append((tr1, tr2))
                 logger.warning(
                     'Tracer combination (%s, %s) for %s found in sacc but not in '
                     'config; it will NOT be included in the likelihood.',
@@ -287,8 +279,6 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 )
                 ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
                 if len(ells_in_sacc) == 0:
-                    # sacc returns empty arrays rather than raising when nothing
-                    # matches, so this has to be checked explicitly.
                     raise ValueError(
                         f"No data points in the sacc for `{key}` with tracers "
                         f"({tr1}, {tr2}). If the sacc stores this pair in the "
@@ -299,6 +289,14 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 tp_filters.append(
                     create_twopoint_filter(key, tr1, tr2, cut_low=cut_high+1, cut_high=cut_high+2)
                 )
+
+        if sacc_only:
+            logger.warning(
+                '%d tracer combination(s) for %s present in the sacc but not in the '
+                'config were excluded from the likelihood: %s. List them under '
+                '`statistics` to include them.',
+                len(sacc_only), key, sorted(sacc_only)
+            )
 
     return tp_filters
 
@@ -562,11 +560,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         sources = {}
         for tracer_name in S.tracers:
             tracer_obj = S.get_tracer(tracer_name)
-            # firecrown declares `sacc_tracer: str` and resolves it with
-            # `sacc_data.get_tracer(self.sacc_tracer)` -- a dict lookup -- so it
-            # must be the name. Passing the tracer object raises
-            # `TypeError: unhashable type`, and would also have made every
-            # firecrown parameter prefix on this path derive from an object.
             if tracer_obj.quantity == "galaxy_shear":
                 sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_name)
             elif tracer_obj.quantity == "galaxy_density":
@@ -646,9 +639,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                     raise ValueError("Must include sacc_path when passing a sacc")
 
                 if 'tracer_combs' not in stat_cfg:
-                    # Nested statistics format: build per-combination ell filters
-                    # for scale cuts.  Sacc combinations absent from statistics
-                    # are included unfiltered (require_filter_for_all stays False).
                     tp_filters = _build_tp_filters_from_sacc(
                         stat_cfg, S, cosmo, ignore_sc_likelihood
                     )
@@ -658,11 +648,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 else:
                     # Flat statistics format: sacc drives everything unchanged
                     lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
-                # Take the parameters from the built cosmology, not from the
-                # `cosmo` config block: firecrown requires the full CCL set
-                # (Omega_k, w0, wa ...) and a config need only list the ones it
-                # overrides. This mirrors the main generation path below.
-                _pars = cosmo.to_dict()
+
+                _pars = deepcopy(cosmo.to_dict())
                 logger.debug(_pars)
 
                 # Make sure using YOUR covariance
@@ -732,7 +719,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
 
-    _pars = cosmo.to_dict()
+    _pars = deepcopy(cosmo.to_dict())
     # Populate ModelingTools and likelihood
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 

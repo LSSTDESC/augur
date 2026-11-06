@@ -222,10 +222,9 @@ class TestBuildTpFiltersFromSacc:
 # ---------------------------------------------------------------------------
 # Multi-data-type saccs
 #
-# Every test above uses a sacc holding a single data type, which is why the
-# data-type scoping bug in the exclusion pass survived: `get_tracer_combinations()`
-# with no argument returns the union over all data types, so pairs belonging to
-# one statistic were tested against the configuration of another.
+# Tests with a sacc holding several data types (shear, density and their cross),
+# checking that each tracer pair is matched only against the configuration of
+# its own data type.
 # ---------------------------------------------------------------------------
 
 def _make_sacc_3x2pt():
@@ -262,12 +261,10 @@ class TestMultipleDataTypes:
         assert _exclusion_filters(filters) == []
 
     def test_pair_of_another_data_type_is_not_treated_as_unconfigured(self):
-        """A shear pair must not be judged against the density configuration.
+        """A shear pair is judged only against the shear configuration.
 
-        Before the data-type scoping fix this raised
-        `IndexError: index -1 is out of bounds for axis 0 with size 0`, because
-        the code looked up a shear pair under the density data type, and sacc
-        returns empty arrays rather than raising when nothing matches.
+        With the density statistic listed first, every pair must still be found
+        under its own data type, so no exclusion filter is produced.
         """
         S = _make_sacc_3x2pt()
         cosmo = _make_cosmo()
@@ -279,8 +276,8 @@ class TestMultipleDataTypes:
         filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
         assert _exclusion_filters(filters) == []
 
-    def test_unconfigured_pair_still_gets_an_exclusion_filter(self):
-        """Scoping the pair set must not disable the exclusion feature."""
+    def test_unconfigured_pair_still_gets_an_exclusion_filter(self, caplog):
+        """A sacc pair missing from its data type's config is excluded."""
         S = _make_sacc_3x2pt()
         cosmo = _make_cosmo()
         stat_cfg = {
@@ -289,8 +286,12 @@ class TestMultipleDataTypes:
             'galaxy_density_cl': {'tracer_combs': [[0, 0], [1, 1]]},
             'galaxy_shearDensity_cl_e': {'tracer_combs': [[0, 1]]},
         }
-        filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
+        with caplog.at_level(logging.WARNING, logger='augur.generate'):
+            filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
         excluded = _exclusion_filters(filters)
         assert len(excluded) == 1
         # Placed just above the last ell so no data survives.
         assert excluded[0].interval == (1001.0, 1002.0)
+        # The summary warning names the excluded pair and its data type.
+        assert 'were excluded from the likelihood' in caplog.text
+        assert "('src0', 'src0')" in caplog.text

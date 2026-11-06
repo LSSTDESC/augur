@@ -12,12 +12,11 @@ def test_generate():
 
 
 def test_generate_use_sacc_round_trip(tmp_path):
-    """Feed a generated sacc back in through `use_sacc`.
+    """Feed a generated sacc back into `generate` through `use_sacc`.
 
-    This path had no coverage at all, which is how three separate bugs survived
-    in it: a data-type scoping error in the filter builder, the sacc tracer
-    object being passed where firecrown wants its name, and the cosmology
-    parameters being read from the config block rather than the built cosmology.
+    Generates a sacc from `test.yaml`, reloads it, and builds the likelihood from
+    it, checking that the resulting likelihood covers every data type stored in
+    the file.
     """
     base_path = Path(__file__).parent
     config = parse_config(f'{base_path}/test.yaml')
