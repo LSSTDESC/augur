@@ -7,6 +7,7 @@ and then convincing it to generate data.
 """
 
 import logging
+from copy import deepcopy
 import numpy as np
 import pyccl as ccl
 import sacc
@@ -15,7 +16,6 @@ from augur.tracers.two_point import ZDistFromFile
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
 from augur.utils.cov_utils import TJPCovGaus
 from augur.utils.theory_utils import compute_new_theory_vector
-from copy import deepcopy
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
 from firecrown.likelihood.two_point import TwoPoint
@@ -211,9 +211,8 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
     tp_filters : list of TwoPointBinFilter
     """
     tp_filters = []
-    sacc_combs = set(S.get_tracer_combinations())
-
     for key in stat_cfg.keys():
+        sacc_combs = set(S.get_tracer_combinations(key))
         config_stats = stat_cfg[key]['tracer_combs']
         for comb in config_stats:
             lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
@@ -235,14 +234,15 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                     tr1, tr2, key
                 )
                 continue
+            if len(ells_in_sacc) == 0:
+                # sacc warns and returns empty arrays rather than raising, so the
+                # try/except above does not cover this case.
+                logger.warning(
+                    'No data points for (%s, %s) / %s in sacc; skipping.',
+                    tr1, tr2, key
+                )
+                continue
 
-            # No lower scale cut is applied in this path (only kmax/lmax upper
-            # cuts exist).  cut_low is just the floor of the kept range and must
-            # sit below the lowest bin's full support: with bandpower windows and
-            # the default SUPPORT filter method, a bin is kept only if its whole
-            # window lies within [cut_low, cut_high].  Using the lowest bin
-            # CENTER would straddle its window and silently drop that bin, so we
-            # floor at 0.
             cut_low = 0.0
 
             if ignore_sc_likelihood:
@@ -267,19 +267,36 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
             t1, t2 = _get_tracers(key, c)
             config_tracer_pairs.add((t1, t2))
 
+        sacc_only = []
         for comb in sacc_combs:
             tr1, tr2 = comb
             if (tr1, tr2) not in config_tracer_pairs and (tr2, tr1) not in config_tracer_pairs:
+                sacc_only.append((tr1, tr2))
                 logger.warning(
-                    'Tracer combination (%s, %s) found in sacc but not in config; '
-                    'it will NOT be included in the likelihood.',
-                    tr1, tr2
+                    'Tracer combination (%s, %s) for %s found in sacc but not in '
+                    'config; it will NOT be included in the likelihood.',
+                    tr1, tr2, key
                 )
                 ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
+                if len(ells_in_sacc) == 0:
+                    raise ValueError(
+                        f"No data points in the sacc for `{key}` with tracers "
+                        f"({tr1}, {tr2}). If the sacc stores this pair in the "
+                        "opposite order, reorder it -- sacc matches tracer pairs "
+                        "exactly."
+                    )
                 cut_high = float(ells_in_sacc[-1])
                 tp_filters.append(
                     create_twopoint_filter(key, tr1, tr2, cut_low=cut_high+1, cut_high=cut_high+2)
                 )
+
+        if sacc_only:
+            logger.warning(
+                '%d tracer combination(s) for %s present in the sacc but not in the '
+                'config were excluded from the likelihood: %s. List them under '
+                '`statistics` to include them.',
+                len(sacc_only), key, sorted(sacc_only)
+            )
 
     return tp_filters
 
@@ -544,10 +561,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         for tracer_name in S.tracers:
             tracer_obj = S.get_tracer(tracer_name)
             if tracer_obj.quantity == "galaxy_shear":
-                sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_obj)
+                sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_name)
             elif tracer_obj.quantity == "galaxy_density":
                 sources[tracer_name] = nc.NumberCounts(
-                    sacc_tracer=tracer_obj,
+                    sacc_tracer=tracer_name,
                     derived_scale=True
                 )
 
@@ -622,9 +639,6 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                     raise ValueError("Must include sacc_path when passing a sacc")
 
                 if 'tracer_combs' not in stat_cfg:
-                    # Nested statistics format: build per-combination ell filters
-                    # for scale cuts.  Sacc combinations absent from statistics
-                    # are included unfiltered (require_filter_for_all stays False).
                     tp_filters = _build_tp_filters_from_sacc(
                         stat_cfg, S, cosmo, ignore_sc_likelihood
                     )
@@ -634,8 +648,8 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                 else:
                     # Flat statistics format: sacc drives everything unchanged
                     lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
-                # _pars = cosmo.__dict__['_params_init_kwargs']
-                _pars = deepcopy(config.get('cosmo', {}))
+
+                _pars = deepcopy(cosmo.to_dict())
                 logger.debug(_pars)
 
                 # Make sure using YOUR covariance
@@ -705,7 +719,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
 
-    _pars = cosmo.to_dict()
+    _pars = deepcopy(cosmo.to_dict())
     # Populate ModelingTools and likelihood
     _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
 
