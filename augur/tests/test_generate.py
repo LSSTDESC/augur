@@ -26,7 +26,7 @@ def test_generate_use_sacc_round_trip(tmp_path):
     generate(config)
     S = sacc.Sacc.load_fits(str(sacc_path))
 
-    lk, _, _ = generate(parse_config(f'{base_path}/test.yaml'), return_all_outputs=True,
+    lk, _, _, _ = generate(parse_config(f'{base_path}/test.yaml'), return_all_outputs=True,
                         write_sacc=False, use_sacc=S, sacc_path=str(sacc_path))
 
     # The likelihood must cover every data type present in the file.
