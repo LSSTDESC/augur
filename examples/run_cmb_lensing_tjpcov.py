@@ -9,7 +9,7 @@ def main():
     config = 'examples/srd_y1_cmb_lensing_tjpcov.yml'
 
     # Build fiducial SACC + likelihood + TJPCov covariance.
-    like, S, tools, sys_params  = generate(config, write_sacc=True)
+    like, S, tools, sys_params = generate(config, write_sacc=True)
 
     # Run Fisher forecast and write outputs defined in the YAML.
     ao = Analyze(config, sys_params=sys_params, tools=tools, likelihood=like)

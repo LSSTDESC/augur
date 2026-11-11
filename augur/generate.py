@@ -20,7 +20,6 @@ import sacc
 import warnings
 import tempfile
 import os
-from copy import deepcopy
 
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc

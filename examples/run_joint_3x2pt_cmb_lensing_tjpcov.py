@@ -5,6 +5,7 @@ from augur.generate import generate
 from augur.analyze import Analyze
 import sacc
 
+
 def main():
     config = 'examples/srd_y1_3x2pt_cmb_lensing_tjpcov.yml'
     sacc_path = './output/srd_y1_3x2pt_cmb_lensing_tjpcov.sacc'
