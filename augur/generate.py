@@ -14,6 +14,7 @@ This module orchestrates the high-level flow:
 """
 
 import logging
+from copy import deepcopy
 import numpy as np
 import sacc
 import warnings
@@ -141,6 +142,14 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                     tr1, tr2, key,
                 )
                 continue
+            if len(ells_in_sacc) == 0:
+                # sacc warns and returns empty arrays rather than raising, so the
+                # try/except above does not cover this case.
+                logger.warning(
+                    'No data points for (%s, %s) / %s in sacc; skipping.',
+                    tr1, tr2, key
+                )
+                continue
 
             # cut_low is the floor of the kept range, not a lower scale cut. With
             # bandpower windows and the default SUPPORT filter method a bin is
@@ -166,22 +175,40 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 create_twopoint_filter(key, tr1, tr2, cut_low=cut_low, cut_high=cut_high)
             )
 
-        # Exclude SACC combinations that the config does not ask for.
-        for (tr1, tr2) in sacc_combs:
-            if (tr1, tr2) in config_pairs or (tr2, tr1) in config_pairs:
-                continue
-            logger.warning(
-                'Tracer combination (%s, %s) found in SACC but not in config; '
-                'excluding it from the likelihood.', tr1, tr2,
-            )
-            try:
+        config_tracer_pairs = set()
+        for c in config_stats:
+            t1, t2 = _get_tracers(key, c)
+            config_tracer_pairs.add((t1, t2))
+
+        sacc_only = []
+        for comb in sacc_combs:
+            tr1, tr2 = comb
+            if (tr1, tr2) not in config_tracer_pairs and (tr2, tr1) not in config_tracer_pairs:
+                sacc_only.append((tr1, tr2))
+                logger.warning(
+                    'Tracer combination (%s, %s) for %s found in sacc but not in '
+                    'config; it will NOT be included in the likelihood.',
+                    tr1, tr2, key
+                )
                 ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
-            except Exception:
-                continue
-            cut_high = float(ells_in_sacc[-1])
-            tp_filters.append(
-                create_twopoint_filter(key, tr1, tr2,
-                                       cut_low=cut_high + 1, cut_high=cut_high + 2)
+                if len(ells_in_sacc) == 0:
+                    raise ValueError(
+                        f"No data points in the sacc for `{key}` with tracers "
+                        f"({tr1}, {tr2}). If the sacc stores this pair in the "
+                        "opposite order, reorder it -- sacc matches tracer pairs "
+                        "exactly."
+                    )
+                cut_high = float(ells_in_sacc[-1])
+                tp_filters.append(
+                    create_twopoint_filter(key, tr1, tr2, cut_low=cut_high+1, cut_high=cut_high+2)
+                )
+
+        if sacc_only:
+            logger.warning(
+                '%d tracer combination(s) for %s present in the sacc but not in the '
+                'config were excluded from the likelihood: %s. List them under '
+                '`statistics` to include them.',
+                len(sacc_only), key, sorted(sacc_only)
             )
 
     return tp_filters
@@ -604,8 +631,10 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                     )
                 # Use the built CCL cosmology dictionary so expected amplitude
                 # keys (A_s/sigma8) and extra parameters are always present.
-                _pars = cosmo.to_dict()
+                _pars = deepcopy(cosmo.to_dict())
                 logger.debug("use_sacc cosmo params: %s", _pars)
+
+                # Make sure using YOUR covariance
                 if (
                     hasattr(S, 'covariance')
                     and S.covariance is not None
@@ -670,7 +699,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
 
-    _pars = cosmo.to_dict()
+    _pars = deepcopy(cosmo.to_dict())
     _, lk, tools = compute_new_theory_vector(
         lk, tools, sys_params, _pars, return_all=True
     )
