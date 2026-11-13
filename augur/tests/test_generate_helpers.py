@@ -5,6 +5,213 @@ import pyccl as ccl
 import sacc
 
 from augur.generate import _get_tracers, _get_scale_cuts, _build_tp_filters_from_sacc
+from augur.generate_utils.real_space import _get_scale_cuts_real_space
+
+
+def test_get_tracers_galaxy_density():
+    assert _get_tracers('galaxy_density_cl', (0, 1)) == ('lens0', 'lens1')
+
+
+def test_get_tracers_shear_ee():
+    assert _get_tracers('galaxy_shear_cl_ee', (2, 3)) == ('src2', 'src3')
+
+
+def test_get_tracers_shear_density():
+    assert _get_tracers('galaxy_shearDensity_cl_e', (1, 4)) == ('src4', 'lens1')
+
+
+def test_get_tracers_shear_density_real_space():
+    assert _get_tracers('galaxy_shearDensity_xi_t', (1, 4)) == ('src4', 'lens1')
+
+
+def test_tp_filter_registry_shear_density_order():
+    # SACC convention: tracer order matches the data-type string (shear first)
+    from firecrown.metadata_types import Galaxies
+    from augur.utils.firecrown_interface import TP_FILTER_REGISTRY
+    assert TP_FILTER_REGISTRY['galaxy_shearDensity_cl_e'] == [[Galaxies.SHEAR_E, Galaxies.COUNTS]]
+    assert TP_FILTER_REGISTRY['galaxy_shearDensity_xi_t'] == [[Galaxies.SHEAR_T, Galaxies.COUNTS]]
+
+
+def test_get_nz_class_known():
+    from augur.generate_utils.tracers import get_nz_class
+    from augur.tracers.two_point import SourceSRD2018
+    assert get_nz_class('SourceSRD2018') is SourceSRD2018
+
+
+def test_get_nz_class_unknown_raises():
+    from augur.generate_utils.tracers import get_nz_class
+    with pytest.raises(ValueError):
+        get_nz_class('__import__("os")')
+
+
+def test_get_tracers_unrecognized():
+    with pytest.raises(NotImplementedError):
+        _get_tracers('unknown_stat', (0, 1))
+
+
+def test_get_tracers_rejects_cmb_statistics():
+    with pytest.raises(NotImplementedError):
+        _get_tracers('cmbGalaxy_convergenceDensity_cl', [0])
+
+
+def test_get_scale_cuts_scalar_lmax():
+    stat_cfg = {'lmax': 500, 'tracer_combs': [('lens0', 'src0'), ('lens1', 'src1')]}
+    lmax, kmax = _get_scale_cuts(stat_cfg, ('lens0', 'src0'))
+    assert lmax == 500
+    assert kmax is None
+
+
+def test_get_scale_cuts_list_lmax():
+    stat_cfg = {'lmax': [100, 200], 'tracer_combs': [('lens0', 'src0'), ('lens1', 'src1')]}
+    lmax, _ = _get_scale_cuts(stat_cfg, ('lens1', 'src1'))
+    assert lmax == 200
+
+
+def test_get_scale_cuts_list_length_mismatch():
+    stat_cfg = {'lmax': [100], 'tracer_combs': [('lens0', 'src0'), ('lens1', 'src1')]}
+    with pytest.raises(ValueError):
+        _get_scale_cuts(stat_cfg, ('lens1', 'src1'))
+
+
+def test_get_scale_cuts_both_kmax_lmax():
+    stat_cfg = {'lmax': 100, 'kmax': 0.2}
+    with pytest.raises(ValueError):
+        _get_scale_cuts(stat_cfg, ('lens0', 'src0'))
+
+
+def test_get_scale_cuts_invalid_kmax_type():
+    stat_cfg = {'kmax': 'not_a_number'}
+    with pytest.raises(ValueError):
+        _get_scale_cuts(stat_cfg, ('lens0', 'src0'))
+
+
+def test_get_scale_cuts_list_kmax():
+    stat_cfg = {'kmax': [0.2, 0.4], 'tracer_combs': [('lens0', 'src0'), ('lens1', 'src1')]}
+    _, kmax = _get_scale_cuts(stat_cfg, ('lens1', 'src1'))
+    assert kmax == 0.4
+
+
+def test_get_scale_cuts_real_space_list_theta():
+    stat_cfg = {
+        'theta_min': [2.0, 5.0],
+        'theta_max': [100.0, 200.0],
+        'tracer_combs': [('lens0', 'src0'), ('lens1', 'src1')],
+    }
+    theta_min, theta_max = _get_scale_cuts_real_space(stat_cfg, ('lens1', 'src1'))
+    assert theta_min == 5.0
+    assert theta_max == 200.0
+
+
+def test_get_scale_cuts_real_space_list_r():
+    class FakeDndz:
+        def __init__(self, z):
+            self.zav = z
+
+    stat_cfg = {
+        'r_min': [6.0, 12.0],
+        'r_max': [120.0, 240.0],
+        'tracer_combs': [('lens0', 'src0'), ('lens1', 'src1')],
+    }
+    cosmo = ccl.CosmologyVanillaLCDM()
+    dndz = {'lens1': FakeDndz(0.5), 'src1': FakeDndz(1.0)}
+    theta_min, theta_max = _get_scale_cuts_real_space(
+        stat_cfg,
+        ('lens1', 'src1'),
+        cosmo=cosmo,
+        dndz=dndz,
+        tr1='lens1',
+        tr2='src1',
+    )
+    assert theta_min is not None
+    assert theta_max is not None
+    assert theta_max > theta_min
+
+
+def test_get_scale_cuts_per_bin_lmax_conservative_min():
+    # Symmetric rectangular grid: 3 lens bins + 3 src bins = 6 values (not 9 pairs)
+    # Per-bin list: [lens0, lens1, lens2, src0, src1, src2]
+    # For (lens0, src1): lens bin=0→offset 0+0=0→800, src bin=1→offset 3+1=4→600
+    # min(800, 600) = 600
+    stat_cfg = {
+        'lmax': [800, 600, 300, 700, 600, 550],
+        'tracer_combs': [
+            ('lens0', 'src0'), ('lens0', 'src1'), ('lens0', 'src2'),
+            ('lens1', 'src0'), ('lens1', 'src1'), ('lens1', 'src2'),
+            ('lens2', 'src0'), ('lens2', 'src1'), ('lens2', 'src2'),
+        ]
+    }
+    lmax, _ = _get_scale_cuts(stat_cfg, ('lens0', 'src1'))
+    assert lmax == 600
+
+
+def test_get_scale_cuts_per_bin_kmax_conservative_min():
+    # Symmetric rectangular grid: 3 lens bins + 3 src bins = 6 values
+    # Per-bin list: [lens0, lens1, lens2, src0, src1, src2]
+    # For (lens0, src1): lens bin=0→offset 0+0=0→0.4, src bin=1→offset 3+1=4→0.3
+    # min(0.4, 0.3) = 0.3
+    stat_cfg = {
+        'kmax': [0.4, 0.2, 0.5, 0.35, 0.3, 0.25],
+        'tracer_combs': [
+            ('lens0', 'src0'), ('lens0', 'src1'), ('lens0', 'src2'),
+            ('lens1', 'src0'), ('lens1', 'src1'), ('lens1', 'src2'),
+            ('lens2', 'src0'), ('lens2', 'src1'), ('lens2', 'src2'),
+        ]
+    }
+    _, kmax = _get_scale_cuts(stat_cfg, ('lens0', 'src1'))
+    assert kmax == 0.3
+
+
+def test_get_scale_cuts_per_bin_asymmetric_lmax():
+    # Asymmetric rectangular grid: 3 lens bins + 2 src bins = 5 values
+    # Per-bin list: [3000, 2500, 2000, 4000, 3500]
+    # For (lens1, src1): lens bin=1→offset 0+1=1→2500, src bin=1→offset 3+1=4→3500
+    # min(2500, 3500) = 2500
+    stat_cfg = {
+        'lmax': [3000, 2500, 2000, 4000, 3500],
+        'tracer_combs': [
+            ('lens0', 'src0'), ('lens0', 'src1'),
+            ('lens1', 'src0'), ('lens1', 'src1'),
+            ('lens2', 'src0'), ('lens2', 'src1'),
+        ]
+    }
+    lmax, _ = _get_scale_cuts(stat_cfg, ('lens1', 'src1'))
+    assert lmax == 2500
+
+
+def test_get_scale_cuts_real_space_per_bin_theta_min_conservative_max():
+    # Symmetric rectangular grid: 3 lens bins + 3 src bins = 6 values
+    # Per-bin list: [lens0, lens1, lens2, src0, src1, src2]
+    # For (lens0, src1): lens bin=0→offset 0+0=0→2.0, src bin=1→offset 3+1=4→8.0
+    # max(2.0, 8.0) = 8.0
+    stat_cfg = {
+        'theta_min': [2.0, 5.0, 8.0, 3.0, 8.0, 9.0],
+        'tracer_combs': [
+            ('lens0', 'src0'), ('lens0', 'src1'), ('lens0', 'src2'),
+            ('lens1', 'src0'), ('lens1', 'src1'), ('lens1', 'src2'),
+            ('lens2', 'src0'), ('lens2', 'src1'), ('lens2', 'src2'),
+        ],
+    }
+    theta_min, theta_max = _get_scale_cuts_real_space(stat_cfg, ('lens0', 'src1'))
+    assert theta_min == 8.0
+    assert theta_max is None
+
+
+def test_get_scale_cuts_real_space_per_bin_theta_max_conservative_min():
+    # Symmetric rectangular grid: 3 lens bins + 3 src bins = 6 values
+    # Per-bin list: [lens0, lens1, lens2, src0, src1, src2]
+    # For (lens0, src1): lens bin=0→offset 0+0=0→120.0, src bin=1→offset 3+1=4→80.0
+    # min(120.0, 80.0) = 80.0
+    stat_cfg = {
+        'theta_max': [120.0, 80.0, 150.0, 110.0, 80.0, 140.0],
+        'tracer_combs': [
+            ('lens0', 'src0'), ('lens0', 'src1'), ('lens0', 'src2'),
+            ('lens1', 'src0'), ('lens1', 'src1'), ('lens1', 'src2'),
+            ('lens2', 'src0'), ('lens2', 'src1'), ('lens2', 'src2'),
+        ],
+    }
+    theta_min, theta_max = _get_scale_cuts_real_space(stat_cfg, ('lens0', 'src1'))
+    assert theta_min is None
+    assert theta_max == 80.0
 
 
 # ---------------------------------------------------------------------------
@@ -29,60 +236,6 @@ def _make_sacc_shear():
 def _make_cosmo():
     return ccl.Cosmology(Omega_c=0.27, Omega_b=0.045, h=0.67, sigma8=0.8, n_s=0.96)
 
-
-def test_get_tracers_galaxy_density():
-    assert _get_tracers('galaxy_density_cl', (0, 1)) == ('lens0', 'lens1')
-
-
-def test_get_tracers_shear_ee():
-    assert _get_tracers('galaxy_shear_cl_ee', (2, 3)) == ('src2', 'src3')
-
-
-def test_get_tracers_shear_density():
-    assert _get_tracers('galaxy_shearDensity_cl_e', (1, 4)) == ('src4', 'lens1')
-
-
-def test_get_tracers_unrecognized():
-    with pytest.raises(NotImplementedError):
-        _get_tracers('unknown_stat', (0, 1))
-
-
-def test_get_scale_cuts_scalar_lmax():
-    stat_cfg = {'lmax': 500, 'tracer_combs': [[0, 0], [1, 1]]}
-    lmax, kmax = _get_scale_cuts(stat_cfg, [0, 0])
-    assert lmax == 500
-    assert kmax is None
-
-
-def test_get_scale_cuts_list_lmax():
-    stat_cfg = {'lmax': [100, 200], 'tracer_combs': [[0, 0], [1, 1]]}
-    with pytest.raises(ValueError):
-        _get_scale_cuts(stat_cfg, (1, 1))
-    lmax, _ = _get_scale_cuts(stat_cfg, [1, 1])
-    assert lmax == 200
-
-
-def test_get_scale_cuts_list_length_mismatch():
-    stat_cfg = {'lmax': [100], 'tracer_combs': [[0, 0], [1, 1]]}
-    with pytest.raises(ValueError):
-        _get_scale_cuts(stat_cfg, (1, 1))
-
-
-def test_get_scale_cuts_both_kmax_lmax():
-    stat_cfg = {'lmax': 100, 'kmax': 0.2}
-    with pytest.raises(ValueError):
-        _get_scale_cuts(stat_cfg, [0, 0])
-
-
-def test_get_scale_cuts_invalid_kmax_type():
-    stat_cfg = {'kmax': 'not_a_number'}
-    with pytest.raises(ValueError):
-        _get_scale_cuts(stat_cfg, [0, 0])
-
-
-# ---------------------------------------------------------------------------
-# Tests for _build_tp_filters_from_sacc
-# ---------------------------------------------------------------------------
 
 # _make_sacc_shear() contains two combinations: (src0, src1) and (src0, src0).
 # _build_tp_filters_from_sacc returns two kinds of filters:
@@ -188,7 +341,7 @@ class TestBuildTpFiltersFromSacc:
             filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
         # No configured combo is present -> no real filters (only exclusions).
         assert _real_filters(filters) == []
-        assert 'not found in sacc' in caplog.text
+        assert 'not found in sacc' in caplog.text.lower()
 
     def test_present_and_missing_combo_mixed(self, caplog):
         S = _make_sacc_shear()
@@ -198,7 +351,7 @@ class TestBuildTpFiltersFromSacc:
             filters = _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood=False)
         # Only the present combination produces a real filter
         assert len(_real_filters(filters)) == 1
-        assert 'not found in sacc' in caplog.text
+        assert 'not found in sacc' in caplog.text.lower()
 
     def test_cut_low_is_zero(self):
         S = _make_sacc_shear()

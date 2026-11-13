@@ -1,228 +1,135 @@
 """Data Generation module
 
-This code generates synthetic dataset by cobbling
-together a suitable configuration file for firecrown
-and then convincing it to generate data.
+This code generates synthetic data vectors by assembling a configuration
+for firecrown and using it to produce likelihoods and SACC files.
 
+The heavy lifting for each probe type lives in :mod:`augur.generate_utils`.
+This module orchestrates the high-level flow:
+
+1. Initialise cosmology and tracers.
+2. Dispatch to probe-specific helpers (harmonic-space C_ell,
+   real-space xi, CMB lensing, cluster counts).
+3. Compute the covariance matrix.
+4. Optionally write the result to a SACC file.
 """
 
 import logging
 from copy import deepcopy
 import numpy as np
-import pyccl as ccl
 import sacc
-from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018
-from augur.tracers.two_point import ZDistFromFile
-from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
-from augur.utils.cov_utils import TJPCovGaus
-from augur.utils.theory_utils import compute_new_theory_vector
+import warnings
+import tempfile
+import os
+
 import firecrown.likelihood.weak_lensing as wl
 import firecrown.likelihood.number_counts as nc
+# firecrown 1.16 re-exports CMBConvergence from firecrown.likelihood, 1.15 keeps
+# it in the private _cmb submodule, and earlier versions expose it as
+# firecrown.likelihood.cmb.
+try:
+    from firecrown.likelihood import CMBConvergence
+except ImportError:
+    try:
+        from firecrown.likelihood._cmb import CMBConvergence
+    except ImportError:
+        from firecrown.likelihood.cmb import CMBConvergence
 from firecrown.likelihood.two_point import TwoPoint
 from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
 from augur.utils.config_io import parse_config
-from augur.utils.firecrown_interface import create_modeling_tools, create_twopoint_filter
-import warnings
-from augur.utils.config_io import parse_array, validate_amplitude_parameter
+from augur.utils.theory_utils import compute_new_theory_vector
+from augur.utils.firecrown_interface import create_modeling_tools
+from augur.utils.firecrown_interface import load_likelihood_from_yaml
+from augur.utils.firecrown_interface import create_twopoint_filter
+import pyccl as ccl
+
+# ── generate_utils modules ------------------------------------------------ #
+from augur.generate_utils.cosmology import initialize_cosmology
+from augur.generate_utils.tracers import (
+    get_tracers as _get_tracers_impl,
+    setup_sources,
+    setup_lenses,
+)
+from augur.generate_utils.harmonic import (
+    add_harmonic_two_point,
+    _get_scale_cuts as _get_scale_cuts_impl,
+)
+from augur.generate_utils.real_space import add_real_space_two_point
+from augur.generate_utils.cmb_lensing import add_cmb_lensing
+from augur.generate_utils.cluster_counts import add_cluster_counts
+from augur.generate_utils.covariance import compute_covariance
+from augur.generate_utils.sacc_interface import (
+    extract_x_and_windows, add_data_points,
+)
+
 
 logger = logging.getLogger(__name__)
 
-implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
 
-# Safe registry for N(z) classes - maps string names to actual classes
-NZ_CLASS_REGISTRY = {
-    'ZDist': ZDist,
-    'LensSRD2018': LensSRD2018,
-    'SourceSRD2018': SourceSRD2018,
-    'ZDistFromFile': ZDistFromFile,
-}
-
-
-def _get_nz_class(class_name):
-    """Safely get N(z) class from registry."""
-    if class_name not in NZ_CLASS_REGISTRY:
-        raise ValueError(f"Unknown N(z) class '{class_name}'. \
-                         Available classes: {list(NZ_CLASS_REGISTRY.keys())}")
-    return NZ_CLASS_REGISTRY[class_name]
-
+# ── Backward-compatible aliases ------------------------------------------- #
+# Tests and external code import these directly from augur.generate.
 
 def _get_tracers(statistic, comb):
-    """
-    Auxiliary function to get the tracers in a given statistic
-    in the configuration file.
-    """
-    if 'galaxy_density_cl' in statistic:
-        tr1 = f'lens{comb[0]}'
-        tr2 = f'lens{comb[1]}'
-    elif 'galaxy_shear_cl_ee' in statistic:
-        tr1 = f'src{comb[0]}'
-        tr2 = f'src{comb[1]}'
-    elif 'galaxy_shearDensity_cl_e' in statistic:
-        tr1 = f'src{comb[1]}'
-        tr2 = f'lens{comb[0]}'
-    else:
-        raise NotImplementedError('Only C_ls available')
-    return tr1, tr2
-
-
-def _add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
-    """
-    Auxiliary function to get the n(z) distribution for a given tracer
-    in the configuration file.
-
-    Parameters
-    ----------
-    cfg : dict
-        Configuration dictionary for the tracer
-    nbins : int
-        Number of redshift bins
-    src_root : str
-        Root name for the source tracer
-    S : sacc.Sacc
-        SACC object to which the n(z) will be added
-    dndz : dict
-        Dictionary to store the n(z) objects
-    """
-    # These are to match the N(z)s from the fits file in the firecrown repo
-    z = np.linspace(0.004004004004004004,
-                    4.004004004004004004, 1000)  # z to probe the dndz distribution
-    Nz_centers = None
-    if 'Nz_center' in cfg['Nz_kwargs'].keys():
-        Nz_centers = parse_array(cfg['Nz_kwargs']['Nz_center'])
-        cfg['Nz_kwargs'].pop('Nz_center')
-
-        if np.isscalar(Nz_centers):
-            Nz_centers = [Nz_centers]
-            if nbins != 1:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
-        else:
-            if len(Nz_centers) != nbins:
-                raise ValueError('Nz_centers should have the same length as the number of bins')
-    for i in range(nbins):
-        sacc_tracer = f'{src_root}{i}'
-        if isinstance(cfg['Nz_type'], list):
-            nz_class = _get_nz_class(cfg['Nz_type'][i])
-            if nz_class in implemented_nzs:
-                if 'ZDistFromFile' not in cfg['Nz_type'][i]:
-                    if Nz_centers is not None:
-                        dndz[sacc_tracer] = nz_class(z,
-                                                     Nz_center=Nz_centers[i],
-                                                     Nz_nbins=nbins,
-                                                     **cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = nz_class(z,
-                                                     Nz_ibin=i,
-                                                     Nz_nbins=nbins,
-                                                     **cfg['Nz_kwargs'])
-
-                else:
-                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
-            else:
-                raise NotImplementedError('The selected N(z) is yet not implemented')
-        else:
-            nz_class = _get_nz_class(cfg['Nz_type'])
-            if nz_class in implemented_nzs:
-                if 'ZDistFromFile' not in cfg['Nz_type']:
-                    if Nz_centers is not None:
-                        dndz[sacc_tracer] = nz_class(z,
-                                                     Nz_center=Nz_centers[i],
-                                                     Nz_nbins=nbins,
-                                                     **cfg['Nz_kwargs'])
-                    else:
-                        dndz[sacc_tracer] = nz_class(z,
-                                                     Nz_ibin=i,
-                                                     Nz_nbins=nbins,
-                                                     **cfg['Nz_kwargs'])
-                else:
-                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
-            else:
-                raise NotImplementedError('The selected N(z) is yet not implemented')
-        S.add_tracer('NZ',
-                     sacc_tracer,
-                     dndz[sacc_tracer].z,
-                     dndz[sacc_tracer].Nz,
-                     quantity=quantity
-                     )
-    return dndz
+    """Backward-compatible wrapper — see :func:`augur.generate_utils.tracers.get_tracers`."""
+    return _get_tracers_impl(statistic, comb)
 
 
 def _get_scale_cuts(stat_cfg, comb):
-    """
-    Auxiliary function to get the scale cuts in ell for a given tracer
-    combination in the configuration file.
-
-    Parameters
-    ----------
-    stat_cfg : dict
-        Configuration dictionary for the statistic
-    comb : tuple
-        Tracer combination
-    Returns
-    -------
-    lmax : int or float or None
-        Maximum ell for the tracer combination
-    kmax : int or float or None
-        Maximum k for the tracer combination
-    """
-
-    tracer_combs = stat_cfg.get('tracer_combs', [])
-    if 'kmax' in stat_cfg.keys() and 'lmax' in stat_cfg.keys():
-        raise ValueError('Cannot specify both lmax and kmax for scale cuts.')
-    lmax = stat_cfg.get('lmax', None)
-    if isinstance(lmax, list):
-        if len(lmax) != len(tracer_combs):
-            raise ValueError('If lmax is a list, it must have the same length as tracer_combs')
-        lmax = lmax[tracer_combs.index(comb)]
-    elif isinstance(lmax, (int, float)) or lmax is None or lmax == 'None':
-        pass
-    else:
-        raise ValueError('lmax must be either a single number or a list of numbers')
-
-    kmax = stat_cfg.get('kmax', None)
-    if kmax is not None and not isinstance(kmax, (int, float)) and kmax != 'None':
-        raise ValueError('kmax must be a single number')
-    return lmax, kmax
+    """Backward-compatible wrapper — see :func:`augur.generate_utils.harmonic._get_scale_cuts`."""
+    return _get_scale_cuts_impl(stat_cfg, comb)
 
 
 def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
     """
-    Build TwoPointBinFilter objects for the Firecrown_Factory + use_sacc path.
+    Build ``TwoPointBinFilter`` objects for the ``Firecrown_Factory`` + *use_sacc*
+    path so that scale cuts and tracer subsetting are honoured when the data
+    vector comes from a pre-existing SACC (instead of being generated here).
 
-    Iterates over the nested statistics config and produces one filter per
-    tracer combination, encoding the ell range to use.  Combinations listed
-    in the config that are absent from the sacc (or whose ell vector cannot
-    be retrieved) are silently skipped with a warning.
+    For every tracer combination listed under a harmonic ``statistics`` block:
+
+    - combinations absent from the SACC are skipped (with a warning);
+    - the upper cut is taken from ``kmax``/``lmax`` (or the SACC's own ell range
+      when ``ignore_sc_likelihood`` is set);
+    - the lower bound is floored at 0 (there is no lower scale cut here; see the
+      note below).
+
+    Combinations present in the SACC but *not* listed in the config are excluded
+    from the likelihood via an out-of-range filter, so a pre-made SACC can carry
+    more data than a given analysis uses.
 
     Parameters
     ----------
     stat_cfg : dict
-        The 'statistics' section of the config (nested format only).
+        The ``statistics`` section of the config (nested format only).
     S : sacc.Sacc
-        Pre-existing sacc file supplying the data vector.
-    cosmo : ccl.Cosmology
-        Fiducial cosmology, used only for kmax -> lmax conversion.
+        Pre-existing SACC supplying the data vector.
+    cosmo : pyccl.Cosmology
+        Fiducial cosmology, used only for the ``kmax`` -> ``lmax`` conversion.
     ignore_sc_likelihood : bool
-        When True, ell cuts are suppressed and filters span the full sacc
-        ell range (tracer subsetting is still applied).
+        When *True*, ell cuts are suppressed and filters span the full SACC ell
+        range (tracer subsetting is still applied).
 
     Returns
     -------
-    tp_filters : list of TwoPointBinFilter
+    tp_filters : list of firecrown ``TwoPointBinFilter``
     """
     tp_filters = []
+
     for key in stat_cfg.keys():
-        sacc_combs = set(S.get_tracer_combinations(key))
+        # Restrict to this data type so cross-probe combinations don't collide.
+        sacc_combs = set(S.get_tracer_combinations(data_type=key))
         config_stats = stat_cfg[key]['tracer_combs']
+        config_pairs = set()
+
         for comb in config_stats:
             lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
             tr1, tr2 = _get_tracers(key, comb)
+            config_pairs.add((tr1, tr2))
 
-            # Skip combinations absent from the sacc
             if (tr1, tr2) not in sacc_combs and (tr2, tr1) not in sacc_combs:
                 logger.warning(
-                    'Tracer combination (%s, %s) for %s not found in sacc; skipping.',
-                    tr1, tr2, key
+                    'Tracer combination (%s, %s) for %s not found in SACC; skipping.',
+                    tr1, tr2, key,
                 )
                 continue
 
@@ -230,8 +137,8 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 ells_in_sacc, _ = S.get_ell_cl(key, tr1, tr2)
             except Exception:
                 logger.warning(
-                    'Could not retrieve ells for (%s, %s) / %s from sacc; skipping.',
-                    tr1, tr2, key
+                    'Could not retrieve ells for (%s, %s) / %s from SACC; skipping.',
+                    tr1, tr2, key,
                 )
                 continue
             if len(ells_in_sacc) == 0:
@@ -243,17 +150,22 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
                 )
                 continue
 
+            # cut_low is the floor of the kept range, not a lower scale cut. With
+            # bandpower windows and the default SUPPORT filter method a bin is
+            # kept only if its whole window lies within [cut_low, cut_high]; using
+            # the lowest bin CENTRE would straddle its window and silently drop
+            # that bin, so we floor at 0.
             cut_low = 0.0
 
             if ignore_sc_likelihood:
                 cut_high = float(ells_in_sacc[-1])
-            elif kmax is not None and kmax != 'None':
+            elif (kmax is not None) and (kmax != 'None'):
                 t1, t2 = S.get_tracer(tr1), S.get_tracer(tr2)
                 zmean1 = np.average(t1.z, weights=t1.nz)
                 zmean2 = np.average(t2.z, weights=t2.nz)
-                a12 = np.array([1. / (1 + zmean1), 1. / (1 + zmean2)])
+                a12 = np.array([1.0 / (1 + zmean1), 1.0 / (1 + zmean2)])
                 cut_high = float(np.min(kmax * ccl.comoving_radial_distance(cosmo, a12)))
-            elif lmax is not None and lmax != 'None':
+            elif (lmax is not None) and (lmax != 'None'):
                 cut_high = float(lmax)
             else:
                 cut_high = float(ells_in_sacc[-1])
@@ -301,549 +213,513 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
     return tp_filters
 
 
-def generate_sacc_and_stats(config):
+# -------------------------------------------------------------------------- #
+#  Private helpers for generate()
+# -------------------------------------------------------------------------- #
+
+
+def _resolve_tools(config, tools):
+    """Create or validate modelling tools, returning (tools, cosmo).
+
+    If *tools* is None, calls :func:`create_modeling_tools`.  Otherwise
+    ensures the CCL cosmology is attached.
     """
-    Routine to generate a placeholder SACC file containing the data-vector
-    combinations and tracers specified in the configuration. It also generates
-    the required TwoPoint statistics to feed the firecrown likelihood.
+    if tools is None:
+        tools, cosmo = create_modeling_tools(config)
+    else:
+        if tools.ccl_cosmo is None:
+            cosmo = tools.ccl_factory.build()
+            tools.set_ccl_cosmology(cosmo)
+        else:
+            cosmo = tools.ccl_cosmo
+    return tools, cosmo
 
-    Note: Systematics implemented are PhotoZShift, MultiplicativeShearBias,
-    and LinearAlignmentSystematic.
 
-    Parameters:
-    -----------
+def _sacc_to_disk(S, *, hint_path=None, prefix="augur_sacc_",
+                  filename="sacc.sacc"):
+    """Ensure a SACC object is available on disk and return the path.
 
-    config : dict or path
-             Dictionary containing the analysis configuration or path to configuration file.
-
-    Returns:
-    --------
-    S : sacc.Sacc
-         Placeholder sacc file
-    cosmo : ccl.Cosmology
-         Fiducial cosmology
-    stats : firecrown.likelihood.gauss_family.statistic.two_point.TwoPoint
-         List of TwoPoint statistics that will enter the likelihood
-    tp_filters : list
-         List of TwoPoint filters that will be applied to the statistics
+    If *hint_path* is provided (and not None), returns it immediately
+    without writing — the file is assumed to already exist.  Otherwise
+    creates a temporary directory and writes *S* there.
     """
+    if hint_path is not None:
+        return hint_path
+    tmp_dir = tempfile.mkdtemp(prefix=prefix)
+    path = os.path.join(tmp_dir, filename)
+    S.save_fits(path, overwrite=True)
+    logger.debug("Wrote temporary SACC to %s", path)
+    return path
 
-    config = parse_config(config)
 
-    # Initialize cosmology
-    cosmo_cfg = config['cosmo']
+def _build_sources_and_stats_from_sacc(config, S):
+    """Build firecrown source objects and TwoPoint statistics from a SACC.
 
-    if cosmo_cfg.get("transfer_function") is None:
-        cosmo_cfg['transfer_function'] = 'boltzmann_camb'
+    Used by the *use_sacc* path in :func:`generate` to reconstruct the
+    sources dict, statistics list, and systematic-parameter map from an
+    existing SACC file rather than generating them from scratch.
 
-    if cosmo_cfg.get('extra_parameters') is None:
-        cosmo_cfg['extra_parameters'] = dict()
-
-    if 'ccl_accuracy' in config.keys():
-        # Pass along spline control parameters
-        if 'spline_params' in config['ccl_accuracy'].keys():
-            for key in config['ccl_accuracy']['spline_params'].keys():
-                try:
-                    type_here = type(ccl.spline_params[key])
-                    value = config['ccl_accuracy']['spline_params'][key]
-                    ccl.spline_params[key] = type_here(value)
-                except KeyError:
-                    logger.warning('The selected spline keyword `%s` is not recognized.', key)
-                except ValueError:
-                    logger.warning('The selected value `%s` could not be casted to `%s`.',
-                                   value, type_here)
-        # Pass along GSL control parameters
-        if 'gsl_params' in config['ccl_accuracy'].keys():
-            for key in config['ccl_accuracy']['gsl_params'].keys():
-                try:
-                    type_here = type(ccl.gsl_params[key])
-                    value = config['ccl_accuracy']['gsl_params'][key]
-                    ccl.gsl_params[key] = type_here(value)
-                except KeyError:
-                    logger.warning('The selected GSL keyword `%s` is not recognized.', key)
-                except ValueError:
-                    logger.warning('The selected value `%s` could not be casted to `%s`.',
-                                   value, type_here)
-
-    if cosmo_cfg.get('mg_parametrization', None) is not None:
-        warnings.warn("Modified gravity parametrizations are experimental and may not be \
-                      fully supported. Use with caution.")
-        mg_cfg = cosmo_cfg['mg_parametrization']
-        if mg_cfg.get('mu_Sigma', None) is not None:
-            mu_sig = mg_cfg['mu_Sigma']
-            required_keys = ['mu_0', 'sigma_0', 'c1_mg', 'c2_mg', 'lambda_mg']
-            for key in required_keys:
-                if key not in mu_sig.keys():
-                    raise ValueError(f'Missing required key `{key}` in \
-                                      `mu_Sigma` modified gravity parametrization.')
-                else:
-                    try:
-                        mu_sig[key] = float(mu_sig[key])
-                    except ValueError:
-                        logger.warning('The selected value `%s` for `%s` could not be \
-                                        casted to `float`.', mu_sig[key], key)
-
-            cosmo_cfg['mg_parametrization'] = ccl.modified_gravity.mu_Sigma.MuSigmaMG(**mu_sig)
-    validate_amplitude_parameter(cosmo_cfg)
-    try:
-        cosmo = ccl.Cosmology(**cosmo_cfg)
-    except (KeyError, TypeError, ValueError) as e:
-        logger.error('Error in cosmology configuration. Check the config file.')
-        # Reraise the exception to see the full traceback
-        raise e
-
-    # First we generate the placeholder SACC file with the correct N(z) and ell-binning
-    # TODO add real-space
-
-    S = sacc.Sacc()
-
-    # Read sources from config file
+    Returns
+    -------
+    sources : dict
+        Map of tracer name to firecrown source.
+    stats : list[TwoPoint]
+        Firecrown TwoPoint statistics constructed from the config.
+    sys_params : dict
+        Raw systematic-parameter dictionary (not yet a ParamsMap).
+    """
     sources = {}
-    dndz = {}
+    for tracer_name in S.tracers:
+        tracer_obj = S.get_tracer(tracer_name)
+        quantity = getattr(tracer_obj, "quantity", None)
+        if quantity == "galaxy_shear" or tracer_name.startswith("src"):
+            sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_name)
+        elif quantity == "galaxy_density" or tracer_name.startswith("lens"):
+            sources[tracer_name] = nc.NumberCounts(
+                sacc_tracer=tracer_name, derived_scale=True
+            )
+        elif quantity == "cmb_convergence" or tracer_name == "cmb_convergence":
+            z_source = getattr(tracer_obj, 'metadata', {}).get(
+                'z_lss', config.get('cmb_lensing', {}).get('z_source', 1100.0)
+            )
+            sources[tracer_name] = CMBConvergence(
+                sacc_tracer=tracer_name,
+                z_source=z_source,
+            )
 
-    sys_params = config['systematics'] if 'systematics' in config.keys() else {}
-
-    if 'sources' in config.keys():
-        src_cfg = config['sources']
-
-        nbins = src_cfg['nbins']  # Number of bins for shear sources
-        src_root = 'src'  # Root of sacc tracer name
-
-        # Loop over bins
-        dndz = _add_nz(src_cfg, nbins, src_root, S, dndz, quantity="galaxy_shear")
-        for i in range(nbins):
-            sacc_tracer = f'{src_root}{i}'
-            sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer)
-
-    # Read lenses from config file
-    if 'lenses' in config.keys():
-        lns_cfg = config['lenses']
-        nbins = lns_cfg['nbins']
-        lns_root = 'lens'
-
-        dndz = _add_nz(lns_cfg, nbins, lns_root, S, dndz, quantity="galaxy_density")
-        for i in range(nbins):
-            sacc_tracer = f'{lns_root}{i}'
-            sources[sacc_tracer] = nc.NumberCounts(sacc_tracer=sacc_tracer, derived_scale=True)
-
-    if 'cmb_lensing' in config.keys():
-        raise NotImplementedError("CMB lensing not yet implemented in Augur generation.")
-
-    # Read data vector combinations
-    if 'statistics' not in config.keys():
+    if 'statistics' not in config:
         raise ValueError('statistics key is required in config file')
     stat_cfg = config['statistics']
     stats = []
     ignore_sc = config['general'].get('ignore_scale_cuts', False)
     ignore_sc_likelihood = config['general'].get('ignore_scale_cuts_likelihood', False)
     if not ignore_sc and ignore_sc_likelihood:
-        raise ValueError("Cannot ignore scale cuts in likelihood while \
-                         applying them to the data vector.")
-    tp_filters = []
+        raise ValueError(
+            "Cannot ignore scale cuts in likelihood while "
+            "applying them to the data vector."
+        )
 
-    Bandpower = config['general'].get('bandpower_windows', 'None')
-    for key in stat_cfg.keys():
-        tracer_combs = stat_cfg[key]['tracer_combs']
-        ell_edges = parse_array(stat_cfg[key]['ell_edges'])
-        ells = np.sqrt(ell_edges[:-1]*ell_edges[1:])  # Geometric average
-        # TODO: add scale cuts to likelihood, not just cutting datavector
-        for comb in tracer_combs:
-            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
+    # Detect flat vs nested structure
+    if 'tracer_combs' in stat_cfg:
+        data_types = S.get_data_types()
+        if len(data_types) != 1:
+            raise ValueError(
+                "Flat statistics format only supported when SACC "
+                "has a single data type"
+            )
+        key = data_types[0]
+        for comb in stat_cfg['tracer_combs']:
             tr1, tr2 = _get_tracers(key, comb)
-            if (kmax is not None) and (kmax != 'None'):
-                zmean1 = dndz[tr1].zav
-                zmean2 = dndz[tr2].zav
-                a12 = np.array([1./(1+zmean1), 1./(1+zmean2)])
-                lmax = np.min(kmax * ccl.comoving_radial_distance(cosmo, a12))
-                ells_here = ells[ells <= lmax]
-            elif (lmax is not None) and (lmax != 'None'):
-                ells_here = ells[ells <= lmax]
-            else:
-                ells_here = ells
-                lmax = ells_here[-1]
+            stats.append(
+                TwoPoint(source0=sources[tr1], source1=sources[tr2],
+                         sacc_data_type=key)
+            )
+    else:
+        for key in stat_cfg:
+            for comb in stat_cfg[key]['tracer_combs']:
+                tr1, tr2 = _get_tracers(key, comb)
+                stats.append(
+                    TwoPoint(source0=sources[tr1], source1=sources[tr2],
+                             sacc_data_type=key)
+                )
 
-            if not ignore_sc_likelihood:
-                # cut_low is the floor of the kept range, not a lower scale cut.
-                # It must sit below the lowest bin's full support: with bandpower
-                # windows and the default SUPPORT filter method, a bin is kept
-                # only if its whole window lies within [cut_low, cut_high].  Using
-                # the lowest bin CENTER would straddle its window and silently
-                # drop that bin, so we floor at 0.
-                tp_filters.append(create_twopoint_filter(key, tr1, tr2,
-                                                         cut_low=0.0,
-                                                         cut_high=lmax)
-                                  )
-            # User may want likelihood cuts but not generated DV cuts,
-            # allow for this option here.
-            if ignore_sc:
-                ells_here = ells
-            # add bandpower windows
-            if Bandpower == 'TopHat':
-                ells_aux = np.arange(0, np.max(ells_here)+1)
-                wgt = np.zeros((len(ells_aux), len(ells_here)))
-                for i in range(len(ells_here)):
-                    in_win = (ells_aux > ell_edges[i]) & (ells_aux < ell_edges[i+1])
-                    wgt[in_win, i] = 1.0
-                win = sacc.BandpowerWindow(ells_aux, wgt)
-                # print(win.nv, win.nell, len(ells_here))
-                S.add_ell_cl(key, tr1, tr2,
-                             ells_here, np.zeros(len(ells_here)), window=win)
+    sys_params = config.get('systematics', {})
+    return sources, stats, sys_params
 
-            elif Bandpower == 'NaMaster':
-                raise NotImplementedError("NaMaster bandpower windows not yet \
-                                          implemented in Augur generation.")
-            else:
-                S.add_ell_cl(key, tr1, tr2,
-                             ells_here, np.zeros(len(ells_here)))
 
-            # Now create TwoPoint objects for firecrown
-            _aux_stat = TwoPoint(source0=sources[tr1], source1=sources[tr2],
-                                 sacc_data_type=key)
-            stats.append(_aux_stat)
-    # Placeholder covariance
+def _refill_sacc_with_theory(S, lk):
+    """Replace placeholder SACC data with the likelihood's theory vector.
+
+    Preserves non-two-point data entries (e.g. cluster counts) by
+    storing them before clearing and re-appending after the refill.
+    Mutates *S* in place.
+    """
+    # Firecrown reports tracer pairs in SACC-convention order (shear before
+    # density) and silently re-orders inputs that do not follow it, so a
+    # statistic can come back as ('src2', 'lens0') where S holds
+    # ('lens0', 'src2').  Keep the orientation stored in S rather than
+    # reformatting the bins.
+    stored_pairs = {(dp.data_type, dp.tracers) for dp in S.data}
+
+    lk_tracer_keys = set()
+    x_dict = {}
+    win_dict = {}
+    oriented_stats = []
+    for st in lk.statistics:
+        st = st.statistic
+        tr1 = st.source0.sacc_tracer
+        tr2 = st.source1.sacc_tracer
+        dtype = st.sacc_data_type
+        if ((dtype, (tr1, tr2)) not in stored_pairs
+                and (dtype, (tr2, tr1)) in stored_pairs):
+            tr1, tr2 = tr2, tr1
+        oriented_stats.append((st, tr1, tr2))
+        lk_tracer_keys.add((dtype, tr1, tr2))
+        x_dict[(tr1, tr2)], win_dict[(tr1, tr2)] = extract_x_and_windows(
+            S, dtype, tr1, tr2,
+        )
+
+    # Preserve non-two-point data entries (e.g. cluster counts)
+    other_data = [
+        dp for dp in S.data
+        if (
+            dp.data_type,
+            dp.tracers[0] if dp.tracers else None,
+            dp.tracers[1] if len(dp.tracers) > 1 else None,
+        )
+        not in lk_tracer_keys
+    ]
+
+    S.covariance = None
+    S.data = []
+
+    for st, tr1, tr2 in oriented_stats:
+        st.ready = False
+        add_data_points(
+            S, st.sacc_data_type, tr1, tr2,
+            x_dict[(tr1, tr2)], st.get_theory_vector(),
+            window=win_dict[(tr1, tr2)],
+        )
+
+    S.data.extend(other_data)
+
+
+def _build_final_lk(config, S, tools, stats, tp_filters, *,
+                    sacc_on_disk_path=None):
+    """Re-build the likelihood after covariance has been applied.
+
+    Handles three cases:
+    1. *tp_filters* present: load with scale-cut filters.
+    2. Firecrown_Factory config but no filters: load from SACC on disk.
+    3. No factory: build a plain ConstGaussian.
+
+    Parameters
+    ----------
+    sacc_on_disk_path : str or None
+        If the SACC was already written to disk (e.g. via *write_sacc*),
+        pass that path here to avoid creating another temp file.
+    """
+    if tp_filters:
+        logger.debug("Rebuilding likelihood with scale-cut filters")
+        sacc_for_rebuild = _sacc_to_disk(
+            S, hint_path=sacc_on_disk_path, prefix="augur_sacc_filters_",
+            filename="filtered_sacc.sacc",
+        )
+        lk = load_likelihood_from_yaml(
+            config, tools.ccl_factory,
+            sacc_for_rebuild,
+            filters=tp_filters,
+        )
+    elif "Firecrown_Factory" in config:
+        sacc_for_rebuild = _sacc_to_disk(
+            S, prefix="augur_sacc_final_", filename="final_sacc.sacc",
+        )
+        lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_for_rebuild)
+    else:
+        lk = ConstGaussian(statistics=stats)
+        lk.read(S)
+    return lk
+
+
+# -------------------------------------------------------------------------- #
+#  generate_sacc_and_stats
+# -------------------------------------------------------------------------- #
+
+def generate_sacc_and_stats(config):
+    """
+    Generate a placeholder SACC file containing the data-vector
+    combinations and tracers specified in the configuration, together with
+    the firecrown ``TwoPoint`` statistics needed to build the likelihood.
+
+    The function dispatches to probe-specific helpers in
+    :mod:`augur.generate_utils` based on which config sections are present:
+
+    * ``statistics``  →  harmonic-space C_ell (always required for now)
+    * ``statistics_real_space``  →  real-space xi (experimental stub)
+    * ``cmb_lensing``  →  CMB-lensing cross-/auto-spectra (stub)
+    * ``cluster_counts``  →  cluster number counts (stub)
+
+    Parameters
+    ----------
+    config : dict or path
+        Analysis configuration dictionary (or path to YAML).
+
+    Returns
+    -------
+    S : sacc.Sacc
+        Placeholder SACC file.
+    cosmo : pyccl.Cosmology
+        Fiducial cosmology.
+    stats : list[TwoPoint]
+        Firecrown TwoPoint statistics for the likelihood.
+    sys_params : ParamsMap
+        Systematic-parameter map.
+    tp_filters : list
+        TwoPoint filters encoding scale cuts.
+    active_probes : list[str]
+        Which probes are present (e.g. ``['harmonic', 'cmb_lensing']``).
+    """
+    config = parse_config(config)
+
+    # ── 1. Cosmology ──────────────────────────────────────────────────── #
+    cosmo, _ = initialize_cosmology(config)
+
+    # ── 2. Empty SACC ─────────────────────────────────────────────────── #
+    S = sacc.Sacc()
+
+    # ── 3. Tracers ────────────────────────────────────────────────────── #
+    sources, dndz = setup_sources(config, S)
+    sources, dndz = setup_lenses(config, S, sources, dndz)
+
+    sys_params = config.get('systematics', {})
+
+    # ── 4. Probe dispatch ─────────────────────────────────────────────── #
+    all_stats = []
+    all_tp_filters = []
+    active_probes = []
+
+    if 'statistics' in config and 'statistics_real_space' in config:
+        raise ValueError(
+            "Augur does not support specifying both \'statistics\'"
+            " and \'statistics_real_space\' in config."
+        )
+
+    # 4a. Harmonic-space two-point (required for existing configs)
+    if 'statistics' in config:
+        stats_h, filters_h = add_harmonic_two_point(
+            config, S, sources, dndz, cosmo
+        )
+        all_stats.extend(stats_h)
+        all_tp_filters.extend(filters_h)
+        active_probes.append('harmonic')
+
+    # 4b. Real-space two-point (experimental)
+    if 'statistics_real_space' in config:
+        stats_r, filters_r = add_real_space_two_point(
+            config, S, sources, dndz, cosmo
+        )
+        all_stats.extend(stats_r)
+        all_tp_filters.extend(filters_r)
+        active_probes.append('real_space')
+
+    # 4c. CMB lensing (stub)
+    if 'cmb_lensing' in config:
+        if 'statistics_real_space' in config:
+            warnings.warn(
+                "CMB lensing generation is currently only implemented for "
+                "harmonic-space statistics. If 'statistics_real_space' is also "
+                "present in the config, the CMB lensing section will be ignored."
+            )
+        else:
+            stats_cmb, filters_cmb = add_cmb_lensing(
+                config, S, sources, dndz, cosmo
+            )
+            all_stats.extend(stats_cmb)
+            all_tp_filters.extend(filters_cmb)
+            active_probes.append('cmb_lensing')
+
+    # 4d. Cluster counts (stub — registers SACC tracers for TJPCov but
+    #     no firecrown statistics are returned yet)
+    if 'cluster_counts' in config:
+        warnings.warn(
+            "Cluster count datavector generation is not yet implemented in "
+            "Augur. Placeholder tracers will be registered in the SACC for "
+            "TJPCov covariance, but no firecrown likelihood statistics are "
+            "created. Firecrown factories for cluster counts with CROW are "
+            "not yet available."
+        )
+        stats_cc, filters_cc = add_cluster_counts(
+            config, S, sources, cosmo
+        )
+        all_stats.extend(stats_cc)
+        all_tp_filters.extend(filters_cc)
+        active_probes.append('cluster_counts')
+
+    if not active_probes:
+        raise ValueError(
+            'No probe sections found in config.  At least one of '
+            '"statistics", "statistics_real_space", "cmb_lensing", '
+            'or "cluster_counts" is required.'
+        )
+
+    # ── 5. Placeholder covariance ─────────────────────────────────────── #
     ndata = len(S.mean)
     S.add_covariance(np.eye(ndata))
     sys_params = ParamsMap(sys_params)
+    return S, cosmo, all_stats, sys_params, all_tp_filters, active_probes
 
-    # needs to return two point filter collection that represents scale cuts
-    return S, cosmo, stats, sys_params, tp_filters
 
+# -------------------------------------------------------------------------- #
+#  generate
+# -------------------------------------------------------------------------- #
 
 def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
              sacc_path=None, lk=None, tools=None):
     """
-    Generate likelihood object and sacc file with fiducial cosmology
+    Generate a likelihood object and SACC file with the fiducial cosmology.
 
-    Parameters:
-    -----------
-
-    config : dict or path
-        Dictionary containing the analysis configuration or path to configuration file.
+    Parameters
+    ----------
+    configs : dict or path
+        Analysis configuration dictionary (or path to YAML file).
     return_all_outputs : bool
-        If `True` it returns the likelihood object (so it can be used later) and the modified
-        Sacc object, as well as the modeling tools object used. If `False` it only returns the
-        likelihood object.
+        If *True*, return ``(lk, S, tools, sys_params)``; otherwise just
+        return the likelihood.
     write_sacc : bool
-        If `True` it writes a sacc file with fiducial data vector.
-    use_sacc : sacc.Sacc
-        If provided, bypasses the generate_sacc_and_stats function and uses pre-existing data
-        vector to generate a likelihood.
-    sacc_path : path
-        If use_sacc is not `None`, a file path must be provided for Firecrown.
-    lk : firecrown.likelihood.Likelihood
-        If provided, it uses this likelihood object instead of generating a new one.
-    tools : firecrown.modeling.ModelingTools
-        If provided, it uses this modeling tools object instead of generating a new one.
+        If *True*, write the fiducial SACC to disk.
+    use_sacc : sacc.Sacc, optional
+        Bypass ``generate_sacc_and_stats`` and use this pre-existing SACC.
+    sacc_path : str, optional
+        File path for *use_sacc* (required by Firecrown factories).
+    lk : firecrown likelihood, optional
+        Inject a pre-built likelihood.
+    tools : firecrown ModelingTools, optional
+        Inject pre-built modelling tools.
 
-    Returns:
+    Returns
     -------
     lk : firecrown.likelihood.ConstGaussian
-        Likelihood object, only returned if `return_all_outputs` is True.
+        Likelihood (always returned).
     S : sacc.Sacc
-        Sacc object with fake data vector and covariance. It is only returned if
-        `return_all_outputs` is True.
-    tools : firecrown.modeling.ModelingTools
-        Modeling tools, only returned if `return_all_outputs` is True.
-    sys_params : dict
-        Dictionary containing the modeling systematic parameters. It is only returned if
-        `return_all_outputs` is True.
-
+        SACC with fiducial data vector and covariance
+        (only if *return_all_outputs*).
+    tools : ModelingTools
+        (only if *return_all_outputs*).
+    sys_params : ParamsMap
+        (only if *return_all_outputs*).
     """
     config = parse_config(configs)
 
-    # Exit function early if a sacc is provided
+    # ================================================================== #
+    #  use_sacc path — bypass generation entirely
+    # ================================================================== #
     if use_sacc is not None:
+        logger.info("Using pre-existing SACC file for generation: %s, "
+                    "setting write_sacc=False", sacc_path)
+        write_sacc = False
         S = use_sacc
 
-        # Create Firecrown stats object
-        # Read info in from the sacc
-        sources = {}
-        for tracer_name in S.tracers:
-            tracer_obj = S.get_tracer(tracer_name)
-            if tracer_obj.quantity == "galaxy_shear":
-                sources[tracer_name] = wl.WeakLensing(sacc_tracer=tracer_name)
-            elif tracer_obj.quantity == "galaxy_density":
-                sources[tracer_name] = nc.NumberCounts(
-                    sacc_tracer=tracer_name,
-                    derived_scale=True
-                )
-
-        if 'statistics' not in config.keys():
-            raise ValueError('statistics key is required in config file')
-        stat_cfg = config['statistics']
-        stats = []
-        ignore_sc = config['general'].get('ignore_scale_cuts', False)
-        ignore_sc_likelihood = config['general'].get('ignore_scale_cuts_likelihood', False)
-        if not ignore_sc and ignore_sc_likelihood:
-            raise ValueError("Cannot ignore scale cuts in likelihood while \
-                             applying them to the data vector.")
-
-        # Sys params
-        sys_params = config['systematics'] if 'systematics' in config.keys() else {}
-        if tools is None:
-            tools, cosmo = create_modeling_tools(config)
-        else:
-            if tools.ccl_cosmo is None:
-                # Build a cosmology from the factory
-                cosmo = tools.ccl_factory.build()
-                tools.set_ccl_cosmology(cosmo)
-            else:
-                # cosmo.compute_nonlin_power()
-                cosmo = tools.ccl_cosmo
-
-        # Detect flat vs nested structure
-        if 'tracer_combs' in stat_cfg:
-            # Flat format (your custom shortcut)
-            if use_sacc is None:
-                raise ValueError("Flat 'statistics' format requires use_sacc")
-
-            # Infer the SACC data type automatically
-            data_types = S.get_data_types()
-            if len(data_types) != 1:
-                raise ValueError(
-                    "Flat statistics format only supported when SACC has a single data type"
-                )
-            key = data_types[0]
-
-            tracer_combs = stat_cfg['tracer_combs']
-
-            for comb in tracer_combs:
-                tr1, tr2 = _get_tracers(key, comb)
-                stats.append(
-                    TwoPoint(
-                        source0=sources[tr1],
-                        source1=sources[tr2],
-                        sacc_data_type=key
-                    )
-                )
-
-        else:
-            # Original nested format (unchanged behavior)
-            for key in stat_cfg.keys():
-                tracer_combs = stat_cfg[key]['tracer_combs']
-                for comb in tracer_combs:
-                    tr1, tr2 = _get_tracers(key, comb)
-                    stats.append(
-                        TwoPoint(
-                            source0=sources[tr1],
-                            source1=sources[tr2],
-                            sacc_data_type=key
-                        )
-                    )
+        sources, stats, sys_params = _build_sources_and_stats_from_sacc(
+            config, S
+        )
+        tools, cosmo = _resolve_tools(config, tools)
 
         # Build likelihood
         if lk is None:
-            if "Firecrown_Factory" in config.keys():
-                from augur.utils.firecrown_interface import load_likelihood_from_yaml
-                if sacc_path is None:
-                    raise ValueError("Must include sacc_path when passing a sacc")
-
+            if "Firecrown_Factory" in config:
+                stat_cfg = config.get('statistics', {})
+                ignore_sc_likelihood = config.get('general', {}).get(
+                    'ignore_scale_cuts_likelihood', False
+                )
+                sacc_input = _sacc_to_disk(S, hint_path=sacc_path)
                 if 'tracer_combs' not in stat_cfg:
+                    # Nested statistics format: build per-combination ell filters
+                    # so scale cuts and tracer subsetting from the config are
+                    # applied to the pre-made SACC.  Combinations absent from the
+                    # config are excluded; those absent from the SACC are skipped.
                     tp_filters = _build_tp_filters_from_sacc(
                         stat_cfg, S, cosmo, ignore_sc_likelihood
                     )
                     lk = load_likelihood_from_yaml(
-                        config, tools.ccl_factory, sacc_path, filters=tp_filters
+                        config, tools.ccl_factory, sacc_input, filters=tp_filters
                     )
                 else:
-                    # Flat statistics format: sacc drives everything unchanged
-                    lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_path)
-
+                    # Flat statistics format: the SACC drives everything unchanged.
+                    lk = load_likelihood_from_yaml(
+                        config, tools.ccl_factory, sacc_input
+                    )
+                # Use the built CCL cosmology dictionary so expected amplitude
+                # keys (A_s/sigma8) and extra parameters are always present.
                 _pars = deepcopy(cosmo.to_dict())
-                logger.debug(_pars)
+                logger.debug("use_sacc cosmo params: %s", _pars)
 
                 # Make sure using YOUR covariance
                 if (
-                    use_sacc is not None
-                    and hasattr(use_sacc, 'covariance')
-                    and use_sacc.covariance is not None
+                    hasattr(S, 'covariance')
+                    and S.covariance is not None
                 ):
-                    '''
-                    lk.inv_cov = np.linalg.inv(S.covariance.covmat)
-                    lk.cov = S.covariance.covmat  # just in case expected
-                    # Ensure dv matches the SACC
-                    lk.data_vector = S.mean
-                    '''
+                    # Only copy the SACC covariance onto the likelihood when the
+                    # shapes agree.  When scale-cut filters were applied the
+                    # likelihood is shorter than the full SACC covariance, and
+                    # Firecrown has already installed the correctly filtered
+                    # covariance from the SACC — do not overwrite it.
                     n_lk = len(lk.get_data_vector())
                     n_cov = S.covariance.covmat.shape[0]
                     if n_lk == n_cov:
                         lk.inv_cov = np.linalg.inv(S.covariance.covmat)
                         lk.cov = S.covariance.covmat
                         lk.data_vector = S.mean
-
-                _, lk, tools = compute_new_theory_vector(lk,
-                                                         tools,
-                                                         sys_params,
-                                                         _pars,
-                                                         return_all=True)
-
+                    else:
+                        logger.info(
+                            "use_sacc: likelihood length %d != SACC covariance "
+                            "%d (scale cuts applied); using Firecrown's filtered "
+                            "covariance.", n_lk, n_cov,
+                        )
+                _, lk, tools = compute_new_theory_vector(
+                    lk, tools, sys_params, _pars, return_all=True
+                )
             else:
                 lk = ConstGaussian(statistics=stats)
+                logger.debug(
+                    "use_sacc path: building ConstGaussian with %d statistics",
+                    len(stats),
+                )
                 lk.read(S)
         else:
-            raise RuntimeError("Non-YAML likelihood with use_sacc is not supported cleanly")
+            raise RuntimeError(
+                "Non-YAML likelihood with use_sacc is not supported cleanly"
+            )
 
         if return_all_outputs:
-            return lk, tools, sys_params
-        else:
-            return lk
+            return lk, S, tools, sys_params
+        return lk
 
-    # Rest of function is only triggered when use_sacc is None
+    # ================================================================== #
+    #  Normal generation path
+    # ================================================================== #
 
-    # Generate placeholders
-    S, cosmo, stats, sys_params, tp_filters = generate_sacc_and_stats(config)
+    # ── 1. Generate placeholder SACC and statistics ─────────────────── #
+    S, cosmo, stats, sys_params, tp_filters, active_probes = \
+        generate_sacc_and_stats(config)
 
-    # config needs to specify likelihood yaml.
-    # alternatively, can pass likelihood and tools objects at input paramters.
-    # choose objects to take precedence.
-
+    # ── 2. Modelling tools ──────────────────────────────────────────── #
     if tools is None:
-        tools, cosmo = create_modeling_tools(config)
+        tools, cosmo = _resolve_tools(config, tools)
     cosmo.compute_nonlin_power()
+
+    # ── 3. Likelihood ───────────────────────────────────────────────── #
     if lk is None:
-        if "Firecrown_Factory" in config.keys():
-            # Many Firecrown YAML pipelines expect a DataSourceSacc with a file path.
-            # Save the placeholder/template SACC to a temporary FITS file, build the
-            # likelihood from YAML pointing at that file, then immediately rebind the
-            # in-memory S object to ensure we use the generated data-vector/covariance.
-            import tempfile
-            import os
-            tmp_dir = tempfile.mkdtemp(prefix="augur_sacc_")
-            tmp_sacc_path = os.path.join(tmp_dir, "template_placeholder_sacc.fits")
-            S.save_fits(tmp_sacc_path, overwrite=True)
-
-            from augur.utils.firecrown_interface import load_likelihood_from_yaml
-            lk = load_likelihood_from_yaml(config, tools.ccl_factory, tmp_sacc_path)
-
+        if "Firecrown_Factory" in config:
+            lk = load_likelihood_from_yaml(
+                config, tools.ccl_factory,
+                _sacc_to_disk(S, prefix="augur_sacc_"),
+            )
         else:
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
 
     _pars = deepcopy(cosmo.to_dict())
-    # Populate ModelingTools and likelihood
-    _, lk, tools = compute_new_theory_vector(lk, tools, sys_params, _pars, return_all=True)
+    _, lk, tools = compute_new_theory_vector(
+        lk, tools, sys_params, _pars, return_all=True
+    )
 
-    # Get all bandpower windows before erasing the placeholder sacc
-    win_dict = {}
-    ell_dict = {}
-    for st in lk.statistics:
-        st = st.statistic
-        tr1 = st.source0.sacc_tracer
-        tr2 = st.source1.sacc_tracer
-        dtype = st.sacc_data_type
-        idx = S.indices(tracers=(tr1, tr2))
-        win_dict[(tr1, tr2)] = S.get_bandpower_windows(idx)
-        ell_dict[(tr1, tr2)], _ = S.get_ell_cl(dtype, tr1, tr2)
-    # Empty the placeholder Sacc's covariance and data vector so we can "overwrite"
-    S.covariance = None
-    S.data = []
-    # Fill out the data-vector with the theory predictions for the fiducial
-    # cosmology/parameters
-    for st in lk.statistics:
-        # Hack to be able to reuse the statistics
-        st = st.statistic
-        tr1 = st.source0.sacc_tracer
-        tr2 = st.source1.sacc_tracer
-        st.ready = False
-        S.add_ell_cl(st.sacc_data_type, tr1, tr2,
-                     ell_dict[(tr1, tr2)], st.get_theory_vector(),  # Only valid for harmonic space
-                     window=win_dict[(tr1, tr2)])
+    # ── 4. Fill SACC with fiducial theory predictions ───────────────── #
+    _refill_sacc_with_theory(S, lk)
 
-    # Now generate covariance matrix
-    # move to a separate file/function?
-    if config['cov_options']['cov_type'] == 'gaus_internal':
-        fsky = config['cov_options']['fsky']
-        cov = get_gaus_cov(S, lk, cosmo, fsky, config)
-        S.add_covariance(cov)
-    elif config['cov_options']['cov_type'] == 'SRD':
-        cov = get_SRD_cov(config['cov_options'], S)
-        S.add_covariance(cov)
-    # The option using TJPCov takes a while. TODO: Use some sort of parallelization.
-    elif config['cov_options']['cov_type'] == 'tjpcov':
-        tjpcov_ell_edges = np.asarray(
-            parse_array(config['cov_options']['binning_info']['ell_edges'])
-        )
-        for stat_name, stat_info in config['statistics'].items():
-            dv_ell_edges = np.asarray(parse_array(stat_info['ell_edges']))
-            if (
-                tjpcov_ell_edges.shape != dv_ell_edges.shape
-                or not np.allclose(tjpcov_ell_edges, dv_ell_edges, rtol=0.0, atol=0.0)
-            ):
-                raise ValueError(
-                    "TJPCov ell_edges do not match the data-vector ell_edges "
-                    f"for statistic `{stat_name}`. "
-                    "Please set `cov_options.binning_info.ell_edges` to match "
-                    "`statistics.<stat>.ell_edges`."
-                )
+    # ── 5. Covariance ───────────────────────────────────────────────── #
+    compute_covariance(config, S, lk, cosmo, tools, probes=active_probes)
 
-        tjpcov_config = dict()  # Create a config dictionary to instantiate TJPCov
-        tjpcov_config['tjpcov'] = dict()
-        tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
-        ccl_tracers = dict()
-        bias_all = dict()
-        for i, myst1 in enumerate(lk.statistics):
-            trname1 = myst1.statistic.source0.sacc_tracer
-            trname2 = myst1.statistic.source1.sacc_tracer
-            tr1 = myst1.statistic.source0.tracers[0].ccl_tracer  # Pulling out the tracers
-            tr2 = myst1.statistic.source1.tracers[0].ccl_tracer
-            ccl_tracers[trname1] = tr1
-            ccl_tracers[trname2] = tr2
-            if 'lens' in trname1:
-                bias_all[trname1] = myst1.statistic.source0.bias
-            if 'lens' in trname2:
-                bias_all[trname2] = myst1.statistic.source1.bias
-        for key in bias_all.keys():
-            tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
-        tjpcov_config['tjpcov']['sacc_file'] = S
-        tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
-        tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
-        tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
-        tjpcov_config['tjpcov']['binning_info'] = dict()
-        tjpcov_config['tjpcov']['binning_info']['ell_edges'] = tjpcov_ell_edges
-        for tr in S.tracers:
-            _, ndens = get_noise_power(config, S, tr, return_ndens=True)
-            tjpcov_config['tjpcov'][f'Ngal_{tr}'] = ndens
-            if 'src' in tr:
-                tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = config['sources']['ellipticity_error']
-
-        cov_calc = TJPCovGaus(tjpcov_config)
-        if config['general']['ignore_scale_cuts']:
-            cov_all = cov_calc.get_covariance()
-        else:
-            ndata = len(S.mean)
-            cov_all = np.zeros((ndata, ndata))
-            for i, trcombs1 in enumerate(S.get_tracer_combinations()):
-                ii = S.indices(tracers=trcombs1)
-                for trcombs2 in S.get_tracer_combinations()[i:]:
-                    jj = S.indices(tracers=trcombs2)
-                    ii_all, jj_all = np.meshgrid(ii, jj, indexing='ij')
-                    # no B-modes for now, as we are only evaluating in Fourier space
-                    cov_here = cov_calc.get_covariance_block(
-                        trcombs1, trcombs2, include_b_modes=False
-                        )
-                    cov_all[ii_all, jj_all] = cov_here[:len(ii), :len(jj)]
-                    cov_all[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
-        S.add_covariance(cov_all)
-    else:
-        warnings.warn('''Currently only internal Gaussian covariance and SRD has been implemented,
-                         cov_type is not understood. Using identity matrix as covariance.''')
+    # ── 6. Write SACC ───────────────────────────────────────────────── #
     if write_sacc:
-        logger.debug(config['fiducial_sacc_path'])
+        logger.info("Writing SACC to %s", config['fiducial_sacc_path'])
         S.save_fits(config['fiducial_sacc_path'], overwrite=True)
-    # Update covariance and inverse -- TODO need to update cholesky!!
 
-    # add two-point filters here to the likelihood, in case of scale cuts
-    if tp_filters != []:
-        logger.info('loading filters')
-        config = parse_config(configs)
-        from augur.utils.firecrown_interface import load_likelihood_from_yaml
-        lk = load_likelihood_from_yaml(config,
-                                       tools.ccl_factory,
-                                       config['fiducial_sacc_path'],
-                                       filters=tp_filters)
-    else:
-        lk = ConstGaussian(statistics=stats)
-        lk.read(S)
+    # ── 7. Re-build likelihood with scale-cut filters ───────────────── #
+    lk = _build_final_lk(
+        config, S, tools, stats, tp_filters,
+        sacc_on_disk_path=config['fiducial_sacc_path'] if write_sacc else None,
+    )
 
     if return_all_outputs:
         return lk, S, tools, sys_params
+    return lk

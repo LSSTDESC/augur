@@ -1,0 +1,225 @@
+"""Tracer / N(z) setup and naming helpers."""
+
+import numpy as np
+
+from augur.tracers.two_point import ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile
+from augur.utils.config_io import parse_array
+
+import firecrown.likelihood.weak_lensing as wl
+import firecrown.likelihood.number_counts as nc
+
+implemented_nzs = [ZDist, LensSRD2018, SourceSRD2018, ZDistFromFile]
+
+# Safe registry for N(z) classes - maps string names to actual classes
+NZ_CLASS_REGISTRY = {
+    'ZDist': ZDist,
+    'LensSRD2018': LensSRD2018,
+    'SourceSRD2018': SourceSRD2018,
+    'ZDistFromFile': ZDistFromFile,
+}
+
+
+def get_nz_class(class_name):
+    """Safely get N(z) class from registry."""
+    if class_name not in NZ_CLASS_REGISTRY:
+        raise ValueError(f"Unknown N(z) class '{class_name}'. \
+                         Available classes: {list(NZ_CLASS_REGISTRY.keys())}")
+    return NZ_CLASS_REGISTRY[class_name]
+
+
+def get_tracers(statistic, comb):
+    """
+    Map a galaxy two-point statistic and bin pair to SACC tracer names.
+
+    This helper is intentionally limited to galaxy source/lens two-point
+    observables used by harmonic and real-space 2pt generation. CMB-lensing
+    and cluster-count probe modules define their own tracer mapping rules.
+
+    Parameters
+    ----------
+    statistic : str
+        SACC data-type string (e.g. ``'galaxy_density_cl'``).
+    comb : tuple
+        Pair of bin indices.
+
+    Returns
+    -------
+    tr1, tr2 : str
+        SACC tracer names (e.g. ``'lens0'``, ``'src1'``). Following the SACC
+        convention, the tracer order matches the data-type string, so
+        ``galaxy_shearDensity_*`` returns ``(src, lens)``.
+    """
+    stat_lower = str(statistic).lower()
+
+    if 'cmb' in stat_lower or 'cluster' in stat_lower:
+        raise NotImplementedError(
+            f"Statistic '{statistic}' is not handled by get_tracers. "
+            "Use the probe-specific mapping in generate_utils/cmb_lensing.py "
+            "or generate_utils/cluster_counts.py."
+        )
+
+    if len(comb) != 2:
+        raise ValueError(
+            f"Statistic '{statistic}' expects a 2-bin combination, got {comb}."
+        )
+
+    if 'galaxy_sheardensity' in stat_lower:
+        tr1 = f'src{comb[1]}'
+        tr2 = f'lens{comb[0]}'
+    elif 'galaxy_shear' in stat_lower:
+        tr1 = f'src{comb[0]}'
+        tr2 = f'src{comb[1]}'
+    elif 'galaxy_density' in stat_lower:
+        tr1 = f'lens{comb[0]}'
+        tr2 = f'lens{comb[1]}'
+    else:
+        raise NotImplementedError(
+            f'Tracer mapping not implemented for statistic: {statistic}'
+        )
+    return tr1, tr2
+
+
+def add_nz(cfg, nbins, src_root, S, dndz, quantity="generic"):
+    """
+    Add N(z) distributions for a set of tomographic bins to a SACC object.
+
+    Parameters
+    ----------
+    cfg : dict
+        Tracer-level config (``sources`` or ``lenses``).
+    nbins : int
+        Number of tomographic bins.
+    src_root : str
+        Root name for the SACC tracer (``'src'`` or ``'lens'``).
+    S : sacc.Sacc
+        SACC object to populate.
+    dndz : dict
+        Dictionary collecting the N(z) objects (modified in-place).
+
+    Returns
+    -------
+    dndz : dict
+        Updated dictionary of N(z) objects.
+    """
+    z = np.linspace(0.004004004004004004,
+                    4.004004004004004004, 1000)
+
+    Nz_centers = None
+    if 'Nz_center' in cfg['Nz_kwargs'].keys():
+        Nz_centers = parse_array(cfg['Nz_kwargs']['Nz_center'])
+        cfg['Nz_kwargs'].pop('Nz_center')
+
+        # parse_array returns a 0-d array for scalar input
+        if np.ndim(Nz_centers) == 0:
+            Nz_centers = [Nz_centers.item()]
+            if nbins != 1:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+        else:
+            if len(Nz_centers) != nbins:
+                raise ValueError('Nz_centers should have the same length as the number of bins')
+
+    for i in range(nbins):
+        sacc_tracer = f'{src_root}{i}'
+        if isinstance(cfg['Nz_type'], list):
+            nz_class = get_nz_class(cfg['Nz_type'][i])
+            if nz_class in implemented_nzs:
+                if 'ZDistFromFile' not in cfg['Nz_type'][i]:
+                    if Nz_centers is not None:
+                        dndz[sacc_tracer] = nz_class(
+                            z, Nz_center=Nz_centers[i], Nz_nbins=nbins,
+                            **cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = nz_class(
+                            z, Nz_ibin=i, Nz_nbins=nbins,
+                            **cfg['Nz_kwargs'])
+                else:
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+            else:
+                raise NotImplementedError('The selected N(z) is yet not implemented')
+        else:
+            nz_class = get_nz_class(cfg['Nz_type'])
+            if nz_class in implemented_nzs:
+                if 'ZDistFromFile' not in cfg['Nz_type']:
+                    if Nz_centers is not None:
+                        dndz[sacc_tracer] = nz_class(
+                            z, Nz_center=Nz_centers[i], Nz_nbins=nbins,
+                            **cfg['Nz_kwargs'])
+                    else:
+                        dndz[sacc_tracer] = nz_class(
+                            z, Nz_ibin=i, Nz_nbins=nbins,
+                            **cfg['Nz_kwargs'])
+                else:
+                    dndz[sacc_tracer] = ZDistFromFile(**cfg['Nz_kwargs'], ibin=i)
+            else:
+                raise NotImplementedError('The selected N(z) is yet not implemented')
+        S.add_tracer('NZ', sacc_tracer, dndz[sacc_tracer].z, dndz[sacc_tracer].Nz,
+                     quantity=quantity)
+    return dndz
+
+
+def setup_sources(config, S):
+    """
+    Read the ``sources`` section of the config and register weak-lensing
+    tracers in the SACC object.
+
+    Parameters
+    ----------
+    config : dict
+        Full Augur config dictionary.
+    S : sacc.Sacc
+        SACC object to populate.
+
+    Returns
+    -------
+    sources : dict
+        Mapping of tracer names to firecrown WeakLensing objects.
+    dndz : dict
+        Mapping of tracer names to N(z) objects.
+    """
+    sources = {}
+    dndz = {}
+    if 'sources' in config:
+        src_cfg = config['sources']
+        nbins = src_cfg['nbins']
+        src_root = 'src'
+        dndz = add_nz(src_cfg, nbins, src_root, S, dndz, quantity="galaxy_shear")
+        for i in range(nbins):
+            sacc_tracer = f'{src_root}{i}'
+            sources[sacc_tracer] = wl.WeakLensing(sacc_tracer=sacc_tracer)
+    return sources, dndz
+
+
+def setup_lenses(config, S, sources, dndz):
+    """
+    Read the ``lenses`` section of the config and register number-count
+    tracers in the SACC object.
+
+    Parameters
+    ----------
+    config : dict
+        Full Augur config dictionary.
+    S : sacc.Sacc
+        SACC object to populate.
+    sources : dict
+        Existing source dict to update in-place.
+    dndz : dict
+        Existing N(z) dict to update in-place.
+
+    Returns
+    -------
+    sources : dict
+        Updated mapping including lens tracers.
+    dndz : dict
+        Updated N(z) mapping.
+    """
+    if 'lenses' in config:
+        lns_cfg = config['lenses']
+        nbins = lns_cfg['nbins']
+        lns_root = 'lens'
+        dndz = add_nz(lns_cfg, nbins, lns_root, S, dndz, quantity="galaxy_density")
+        for i in range(nbins):
+            sacc_tracer = f'{lns_root}{i}'
+            sources[sacc_tracer] = nc.NumberCounts(
+                sacc_tracer=sacc_tracer, derived_scale=True
+            )
+    return sources, dndz
