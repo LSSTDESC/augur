@@ -144,3 +144,23 @@ def test_mass_split_reaches_mu_sigma_branch():
 def test_mass_split_sum_rejected():
     with pytest.raises(ValueError, match="ambiguous"):
         fci._create_ccl_factory(_nu_cfg(m_nu=0.06, mass_split='sum'))
+
+
+@pytest.mark.parametrize('split, m_nu', [('equal', 0.06), ('normal', 0.06),
+                                         ('inverted', 0.1), ('single', 0.06)])
+def test_mass_split_accepted(split, m_nu):
+    """Every supported scalar split reaches the factory unchanged."""
+    factory, _ = fci._create_ccl_factory(_nu_cfg(m_nu=m_nu, mass_split=split))
+    assert factory.mass_split is NeutrinoMassSplits(split)
+
+
+def test_mass_split_defaults_to_normal():
+    factory, _ = fci._create_ccl_factory(_nu_cfg(m_nu=0.06))
+    assert factory.mass_split is NeutrinoMassSplits.NORMAL
+
+
+@pytest.mark.parametrize('bad', ['normla', 'bogus', 'Normal', None])
+def test_mass_split_unknown_rejected(bad):
+    """A typo, a wrong case or an explicit null must fail up front, naming the valid choices."""
+    with pytest.raises(ValueError, match="Unknown mass_split"):
+        fci._create_ccl_factory(_nu_cfg(m_nu=0.06, mass_split=bad))

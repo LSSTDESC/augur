@@ -214,6 +214,8 @@ def test_ccl_is_silently_flat_below_zero_mass():
     # Why the degenerate floor is 0 and not None: CCL accepts a negative total under
     # 'equal', clamps Omega_nu to zero and raises nothing, so the theory below zero is
     # the massless one. A central difference straddling 0 then halves the derivative.
+    # Reported upstream as https://github.com/LSSTDESC/CCL/issues/1324; revisit this
+    # test once CCL warns or raises.
     def pk(m_nu):
         c = ccl.Cosmology(Omega_c=0.25, Omega_b=0.05, h=0.7, n_s=0.96, sigma8=0.8,
                           m_nu=m_nu, mass_split='equal',

@@ -44,6 +44,11 @@ TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E
                       }
 
 
+# Neutrino mass splits augur accepts: the CCL ones that work with a firecrown CCLFactory.
+# 'sum' is excluded on purpose, see _create_ccl_factory.
+NEUTRINO_MASS_SPLITS = ('equal', 'normal', 'inverted', 'single', 'list')
+
+
 def _create_ccl_factory(config):
     """
     Build and return (ccl_factory, ccl_cosmo) using entries in the
@@ -114,14 +119,20 @@ def _create_ccl_factory(config):
     # config says, and the theory vector no longer matches the cosmology built below.
     # get, not pop: cosmo_cfg still feeds ccl.Cosmology.
     mass_split = cosmo_cfg.get('mass_split', 'normal')
-    nu_kwargs = {'mass_split': mass_split}
-    if mass_split == 'list':
-        nu_kwargs['num_neutrino_masses'] = len(np.atleast_1d(cosmo_cfg.get('m_nu', [])))
-    elif mass_split == 'sum':
+    if mass_split == 'sum':
         # CCL reads a scalar sum; firecrown registers one sampler parameter per species.
         raise ValueError("mass_split='sum' is ambiguous between CCL and firecrown; use "
                          "'equal', 'normal', 'inverted' or 'single' with a scalar m_nu, "
                          "or 'list' with one mass per species.")
+    if mass_split not in NEUTRINO_MASS_SPLITS:
+        # Checked here, before the factory is built, so a typo (or an explicit
+        # `mass_split: null`, which .get() does not default) fails with the valid
+        # choices rather than deep inside firecrown or CCL.
+        raise ValueError(f"Unknown mass_split {mass_split!r}; use one of "
+                         f"{', '.join(repr(m) for m in NEUTRINO_MASS_SPLITS)}.")
+    nu_kwargs = {'mass_split': mass_split}
+    if mass_split == 'list':
+        nu_kwargs['num_neutrino_masses'] = len(np.atleast_1d(cosmo_cfg.get('m_nu', [])))
 
     mg_cfg = cosmo_cfg.pop('mg_parametrization', None)
     if mg_cfg is not None:

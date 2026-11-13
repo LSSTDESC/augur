@@ -109,7 +109,8 @@ def _neutrino_mass_floor(mass_split):
     degenerate splits have no hierarchy, but the masses still cannot be negative, so
     their floor is zero. That one CCL does not enforce at all: it accepts a negative
     total, clamps Omega_nu to zero and returns the massless cosmology, so the theory
-    is silently flat below zero and a derivative straddling it comes out halved.
+    is silently flat below zero and a derivative straddling it comes out halved
+    (reported upstream: https://github.com/LSSTDESC/CCL/issues/1324).
 
     The floor is built from CCL's own oscillation constants rather than hard-coded, so
     it follows them if they are ever revised. It is deliberately not delegated to CCL's
@@ -137,6 +138,7 @@ def _neutrino_mass_floor(mass_split):
         d13 = abs(c.DELTAM13_sq_neg)
         return np.sqrt(d13) + np.sqrt(d13 + c.DELTAM12_sq)
     if mass_split in ('equal', 'single', 'sum'):
+        # CCL silently clamps a negative total to zero here, see LSSTDESC/CCL#1324.
         return 0.0
     return None
 
