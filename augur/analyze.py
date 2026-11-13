@@ -104,25 +104,17 @@ def _neutrino_mass_floor(mass_split):
     """
     Return the smallest total neutrino mass a mass split admits, or None if unknown.
 
-    `normal` and `inverted` fix the two squared-mass differences, so the total mass
-    cannot go below the value it takes when the lightest species is massless. The
-    degenerate splits have no hierarchy, but the masses still cannot be negative, so
-    their floor is zero. That one CCL does not enforce at all: it accepts a negative
-    total, clamps Omega_nu to zero and returns the massless cosmology, so the theory
-    is silently flat below zero and a derivative straddling it comes out halved
-    (reported upstream: https://github.com/LSSTDESC/CCL/issues/1324).
-
-    The floor is built from CCL's own oscillation constants rather than hard-coded, so
-    it follows them if they are ever revised. It is deliberately not delegated to CCL's
-    `nu_masses`: that guard is correct for `normal`, but for `inverted` it subtracts
-    the solar splitting where the solve adds it, so it admits totals about 1.5 meV below
-    the true floor and returns a negative lightest mass there without raising.
+    `normal` and `inverted` are limited by the oscillation splittings (lightest species
+    massless); the degenerate splits only by positivity, so their floor is zero. CCL
+    enforces neither reliably: its `inverted` guard admits totals ~1.5 meV too low, and
+    for the degenerate splits it silently clamps negative totals to zero, so the theory
+    is flat below zero (https://github.com/LSSTDESC/CCL/issues/1324). The floor is
+    therefore built from CCL's oscillation constants here instead of delegating to it.
 
     Parameters:
     -----------
     mass_split : str or None
-        CCL mass split. None (an unspecified split) is treated as unknown, and so is
-        `list`, which has no single total to step.
+        CCL mass split. None and `list` (no single total to step) give None.
 
     Returns:
     --------
@@ -133,8 +125,7 @@ def _neutrino_mass_floor(mass_split):
     if mass_split == 'normal':
         return np.sqrt(c.DELTAM12_sq) + np.sqrt(c.DELTAM13_sq_pos)
     if mass_split == 'inverted':
-        # At the floor the lightest (m3) vanishes, so m1^2 = |DELTAM13_sq_neg| and
-        # m2^2 = m1^2 + DELTAM12_sq -- the sign CCL's own guard gets wrong.
+        # Lightest (m3) vanishes: m1^2 = |DELTAM13_sq_neg|, m2^2 = m1^2 + DELTAM12_sq.
         d13 = abs(c.DELTAM13_sq_neg)
         return np.sqrt(d13) + np.sqrt(d13 + c.DELTAM12_sq)
     if mass_split in ('equal', 'single', 'sum'):
@@ -262,6 +253,7 @@ class Analyze(object):
         self._unpack_gaussian_priors()
         self._unpack_norm_step()
         self._unpack_derivative_method()
+        self._validate_neutrino_fiducial()
         self._validate_neutrino_step()
 
     def _unpack_transformations(self):
@@ -399,14 +391,30 @@ class Analyze(object):
         self.x = np.array(self.x).astype(np.float64)
         self.par_bounds = np.array(self.par_bounds)
 
+    def _validate_neutrino_fiducial(self):
+        """
+        Check that the fiducial neutrino masses are not negative.
+
+        CCL accepts negative masses without raising: it clamps a negative total to zero
+        (LSSTDESC/CCL#1324) and drops a negative `list` entry, so its cosmology no
+        longer matches `Sum(m_nu)` of the fiducial. Raises ValueError on any negative
+        mass; warns if a `list` entry is zero, which CCL drops as a massless species.
+        """
+        masses = np.atleast_1d(self.pars_fid.get('m_nu', 0.0)).astype(float)
+        if np.any(masses < 0.0):
+            raise ValueError("Fiducial m_nu has negative neutrino masses "
+                             f"({self.pars_fid['m_nu']}); masses must be non-negative.")
+        if np.ndim(self.pars_fid.get('m_nu', 0.0)) > 0 and np.any(masses == 0.0):
+            warnings.warn(f"Fiducial m_nu {self.pars_fid['m_nu']} has a zero mass; CCL treats "
+                          "it as a massless species and drops it from the massive ones.")
+
     def _validate_neutrino_var_pars(self):
         """
         Check that varying the neutrino mass is compatible with the fiducial cosmology.
 
-        Raises ValueError if `m_nu` is varied while the fiducial cosmology carries one
-        mass per species, which `mass_split: 'list'` does. There is no single number to
-        step in that case: the pivot vector cannot hold a sequence, and the cast below
-        would fail with a numpy message naming neither the parameter nor the split.
+        Raises ValueError if `m_nu` is varied while the fiducial carries one mass per
+        species (`mass_split: 'list'`): the pivot vector holds one scalar per parameter,
+        so individual masses cannot be varied, only the total under a scalar split.
         """
         if 'm_nu' not in self.var_pars:
             return
@@ -422,15 +430,9 @@ class Analyze(object):
         """
         Check that the derivative will not step below the smallest physical neutrino mass.
 
-        Each mass split admits no total mass below a floor (see `_neutrino_mass_floor`).
-        A derivative that samples under it aborts the run partway through under
-        `normal`; under `inverted` it silently uses a negative mass; under the degenerate
-        splits it silently uses the massless theory and halves the derivative. All are
-        far cheaper to catch here than after hours of C_ell evaluations.
-
-        Assumes the fiducial cosmology itself is physical: CCL would already have
-        refused to build it otherwise. A `pars_fid` with no `mass_split` is treated as
-        unknown and skipped; one built from a CCL cosmology always carries it.
+        See `_neutrino_mass_floor`. Without this, `normal` aborts mid-run, `inverted`
+        silently uses a negative mass, and the degenerate splits silently halve the
+        derivative. Skipped if the fiducial `mass_split` is missing (unknown).
         """
         if 'm_nu' not in self.var_pars:
             return

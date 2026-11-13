@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pyccl as ccl
 import pytest
@@ -886,3 +887,28 @@ def test_f_2d_input_returns_correct_shape():
 
     assert result.shape == (2, 1)
     assert len(captured) == 2
+
+
+@pytest.mark.parametrize('m_nu, split, var_pars', [
+    (-0.01, 'equal', ['Omega_c']),             # scalar, masses fixed
+    (-0.01, 'equal', ['Omega_c', 'm_nu']),     # scalar, varied
+    ([0.02, 0.02, -0.01], 'list', ['Omega_c']),  # CCL drops the negative species
+])
+def test_negative_fiducial_mnu_raises(m_nu, split, var_pars):
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': m_nu, 'mass_split': split}
+    with pytest.raises(ValueError, match='negative neutrino masses'):
+        make_analyze(var_pars, pars)
+
+
+def test_zero_mass_in_list_fiducial_warns():
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': [0.05, 0.01, 0.0],
+            'mass_split': 'list'}
+    with pytest.warns(UserWarning, match='zero mass'):
+        make_analyze(['Omega_c'], pars)
+
+
+def test_zero_scalar_mnu_does_not_warn():
+    pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.0, 'mass_split': 'equal'}
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        make_analyze(['Omega_c'], pars)
