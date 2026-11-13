@@ -1,3 +1,4 @@
+import importlib.util
 import warnings
 import numpy as np
 import pyccl as ccl
@@ -5,6 +6,10 @@ import pytest
 
 from augur.analyze import (Analyze, _sum_mnu, _dsum_dpar, _neutrino_mass_floor,
                            _derivative_probe_drop)
+
+# derivkit is optional (not in environment.yml); tests that need it are skipped without it.
+requires_derivkit = pytest.mark.skipif(importlib.util.find_spec('derivkit') is None,
+                                       reason='derivkit not installed')
 
 
 class DummyLikelihood:
@@ -253,6 +258,7 @@ def test_derivative_probe_drop_per_method():
     # derivative_args, so it takes the same margin.
     assert _derivative_probe_drop('5pt_stencil', 0.006, {}, 0.12) == pytest.approx(0.012)
     assert _derivative_probe_drop('numdifftools', 0.006, {}, 0.12) == pytest.approx(0.012)
+    pytest.importorskip('derivkit')
     # derivkit ignores `step` entirely: its half-width is max(frac*|x0|, base_abs).
     assert _derivative_probe_drop('derivkit', 0.006, {}, 0.12) == pytest.approx(0.0012)
     assert _derivative_probe_drop('derivkit', 0.006, {}, 0.06) == pytest.approx(0.001)
@@ -260,6 +266,7 @@ def test_derivative_probe_drop_per_method():
         == pytest.approx(0.006)
 
 
+@requires_derivkit
 def test_derivative_probe_drop_reads_per_parameter_base_abs():
     # With base_abs given per parameter, the guard must use the floor the m_nu column
     # is actually built with, not the default and not another parameter's value.
@@ -271,6 +278,7 @@ def test_derivative_probe_drop_reads_per_parameter_base_abs():
         == pytest.approx(1e-3)
 
 
+@requires_derivkit
 def test_per_parameter_base_abs_below_floor_raises():
     pars = {'Omega_c': 0.2, 'Omega_b': 0.05, 'h': 0.7, 'm_nu': 0.004,
             'mass_split': 'equal'}
@@ -306,6 +314,7 @@ def test_step_above_hierarchy_floor_is_accepted():
     assert a.var_pars == ['Omega_c', 'm_nu']
 
 
+@requires_derivkit
 def test_derivkit_step_below_floor_raises():
     # The case a `Sum - 2*step` rule misses: derivkit never reads `step`, and its
     # 1e-3 default floor on the half-width reaches 0.059 from a 0.06 fiducial.
@@ -316,6 +325,7 @@ def test_derivkit_step_below_floor_raises():
         make_analyze(['Omega_c', 'm_nu'], pars, extra_fisher_cfg=cfg)
 
 
+@requires_derivkit
 def test_inverted_floor_guards_ccl_silent_window():
     # Sum = 0.0995 with derivkit reaches 0.0985: CCL does not raise there, it returns
     # a negative lightest mass. Enforcing the true floor is the whole point.
