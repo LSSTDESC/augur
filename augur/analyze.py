@@ -17,6 +17,163 @@ logger = logging.getLogger(__name__)
 mnu_norm = 93.14  # eV
 
 
+def _sum_mnu(m_nu):
+    """
+    Total neutrino mass, whatever convention the fiducial cosmology stores it in.
+
+    CCL's five mass splits come in two shapes: `sum`, `normal`, `inverted`, `equal`
+    and `single` take a scalar that *is* the total mass, while `list` takes one mass
+    per species. Summing covers both, so this never has to read `mass_split` and
+    cannot fall out of step with the value passed to `CCLFactory`.
+
+    Parameters:
+    -----------
+    m_nu : float or array_like
+        Neutrino mass entry of the fiducial cosmology, as `ccl.Cosmology.to_dict`
+        returns it.
+
+    Returns:
+    --------
+    sum_mnu : float
+        Sum of the neutrino masses in eV.
+    """
+    return float(np.sum(np.atleast_1d(m_nu)))
+
+
+# Varied parameters that change the total neutrino mass. A lightest-mass
+# parametrization would register its own parameter and add it here.
+NEUTRINO_MASS_PARS = frozenset({'m_nu'})
+
+
+def _dsum_dpar(par):
+    """
+    Return the derivative of the total neutrino mass with respect to a varied parameter.
+
+    Parameters:
+    -----------
+    par : str
+        Name of the varied parameter, one of `NEUTRINO_MASS_PARS`.
+
+    Returns:
+    --------
+    dsum_dpar : float
+        dSum(m_nu)/dpar.
+    """
+    if par == 'm_nu':
+        # Every scalar split stores the total mass itself, so this is 1 by
+        # definition. 'list' never reaches here: its masses cannot be varied.
+        return 1.0
+    raise ValueError(f'No derivative of the total neutrino mass with respect to {par} '
+                     f'is defined. Only {sorted(NEUTRINO_MASS_PARS)} change it.')
+
+
+def _dOm_dpars_from_neutrinos(var_pars, pars_fid):
+    """
+    Return dOmega_m/dparameter for every varied parameter the neutrinos couple to.
+
+    Massive neutrinos contribute Omega_nu = Sum(m_nu)/(93.14 h^2), so Omega_m depends
+    on the masses and, separately, on h. The h dependence is there whenever the
+    neutrinos are massive -- holding the masses fixed does not remove it.
+
+    Parameters:
+    -----------
+    var_pars : list of str
+        Names of the varied parameters, in Fisher-matrix order.
+    pars_fid : dict
+        Fiducial parameters. `h` is required if the neutrinos are massive; `get_Om`
+        raises the informative error for its absence before this is reached.
+
+    Returns:
+    --------
+    dOm : dict
+        Maps each varied parameter that Omega_m depends on through the neutrinos to
+        dOmega_m/dparameter. Empty for massless neutrinos.
+    """
+    sum_mnu = _sum_mnu(pars_fid.get('m_nu', 0.0))
+    if sum_mnu <= 0.0:
+        return {}
+    h = pars_fid['h']
+    dOm = {par: _dsum_dpar(par)/(h*h*mnu_norm)
+           for par in var_pars if par in NEUTRINO_MASS_PARS}
+    if 'h' in var_pars:
+        dOm['h'] = -2.0 * sum_mnu / (h*h*h*mnu_norm)
+    return dOm
+
+
+def _neutrino_mass_floor(mass_split):
+    """
+    Return the smallest total neutrino mass a mass split admits, or None if unknown.
+
+    `normal` and `inverted` are limited by the oscillation splittings (lightest species
+    massless); the degenerate splits only by positivity, so their floor is zero. CCL
+    enforces neither reliably: its `inverted` guard admits totals ~1.5 meV too low, and
+    for the degenerate splits it silently clamps negative totals to zero, so the theory
+    is flat below zero (https://github.com/LSSTDESC/CCL/issues/1324). The floor is
+    therefore built from CCL's oscillation constants here instead of delegating to it.
+
+    Parameters:
+    -----------
+    mass_split : str or None
+        CCL mass split. None and `list` (no single total to step) give None.
+
+    Returns:
+    --------
+    floor : float or None
+        Smallest physical Sum(m_nu) in eV, or None if it cannot be determined.
+    """
+    c = ccl.physical_constants
+    if mass_split == 'normal':
+        return np.sqrt(c.DELTAM12_sq) + np.sqrt(c.DELTAM13_sq_pos)
+    if mass_split == 'inverted':
+        # Lightest (m3) vanishes: m1^2 = |DELTAM13_sq_neg|, m2^2 = m1^2 + DELTAM12_sq.
+        d13 = abs(c.DELTAM13_sq_neg)
+        return np.sqrt(d13) + np.sqrt(d13 + c.DELTAM12_sq)
+    if mass_split in ('equal', 'single', 'sum'):
+        # CCL silently clamps a negative total to zero here, see LSSTDESC/CCL#1324.
+        return 0.0
+    return None
+
+
+def _derivative_probe_drop(method, step, derivative_args, x0, par=None):
+    """
+    Return how far below x0 the configured derivative method samples.
+
+    Parameters:
+    -----------
+    method : str
+        Derivative method: `5pt_stencil`, `numdifftools` or `derivkit`.
+    step : float
+        Configured step size, in the units the method uses.
+    derivative_args : dict
+        Extra keyword arguments for the method.
+    x0 : float
+        Pivot value of the parameter.
+    par : str, optional
+        Name of the parameter, used when `base_abs` is given per parameter.
+
+    Returns:
+    --------
+    drop : float
+        Distance below x0 of the lowest sample.
+    """
+    if 'derivkit' in method:
+        # derivkit never reads `step`. Its adaptive grid is Chebyshev nodes on
+        # [x0 - h, x0 + h] with h from its own spacing rule, so reuse that rule
+        # rather than restating it here. augur's defaults are '1%' and 1e-3.
+        from derivkit.derivatives.adaptive.spacing import resolve_spacing
+        base_abs = derivative_args.get('base_abs', 1.e-3)
+        if isinstance(base_abs, dict):
+            # Per-parameter floors: use the one this parameter's column is built with.
+            base_abs = base_abs.get(par, base_abs.get('default', 1.e-3))
+        return resolve_spacing(derivative_args.get('spacing', '1%'), x0, float(base_abs))
+    # five_pt_stencil evaluates at x0 - 2h. numdifftools' reach depends on the
+    # `method` and `order` in `derivative_args` (a `step` there is a TypeError, since
+    # it is already passed): the default central difference only reaches x0 - h,
+    # `backward` reaches x0 - 2h, and central `order=6` x0 - 4h. The same 2h margin
+    # is therefore conservative for the default and too small for order >= 6.
+    return 2.0 * step
+
+
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
                  norm_step=False):
@@ -96,6 +253,8 @@ class Analyze(object):
         self._unpack_gaussian_priors()
         self._unpack_norm_step()
         self._unpack_derivative_method()
+        self._validate_neutrino_fiducial()
+        self._validate_neutrino_step()
 
     def _unpack_transformations(self):
         """
@@ -205,6 +364,7 @@ class Analyze(object):
         if 'parameters' in self.config.keys():
             self.var_pars = list(self.config['parameters'].keys())
             self._validate_amplitude_in_var_pars()
+            self._validate_neutrino_var_pars()
             for var in self.var_pars:
                 _val = self.config['parameters'][var]
                 if isinstance(_val, list):
@@ -218,6 +378,7 @@ class Analyze(object):
         elif 'var_pars' in self.config.keys():
             self.var_pars = self.config['var_pars']
             self._validate_amplitude_in_var_pars()
+            self._validate_neutrino_var_pars()
             for var in self.var_pars:
                 if var in self.pars_fid.keys():
                     self.x.append(self.pars_fid[var])
@@ -229,6 +390,70 @@ class Analyze(object):
         # Cast to numpy array (this will be done later anyway)
         self.x = np.array(self.x).astype(np.float64)
         self.par_bounds = np.array(self.par_bounds)
+
+    def _validate_neutrino_fiducial(self):
+        """
+        Check that the fiducial neutrino masses are not negative.
+
+        CCL accepts negative masses without raising: it clamps a negative total to zero
+        (LSSTDESC/CCL#1324) and drops a negative `list` entry, so its cosmology no
+        longer matches `Sum(m_nu)` of the fiducial. Raises ValueError on any negative
+        mass; warns if a `list` entry is zero, which CCL drops as a massless species.
+        """
+        masses = np.atleast_1d(self.pars_fid.get('m_nu', 0.0)).astype(float)
+        if np.any(masses < 0.0):
+            raise ValueError("Fiducial m_nu has negative neutrino masses "
+                             f"({self.pars_fid['m_nu']}); masses must be non-negative.")
+        if np.ndim(self.pars_fid.get('m_nu', 0.0)) > 0 and np.any(masses == 0.0):
+            warnings.warn(f"Fiducial m_nu {self.pars_fid['m_nu']} has a zero mass; CCL treats "
+                          "it as a massless species and drops it from the massive ones.")
+
+    def _validate_neutrino_var_pars(self):
+        """
+        Check that varying the neutrino mass is compatible with the fiducial cosmology.
+
+        Raises ValueError if `m_nu` is varied while the fiducial carries one mass per
+        species (`mass_split: 'list'`): the pivot vector holds one scalar per parameter,
+        so individual masses cannot be varied, only the total under a scalar split.
+        """
+        if 'm_nu' not in self.var_pars:
+            return
+        if np.ndim(self.pars_fid.get('m_nu', 0.0)) > 0:
+            raise ValueError(
+                "m_nu is listed in var_pars but the fiducial cosmology carries one mass "
+                f"per species ({self.pars_fid['m_nu']}), as mass_split='list' does. Vary "
+                "the total mass with a scalar split -- equal, normal, inverted or single "
+                "-- or drop m_nu from var_pars and keep the masses fixed."
+            )
+
+    def _validate_neutrino_step(self):
+        """
+        Check that the derivative will not step below the smallest physical neutrino mass.
+
+        See `_neutrino_mass_floor`. Without this, `normal` aborts mid-run, `inverted`
+        silently uses a negative mass, and the degenerate splits silently halve the
+        derivative. Skipped if the fiducial `mass_split` is missing (unknown).
+        """
+        if 'm_nu' not in self.var_pars:
+            return
+        floor = _neutrino_mass_floor(self.pars_fid.get('mass_split'))
+        if floor is None:
+            return
+        ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
+        sum_fid = float(self.x[ind_nu])
+        drop = _derivative_probe_drop(self.derivative_method, self.step_size,
+                                      self.derivative_args, sum_fid, par='m_nu')
+        if self.norm_step and (self.norm is not None) and 'derivkit' not in \
+                self.derivative_method:
+            # The step is applied in normalised coordinates, so scale it back.
+            drop *= float(self.norm[ind_nu])
+        if sum_fid - drop < floor:
+            raise ValueError(
+                f"mass_split='{self.pars_fid['mass_split']}' admits no total neutrino "
+                f"mass below {floor:.5f} eV, but the {self.derivative_method} derivative "
+                f"samples down to {sum_fid - drop:.5f} eV from a fiducial of "
+                f"{sum_fid:.5f} eV. Raise the fiducial m_nu or shrink the step."
+            )
 
     def _validate_amplitude_in_var_pars(self):
         """
@@ -325,7 +550,7 @@ class Analyze(object):
             if 'Omega_b' in self.pars_fid.keys():
                 Om += self.pars_fid['Omega_b']
             if 'm_nu' in self.pars_fid.keys():
-                m_nu = self.pars_fid['m_nu']
+                m_nu = _sum_mnu(self.pars_fid['m_nu'])
                 if m_nu > 0.0:
                     if 'h' not in self.pars_fid.keys():
                         raise ValueError('Require h to be specified \
@@ -386,14 +611,12 @@ class Analyze(object):
                     ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
                     J[ind_c][ind_b] = -1.0
 
-                if 'm_nu' in self.var_pars:
-                    mnu = self.pars_fid['m_nu']
-                    h = self.pars_fid['h']
-                    ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                    J[ind_c][ind_nu] = -1.0/(h*h*mnu_norm)
-                    if 'h' in self.var_pars:
-                        ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                        J[ind_c][ind_h] = 2.0 * mnu / (h*h*h*mnu_norm)
+                # Omega_c = Omega_m - Omega_b - Omega_nu, so every neutrino-sector
+                # entry of this row is -dOmega_m/dpar.
+                for par, dOm_dpar in _dOm_dpars_from_neutrinos(self.var_pars,
+                                                               self.pars_fid).items():
+                    ind_par = np.where(np.array(self.var_pars) == par)[0][0]
+                    J[ind_c][ind_par] = -dOm_dpar
 
                 logger.info('Replaced Omega_c with Omega_m in Jacobian')
 
@@ -418,14 +641,12 @@ class Analyze(object):
                     if 'Omega_b' in self.var_pars:
                         ind_b = np.where(np.array(self.var_pars) == 'Omega_b')[0][0]
                         J[ind_sigma8][ind_b] = -0.5 * sigma_8 / Om
-                    if 'm_nu' in self.var_pars:
-                        mnu = self.pars_fid['m_nu']
-                        h = self.pars_fid['h']
-                        ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
-                        J[ind_sigma8][ind_nu] = -0.5 * sigma_8 / Om * (1.0/(h*h*mnu_norm))
-                        if 'h' in self.var_pars:
-                            ind_h = np.where(np.array(self.var_pars) == 'h')[0][0]
-                            J[ind_sigma8][ind_h] = sigma_8 * mnu / (Om * h**3 * mnu_norm)
+                    # Same derivatives, carried into sigma8 = S8 sqrt(0.3/Omega_m)
+                    # by the one chain-rule factor below.
+                    for par, dOm_dpar in _dOm_dpars_from_neutrinos(self.var_pars,
+                                                                   self.pars_fid).items():
+                        ind_par = np.where(np.array(self.var_pars) == par)[0][0]
+                        J[ind_sigma8][ind_par] = -0.5 * sigma_8 / Om * dOm_dpar
                 logger.info("Replaced sigma8 with S8 in Jacobian")
             self.J = J
 
