@@ -165,7 +165,6 @@ def setup_cluster_sacc_tracers_for_tjpcov(S, config):
         # SACC tracer type 'bin_richness' with (log10_lambda_min, log10_lambda_max)
         S.add_tracer("bin_richness", tracer_name, log_lam_min, log_lam_max)
 
-    # Add survey metadata tracer
+    # Add survey metadata tracer, sacc takes degrees^2
     survey_area_deg2 = float(cluster_cfg.get('survey_area', 4000.0))
-    survey_area_sr = survey_area_deg2 * (np.pi / 180.0) ** 2  # Convert deg^2 to steradians
-    S.add_tracer("survey", "mock_survey", survey_area_sr)
+    S.add_tracer("survey", "mock_survey", survey_area_deg2)

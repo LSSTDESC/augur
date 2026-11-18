@@ -34,8 +34,7 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
 
     Note:
     -----
-    The input number_densities are #/arcmin. The output noise has no units.
-    The output number density is in arcmin^-2.
+    The input number_densities are #/arcmin^2.
     """
     if 'src' not in tracer_name and 'lens' not in tracer_name:
         # Not a galaxy source/lens tracer; may be cluster or other (skip gracefully).
@@ -61,17 +60,26 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     tracer_bin = int(tracer_bin_str)
 
     norm = dict()
-    if 'src' in tracer_name:
-        nz_all['src'] = np.array(nz_all['src'])
-        norm['src'] = np.sum(nz_all['src'], axis=1)/np.sum(nz_all['src'])
+    keyw, section = ('sources', 'src') if 'src' in tracer_name else ('lenses', 'lens')
+    ndens = parse_array(config[keyw]['ndens'])
+    nbins = len(nz_all[keyw])
+    if ndens.ndim == 0:
+        # Split between the tomographic bins
+        if ndens <= 0:
+            raise ValueError(f"ndens for {keyw} must be positive.")
+        nz_all[keyw] = np.array(nz_all[keyw])
+        norm[keyw] = np.sum(nz_all[keyw], axis=1)/np.sum(nz_all[keyw])
+        ndens = float(ndens * norm[tracer_bin])
+    elif ndens.ndim == (nbins,):
+        # Individually-defined number densities for each tomographic bin
+        if not np.all(ndens > 0):
+            raise ValueError(f"ndens for {keyw} must be positive.")
+        ndens = float(ndens[tracer_bin])
+    else:
+        raise ValueError(
+            f"ndens for {keyw} must be a scalar or 1D array of length {nbins}."
+        )
 
-        ndens = config['sources']['ndens']
-        ndens *= norm['src'][tracer_bin]
-    elif 'lens' in tracer_name:
-        nz_all['lens'] = np.array(nz_all['lens'])
-        norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
-        ndens = config['lenses']['ndens']
-        ndens *= norm['lens'][tracer_bin]
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
 
     if 'src' in tracer_name:
