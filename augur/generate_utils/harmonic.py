@@ -75,7 +75,7 @@ def add_harmonic_two_point(config, S, sources, dndz, cosmo):
             "applying them to the data vector."
         )
 
-    bandpower = config['general'].get('bandpower_windows', 'None')
+    bandpower = config['general'].get('bandpower_windows', 'None').lower()
 
     for key in stat_cfg:
         tracer_combs = stat_cfg[key]['tracer_combs']
@@ -116,7 +116,7 @@ def add_harmonic_two_point(config, S, sources, dndz, cosmo):
                 ells_here = ells
 
             # Bandpower windows
-            if bandpower == 'TopHat':
+            if bandpower == 'tophat':
                 ells_aux = np.arange(0, np.max(ells_here) + 1)
                 wgt = np.zeros((len(ells_aux), len(ells_here)))
                 for i in range(len(ells_here)):
@@ -125,7 +125,7 @@ def add_harmonic_two_point(config, S, sources, dndz, cosmo):
                 win = sacc.BandpowerWindow(ells_aux, wgt)
                 S.add_ell_cl(key, tr1, tr2,
                              ells_here, np.zeros(len(ells_here)), window=win)
-            elif bandpower == 'NaMaster':
+            elif bandpower == 'namaster':
                 raise NotImplementedError(
                     "NaMaster bandpower windows not yet implemented in Augur generation."
                 )
