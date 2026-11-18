@@ -1,6 +1,7 @@
 import ast
 import types
 import numpy as np
+from pathlib import Path
 
 
 # Restricted namespace for safe evaluation of array expressions in configs.
@@ -106,3 +107,20 @@ def read_fisher_from_file(base):
         return fisher, fiducials
     except Exception as e:
         raise RuntimeError(f"Could not read files at {base}. Exception: {e}")
+
+
+def _check_path_exists(path):
+    """
+    Check if a given path exists.
+    Creates it if it does not exist, and raises an error if the path is invalid.
+
+    Parameters
+    ----------
+    path : str or Path
+        The path to check.
+    """
+    if not Path(path).exists():
+        try:
+            Path(path).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise FileNotFoundError(f"The specified path does not exist: {path}") from e

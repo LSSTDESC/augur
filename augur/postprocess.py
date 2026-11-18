@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import EllipseCollection
 from astropy.table import Table
 from scipy.stats import norm, chi2
-from augur.utils.config_io import parse_config
+from augur.utils.config_io import _check_path_exists, parse_config
 import os
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def postprocess(config):
             if i == 0:
                 ax[j, i].set_ylabel(j_key)
     plt.tight_layout()
-    f.savefig(pconfig["triangle_plot"])
+    f.savefig(_check_path_exists(pconfig["triangle_plot"]))
     if "pairplots" in pconfig.keys():
         pairplots = pconfig["pairplots"]
         npairplots = int(len(pairplots)/2)
@@ -143,7 +143,7 @@ def postprocess(config):
             ax.set_xlabel(pair0)
             ax.set_ylabel(pair1)
             plt.tight_layout()
-            f.savefig(os.path.join(outdir, f"{pair0}--{pair1}.pdf"))
+            f.savefig(_check_path_exists(os.path.join(outdir, f"{pair0}--{pair1}.pdf")))
 
     # w0 -- wa plots are always made
     # iw = np.where(keys == "w0")[0][0]
@@ -176,7 +176,7 @@ def postprocess(config):
         fisher_table.add_row([cl, FOM, FOM2, sig_w0, sig_wa])
 
     # Write the table to a LaTeX file
-    fisher_table.write(pconfig["latex_table"], format="latex", overwrite=True)
+    fisher_table.write(_check_path_exists(pconfig["latex_table"]), format="latex", overwrite=True)
 
 
 def draw_fisher_ellipses(ax, inv_F, facecolors, edgecolors, linestyles, linewidth,

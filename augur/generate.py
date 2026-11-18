@@ -36,7 +36,7 @@ except ImportError:
 from firecrown.likelihood.two_point import TwoPoint
 from firecrown.likelihood.gaussian import ConstGaussian
 from firecrown.parameters import ParamsMap
-from augur.utils.config_io import parse_config
+from augur.utils.config_io import _check_path_exists, parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
 from augur.utils.firecrown_interface import create_modeling_tools
 from augur.utils.firecrown_interface import load_likelihood_from_yaml
@@ -247,7 +247,7 @@ def _sacc_to_disk(S, *, hint_path=None, prefix="augur_sacc_",
         return hint_path
     tmp_dir = tempfile.mkdtemp(prefix=prefix)
     path = os.path.join(tmp_dir, filename)
-    S.save_fits(path, overwrite=True)
+    S.save_fits(_check_path_exists(path), overwrite=True)
     logger.debug("Wrote temporary SACC to %s", path)
     return path
 
@@ -712,7 +712,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
     # ── 6. Write SACC ───────────────────────────────────────────────── #
     if write_sacc:
         logger.info("Writing SACC to %s", config['fiducial_sacc_path'])
-        S.save_fits(config['fiducial_sacc_path'], overwrite=True)
+        S.save_fits(_check_path_exists(config['fiducial_sacc_path']), overwrite=True)
 
     # ── 7. Re-build likelihood with scale-cut filters ───────────────── #
     lk = _build_final_lk(
