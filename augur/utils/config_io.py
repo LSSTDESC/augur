@@ -124,3 +124,4 @@ def _check_path_exists(path):
             Path(path).mkdir(parents=True, exist_ok=True)
         except Exception as e:
             raise FileNotFoundError(f"The specified path does not exist: {path}") from e
+    return path
