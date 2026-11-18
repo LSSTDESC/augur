@@ -60,8 +60,8 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     tracer_bin = int(tracer_bin_str)
 
     norm = dict()
-    keyw, section = ('sources', 'src') if 'src' in tracer_name else ('lenses', 'lens')
-    ndens = parse_array(config[keyw]['ndens'])
+    keyw, section = ('src', 'sources') if 'src' in tracer_name else ('lens', 'lenses')
+    ndens = parse_array(config[section]['ndens'])
     nbins = len(nz_all[keyw])
     if ndens.ndim == 0:
         # Split between the tomographic bins
@@ -77,7 +77,7 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
         ndens = float(ndens[tracer_bin])
     else:
         raise ValueError(
-            f"ndens for {keyw} must be a scalar or 1D array of length {nbins}."
+            f"ndens for {section} must be a scalar or 1D array of length {nbins}."
         )
 
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
