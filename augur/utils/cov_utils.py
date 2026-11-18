@@ -67,8 +67,8 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
         # Split between the tomographic bins
         if ndens <= 0:
             raise ValueError(f"ndens for {keyw} must be positive.")
-        nz_all[keyw] = np.array(nz_all[keyw])
-        norm[keyw] = np.sum(nz_all[keyw], axis=1)/np.sum(nz_all[keyw])
+        nz = np.array(nz_all[keyw])
+        norm = np.sum(nz, axis=1)/np.sum(nz)
         ndens = float(ndens * norm[tracer_bin])
     elif ndens.ndim == (nbins,):
         # Individually-defined number densities for each tomographic bin
