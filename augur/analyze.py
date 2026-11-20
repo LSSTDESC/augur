@@ -176,7 +176,7 @@ def _derivative_probe_drop(method, step, derivative_args, x0, par=None):
 
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
-                 norm_step=False):
+                 norm_step=None):
         """
         Run numerical derivatives of a likelihood to obtain a Fisher matrix estimate.
 
@@ -193,9 +193,10 @@ class Analyze(object):
         req_params: dict
             Dictionary containing the required parameters for the likelihood. Required if a
             likelihood object is passed.
-        norm_step : bool
+        norm_step : bool or None
             If `True` it internally normalizes the step size using the sampling bounds in order
-            to determine the samples.
+            to determine the samples. Not applied to derivkit. If None, the config's
+            `norm_step` is used (default False).
 
         Returns:
         --------
@@ -223,7 +224,7 @@ class Analyze(object):
                 self._unpack_ccl_accuracy_parameters(config)
 
         self.lk, self.tools = likelihood, tools
-        self.req_params, self.norm_step = req_params, norm_step
+        self.req_params = req_params
         self.data_fid = self.lk.get_data_vector()
         # Get the fiducial cosmological parameters
         self.pars_fid = tools.get_ccl_cosmology().to_dict()
@@ -231,6 +232,8 @@ class Analyze(object):
 
         # Load the relevant section of the configuration file
         self.config = config['fisher']
+        self.norm_step = bool(self.config.get('norm_step', False) if norm_step is None
+                              else norm_step)
 
         # Initialize pivot point
         self.x, self.par_bounds, self.gpriors = [], [], []
@@ -303,8 +306,44 @@ class Analyze(object):
         # derivative method
         self.derivative_method = self.config.get('derivative_method', 'numdifftools')
         self.derivative_args = self.config.get('derivative_args', {})
-        # step size
-        self.step_size = float(self.config.get('step', 0.01))
+        # step size: a number, or a mapping from parameter name to step (see `_steps`)
+        step = self.config.get('step', 0.01)
+        self.step_size = step if isinstance(step, dict) else float(step)
+        self._steps()  # check the step setting now rather than at the first derivative
+
+    def _steps(self, step=None, method=None):
+        """
+        Return the derivative step of each varied parameter, in `var_pars` order.
+
+        `step` (the config's if None) is a number for every parameter, or a mapping from
+        parameter name to step whose optional `default` (else 0.01) covers the rest. Under
+        `norm_step` the steps are fractions of the bounds width. None for derivkit, which
+        samples as `derivative_args` says and does not support per-parameter steps yet.
+        """
+        step = self.step_size if step is None else step
+        if 'derivkit' in (method or self.derivative_method):
+            if isinstance(step, dict):
+                raise ValueError('Per-parameter steps are not supported for derivkit at this '
+                                 'time. Set its sampling in derivative_args instead.')
+            return None
+        if not isinstance(step, dict):
+            step = {'default': step}
+        unknown = sorted(set(step) - set(self.var_pars) - {'default'})
+        if unknown:
+            raise ValueError(f'step names {unknown}, which are not in var_pars {self.var_pars}.')
+        default = step.get('default', 0.01)
+        steps = [float(step.get(par, default)) for par in self.var_pars]
+        if not all(np.isfinite(h) and h > 0 for h in steps):
+            raise ValueError(f'step must be positive and finite; got {step}.')
+        # 0.01 suits O(1) parameters but steps A_s ~ 2e-9 through zero.
+        width = self.norm if self.norm_step else np.ones(len(steps))
+        crossing = [par for j, par in enumerate(self.var_pars)
+                    if 'default' not in step and par not in step
+                    and 0 < abs(self.x[j]) <= 2 * steps[j] * width[j]]
+        if crossing:
+            warnings.warn(f'The default step of {default} samples {crossing} at or beyond '
+                          f'zero; give them their own entry in `step`.')
+        return steps
 
     def _unpack_ccl_accuracy_parameters(self, config):
         """
@@ -344,6 +383,8 @@ class Analyze(object):
         if (len(self.par_bounds) < 1) & (self.norm_step):
             self.norm_step = False
             warnings.warn('Parameter bounds not provided -- the step will not be normalized')
+        if self.norm_step and len(self.par_bounds) != len(self.var_pars):
+            raise ValueError('norm_step needs [min, fiducial, max] for every varied parameter.')
         # Normalize the pivot point given the sampling region
         if self.norm_step:
             self.norm = np.array(self.par_bounds[:, 1]).astype(np.float64) - \
@@ -441,7 +482,9 @@ class Analyze(object):
             return
         ind_nu = np.where(np.array(self.var_pars) == 'm_nu')[0][0]
         sum_fid = float(self.x[ind_nu])
-        drop = _derivative_probe_drop(self.derivative_method, self.step_size,
+        steps = self._steps()
+        step = None if steps is None else steps[ind_nu]
+        drop = _derivative_probe_drop(self.derivative_method, step,
                                       self.derivative_args, sum_fid, par='m_nu')
         if self.norm_step and (self.norm is not None) and 'derivkit' not in \
                 self.derivative_method:
@@ -745,12 +788,9 @@ class Analyze(object):
         method : str
             Method to compute derivatives, currently only `5pt_stencil`, `numdifftools`
             or `derivkit` are allowed.
-        step : float
-            Step size for numerical differentiation
+        step : float or dict
+            Step size for numerical differentiation, overriding the config's (see `_steps`).
         """
-
-        if step is None:
-            step = self.step_size
         if method is None:
             method = self.derivative_method
         # Compute the derivatives with respect to the parameters in var_pars at x
@@ -759,17 +799,20 @@ class Analyze(object):
                 x_here = (self.x - np.array(self.par_bounds[:, 0]).astype(np.float64)) \
                     * 1/self.norm
             elif self.norm_step and 'derivkit' in method:
-                warnings.warn('Using derivkit with norm_step=True not recommended.\
-                               Forcing norm_step to False and continuing computation.')
+                warnings.warn('norm_step is not applied to derivkit. Forcing norm_step to False '
+                              'and continuing.')
                 self.norm_step = False
                 x_here = self.x
             else:
                 x_here = self.x
+            steps = self._steps(step, method)
+            if steps is not None:
+                logger.info('Derivative steps (%s): %s', method, dict(zip(self.var_pars, steps)))
 
             if '5pt_stencil' in method:
                 self.derivatives = five_pt_stencil(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                    self.req_params, donorm=self.norm_step),
-                                                   x_here, h=step)
+                                                   x_here, h=steps)
             elif 'numdifftools' in method:
                 import numdifftools as nd
                 if kwargs != {}:
@@ -781,7 +824,7 @@ class Analyze(object):
                 jacobian_calc = nd.Jacobian(lambda y: self.f(y, self.var_pars, self.pars_fid,
                                                              self.req_params,
                                                              donorm=self.norm_step),
-                                            step=step,
+                                            step=np.array(steps),
                                             **kwargs)
                 self.derivatives = jacobian_calc(x_here).T
             elif 'derivkit' in method:
@@ -790,7 +833,7 @@ class Analyze(object):
                     logger.info('Overwriting config-specified derivkit kwargs')
                     kwargs = kwargs
                 elif self.derivative_args != {}:
-                    kwargs = self.derivative_args
+                    kwargs = dict(self.derivative_args)  # popped below
                 else:
                     logger.info('Using default Augur derivkit kwargs')
                     kwargs = {'method': 'adaptive',

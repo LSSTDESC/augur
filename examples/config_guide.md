@@ -497,9 +497,21 @@ stepping. A scalar value can also be given as the fiducial.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `step` | `float` | `0.01` | Step size for numerical differentiation. |
+| `step` | `float` or `dict` | `0.01` | Step size for numerical differentiation: one number for every parameter, or a mapping from parameter name to step (see below). |
+| `norm_step` | `bool` | `False` | If `true`, steps are fractions of each parameter's bounds width (max − min), so every varied parameter needs `[min, fiducial, max]`. Not applied to `'derivkit'`. The `norm_step` argument of `Analyze` overrides this. |
 | `derivative_method` | `str` | `'numdifftools'` | Method for numerical derivatives. Options: `'5pt_stencil'`, `'numdifftools'`, `'derivkit'`. |
 | `derivative_args` | `dict` | `{}` | Extra keyword arguments passed to the derivative calculator (used with `'derivkit'`). |
+
+```yaml
+fisher:
+    step: {A_s: 2.e-11, wa: 0.05}          # the rest get the default
+    step: {default: 1.e-3, A_s: 2.e-11}    # with a default of your own
+```
+
+Parameters a mapping leaves out get `0.01`, and Augur warns if that would step a
+parameter through zero (for example `A_s`). Per-parameter steps are not supported for
+`'derivkit'` at this time: a mapping raises an error, and a single `step` is ignored,
+since derivkit samples as `derivative_args` says.
 
 ##### Using `derivkit`
 

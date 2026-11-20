@@ -22,6 +22,8 @@ def five_pt_stencil(f, x0, h=1e-4):
         Reference point at which to compute the derivative of f.
         It can be a float, a list (with len = Ncomponents) or an
         np.ndarray with shape (Ncomponents).
+    h : float or array_like
+        Step size: one for every component of x0, or one per component.
 
     Returns:
     --------
@@ -33,11 +35,12 @@ def five_pt_stencil(f, x0, h=1e-4):
     if not callable(f):
         raise ValueError("f must be callable")
 
-    if not isinstance(h, (int, float)) or h <= 0:
-        raise ValueError("h must be a positive number")
+    h = np.asarray(h, dtype=np.float64)
+    if h.ndim > 1 or not np.all(np.isfinite(h) & (h > 0)):
+        raise ValueError("h must be a positive number, or one per component of x0")
 
-    if h < 1e-12:
-        warnings.warn("Step size h=%g is very small, may cause numerical instability", h)
+    if np.any(h < 1e-12):
+        warnings.warn(f"Step size h={h} is very small, may cause numerical instability")
 
     # Convert x0 to numpy array if needed
     if isinstance(x0, list):
@@ -52,7 +55,7 @@ def five_pt_stencil(f, x0, h=1e-4):
         # Evaluate function at central point first
         f0 = f(x0)
         if not np.isfinite(f0).all():
-            warnings.warn("Function evaluation at x0 returns non-finite values: %s", f0)
+            warnings.warn(f"Function evaluation at x0 returns non-finite values: {f0}")
     except Exception as e:
         raise RuntimeError(f"Function evaluation failed at x0: {e}")
 
@@ -67,13 +70,13 @@ def five_pt_stencil(f, x0, h=1e-4):
             # Check for non-finite values
             for val, label in [(fm2, 'x0-2h'), (fm1, 'x0-h'), (fp1, 'x0+h'), (fp2, 'x0+2h')]:
                 if not np.isfinite(val).all():
-                    warnings.warn("Function evaluation at %s returns non-finite values: %s",
-                                  label, val)
+                    warnings.warn(f"Function evaluation at {label} returns non-finite "
+                                  f"values: {val}")
 
             der = 1./(12.*h)*(fm2 - 8.*fm1 + 8.*fp1 - fp2)
 
             if not np.isfinite(der).all():
-                warnings.warn("Derivative calculation produced non-finite values: %s", der)
+                warnings.warn(f"Derivative calculation produced non-finite values: {der}")
 
             return der
 
@@ -83,7 +86,7 @@ def five_pt_stencil(f, x0, h=1e-4):
     elif isinstance(x0, np.ndarray):
         if x0.ndim == 1:
             try:
-                # Vector case - create perturbation matrices
+                # Vector case - create perturbation matrices (row i moves x_i by h_i)
                 n_components = len(x0)
                 xp2 = x0 + 2.*h*np.identity(n_components, dtype=np.float64)[:, None]
                 xm2 = x0 - 2.*h*np.identity(n_components, dtype=np.float64)[:, None]
@@ -105,9 +108,10 @@ def five_pt_stencil(f, x0, h=1e-4):
                 for vals, label in [(fm2_vals, 'x-2h'), (fm1_vals, 'x-h'),
                                     (fp1_vals, 'x+h'), (fp2_vals, 'x+2h')]:
                     if not np.isfinite(vals).all():
-                        warnings.warn("Function evaluations at %s contain non-finite values", label)
+                        warnings.warn(f"Function evaluations at {label} contain non-finite values")
 
-                der = 1./(12.*h)*(fm2_vals - 8.*fm1_vals + 8.*fp1_vals - fp2_vals)
+                diff = fm2_vals - 8.*fm1_vals + 8.*fp1_vals - fp2_vals
+                der = 1./(12.*h.reshape(h.shape + (1,) * (diff.ndim - 1)))*diff
 
                 if not np.isfinite(der).all():
                     warnings.warn("Derivative calculation produced non-finite values")
