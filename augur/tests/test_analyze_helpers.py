@@ -1,9 +1,11 @@
 import importlib.util
+import os
 import warnings
 import numpy as np
 import pyccl as ccl
 import pytest
 
+from augur.utils.config_io import write_fisher_to_file
 from augur.analyze import (Analyze, _sum_mnu, _dsum_dpar, _neutrino_mass_floor,
                            _derivative_probe_drop)
 
@@ -922,3 +924,172 @@ def test_zero_scalar_mnu_does_not_warn():
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         make_analyze(['Omega_c'], pars)
+
+
+def write_augur_fisher(tmp_path, stem, fisher, names, values):
+    """Write a Fisher matrix and parameter file the way get_fisher_matrix does."""
+    fisher_path = str(tmp_path / f'{stem}.dat')
+    fid_path = str(tmp_path / f'{stem}_pars.dat')
+    write_fisher_to_file(fisher, names, dict(zip(names, values)), fisher_path, fid_path)
+    return fisher_path, fid_path
+
+
+def random_fisher(n, seed):
+    m = np.random.default_rng(seed).normal(size=(3 * n, n))
+    return m.T @ m
+
+
+def make_external_analyze(**extra_cfg):
+    # Run parameters: Omega_c, h (cosmology) and lens0_bias (nuisance), in that order.
+    return make_analyze(['Omega_c', 'h', 'lens0_bias'], {'Omega_c': 0.25, 'h': 0.7},
+                        extra_fisher_cfg=extra_cfg, req_params={'lens0_bias': 1.5})
+
+
+def test_external_fisher_is_embedded_by_name(tmp_path):
+    a = make_external_analyze()
+    a.Fij = random_fisher(3, 0)
+    F_ext = random_fisher(2, 1)
+    paths = write_augur_fisher(tmp_path, 'ext', F_ext, ['hubble', 'Omega_c'], [0.7, 0.25])
+    a.add_external_fisher(*paths, rename={'hubble': 'h'})
+
+    expected = a.Fij.copy()
+    expected[np.ix_([1, 0], [1, 0])] += F_ext
+    assert np.allclose(a.get_combined_fisher(save_txt=False), expected)
+    assert list(a.external_fishers) == [os.path.realpath(paths[0])]
+
+
+def test_marginalized_external_matches_joint_inversion(tmp_path):
+    # Integrating out a parameter only the external has must give the same covariance
+    # as inverting the joint matrix over all four parameters.
+    a = make_external_analyze()
+    a.Fij = random_fisher(3, 2)
+    F_ext = random_fisher(3, 3)
+    paths = write_augur_fisher(tmp_path, 'ext', F_ext, ['Omega_c', 'h', 'ext_bias'],
+                               [0.25, 0.7, 2.0])
+    a.add_external_fisher(*paths, marginalize=['ext_bias'])
+
+    joint = np.zeros((4, 4))
+    joint[:3, :3] += a.Fij
+    joint[np.ix_([0, 1, 3], [0, 1, 3])] += F_ext
+    assert np.allclose(np.linalg.inv(a.get_combined_fisher(save_txt=False)),
+                       np.linalg.inv(joint)[:3, :3])
+
+
+def test_marginalizing_unconstrained_parameter_raises(tmp_path):
+    a = make_external_analyze()
+    paths = write_augur_fisher(tmp_path, 'ext', np.diag([3.0, 2.0, 0.0]),
+                               ['Omega_c', 'h', 'ext_bias'], [0.25, 0.7, 2.0])
+    with pytest.raises(ValueError, match='barely constrains'):
+        a.add_external_fisher(*paths, marginalize=['ext_bias'])
+
+
+def test_external_parameter_missing_from_run_raises(tmp_path):
+    a = make_external_analyze()
+    paths = write_augur_fisher(tmp_path, 'ext', random_fisher(2, 4), ['Omega_c', 'w0'],
+                               [0.25, -1.0])
+    with pytest.raises(ValueError, match='not parameters of this run'):
+        a.add_external_fisher(*paths)
+
+
+def test_external_must_use_the_transformed_basis(tmp_path):
+    a = make_analyze(['Omega_c', 'h'], {'Omega_c': 0.25, 'h': 0.7},
+                     extra_fisher_cfg={'transform_Omega_m': True})
+    old = write_augur_fisher(tmp_path, 'old', random_fisher(2, 5), ['Omega_c', 'h'],
+                             [0.25, 0.7])
+    with pytest.raises(ValueError, match=r"reports \['Omega_m'\] in place of \['Omega_c'\]"):
+        a.add_external_fisher(*old)
+    new = write_augur_fisher(tmp_path, 'new', random_fisher(2, 5), ['Omega_m', 'h'],
+                             [0.25, 0.7])
+    a.add_external_fisher(*new)
+
+
+def test_external_fiducial_mismatch_warns_and_adds(tmp_path):
+    a = make_external_analyze()
+    paths = write_augur_fisher(tmp_path, 'ext', random_fisher(2, 6), ['Omega_c', 'h'],
+                               [0.26, 0.7])
+    with pytest.warns(UserWarning, match='fiducial values differ'):
+        a.add_external_fisher(*paths)
+    assert len(a.external_fishers) == 1
+
+
+def test_same_external_cannot_be_added_twice(tmp_path):
+    a = make_external_analyze()
+    F_ext = random_fisher(3, 7)
+    paths = write_augur_fisher(tmp_path, 'ext', F_ext, ['Omega_c', 'h', 'ext_bias'],
+                               [0.25, 0.7, 2.0])
+    a.add_external_fisher(*paths, marginalize=['ext_bias'])
+    with pytest.raises(ValueError, match='already added'):
+        a.add_external_fisher(*paths, marginalize=['ext_bias'])
+    # A copy elsewhere, with its nuisance parameter renamed, matches on the shared entries.
+    copy = write_augur_fisher(tmp_path, 'copy', F_ext, ['Omega_c', 'h', 'other_bias'],
+                              [0.25, 0.7, 2.0])
+    with pytest.raises(ValueError, match='already added'):
+        a.add_external_fisher(*copy, marginalize=['other_bias'])
+    # A different analysis of the same parameters is accepted.
+    other = write_augur_fisher(tmp_path, 'other', random_fisher(2, 8), ['Omega_c', 'h'],
+                               [0.25, 0.7])
+    a.add_external_fisher(*other)
+    assert len(a.external_fishers) == 2
+
+
+def test_external_matching_this_run_raises(tmp_path):
+    a = make_external_analyze()
+    a.Fij = random_fisher(3, 9)
+    paths = write_augur_fisher(tmp_path, 'ext', a.Fij[:2, :2], ['Omega_c', 'h'], [0.25, 0.7])
+    a.add_external_fisher(*paths)
+    with pytest.raises(ValueError, match='matches this run'):
+        a.get_combined_fisher(save_txt=False)
+
+
+def test_own_output_and_prior_files_are_rejected(tmp_path):
+    paths = write_augur_fisher(tmp_path, 'fisher', random_fisher(3, 10),
+                               ['Omega_c', 'h', 'lens0_bias'], [0.25, 0.7, 1.5])
+    a = make_external_analyze(output=paths[0])
+    with pytest.raises(ValueError, match='output of this run'):
+        a.add_external_fisher(*paths)
+    with pytest.raises(ValueError, match='includes priors'):
+        a.add_external_fisher(paths[0] + '.with_priors', paths[1])
+
+
+def test_combined_fisher_excludes_gaussian_priors(tmp_path):
+    a = make_external_analyze(gaussian_priors={'h': 0.1})
+    a.Fij = random_fisher(3, 11)
+    a.add_gaussian_priors(save_txt=False)
+    F_ext = random_fisher(2, 12)
+    paths = write_augur_fisher(tmp_path, 'ext', F_ext, ['Omega_c', 'h'], [0.25, 0.7])
+    a.add_external_fisher(*paths)
+
+    expected = a.Fij.copy()
+    expected[:2, :2] += F_ext
+    assert np.allclose(a.get_combined_fisher(save_txt=False), expected)
+
+
+def test_shared_nuisance_parameter_warns(tmp_path):
+    a = make_external_analyze()
+    paths = write_augur_fisher(tmp_path, 'ext', random_fisher(2, 13), ['h', 'lens0_bias'],
+                               [0.7, 1.5])
+    with pytest.warns(UserWarning, match='lens0_bias'):
+        a.add_external_fisher(*paths)
+
+
+def test_external_fishers_from_config(tmp_path):
+    paths = write_augur_fisher(tmp_path, 'ext', random_fisher(3, 14),
+                               ['Omega_c', 'h', 'ext_bias'], [0.25, 0.7, 2.0])
+    spec = {'fisher': paths[0], 'fiducials': paths[1], 'marginalize': ['ext_bias']}
+    a = make_external_analyze(external_fishers=[spec])
+    assert list(a.external_fishers) == [os.path.realpath(paths[0])]
+
+
+def test_fisher_pars_use_transformed_names():
+    pars = {'Omega_c': 0.25, 'sigma8': 0.8, 'h': 0.7}
+    a = make_analyze(['Omega_c', 'sigma8', 'h'], pars,
+                     extra_fisher_cfg={'transform_Omega_m': True, 'transform_S8': True})
+    assert a.fisher_pars == ['Omega_m', 'S8', 'h']
+    assert list(a.var_pars) == ['Omega_c', 'sigma8', 'h']  # still the varied parameters
+    assert a._fisher_fid_values() == pytest.approx([0.25, a.get_S8(), 0.7])
+
+
+def test_fisher_pars_without_transforms_are_var_pars():
+    a = make_external_analyze()
+    assert a.fisher_pars == ['Omega_c', 'h', 'lens0_bias']
+    assert a._fisher_fid_values() == pytest.approx([0.25, 0.7, 1.5])

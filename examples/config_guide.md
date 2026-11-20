@@ -554,6 +554,51 @@ fisher:
 Adds $1/\sigma^2$ to the diagonal of the Fisher matrix for each specified
 parameter.
 
+#### External Fisher matrices
+
+Adds Fisher matrices from independent analyses to this run's. Each one must be in
+Augur's output format: the matrix written to `output` and the parameter file written
+to `fid_output`, usually by another Augur run. To add a matrix that Augur did not make,
+first write it in this format with
+`augur.utils.config_io.write_fisher_to_file(fisher, names, fiducials, fisher_path, fid_path)`,
+where `fiducials` maps each name to its fiducial value.
+
+```yaml
+fisher:
+    external_fishers:
+        - fisher: output/other/fisher.dat
+          fiducials: output/other/fiducials.dat
+          rename: {Om: Omega_m}                   # optional
+          marginalize: [lens0_bias, lens1_bias]   # optional
+```
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `fisher` | `str` | Path to the external Fisher matrix. |
+| `fiducials` | `str` | Path to its parameter file: a line of names, then a line of values. |
+| `rename` | `dict` | Maps external parameter names to this run's names. |
+| `marginalize` | `list` | External parameters, named after renaming, to integrate out before adding. |
+
+The same can be done in Python with
+`ao.add_external_fisher(fisher, fiducials, rename=..., marginalize=...)`. The sum is
+`ao.Fij_combined`, also returned by `ao.get_combined_fisher()` and saved to
+`{output}.combined`. It has this run's parameters in this run's order, so `fid_output`
+describes it too. It does not include the Gaussian priors.
+
+- External parameters are matched to this run's by name, after renaming, and must use
+  the parameters this run reports (`Omega_m` and `S8` when transformed). Any other
+  external parameter must be listed under `marginalize`.
+- Parameters with the same name are treated as the same parameter. A nuisance
+  parameter shared with this run gives a warning; rename it if it is a different one.
+- A warning is given if the fiducial values of shared parameters differ.
+- The analyses are assumed to be independent. A matrix that agrees with one already
+  added, or with this run's, on every parameter they share is rejected as a double
+  count. So are this run's own output and files that already contain priors or other
+  matrices (`.with_priors`, `.priors_only`, `.combined`).
+- An external matrix is given zeros for parameters it does not have, meaning it carries
+  no information on them. If that analysis held one of them fixed, the combined
+  constraints are too optimistic.
+
 #### Fisher bias
 
 Computes parameter biases from unmodeled systematics:
@@ -629,6 +674,7 @@ Running a full Augur pipeline produces the following files:
 | `{output}.derivatives` | analyze | Numerical derivatives matrix |
 | `{output}.priors_only` | analyze | Gaussian prior contribution |
 | `{output}.with_priors` | analyze | Fisher matrix + priors combined |
+| `{output}.combined` | analyze | Fisher matrix + external Fisher matrices, without priors |
 | `{fid_output}` | analyze | Fiducial parameter values |
 | `{fid_output}.biased_params` | analyze | Fisher bias on each parameter |
 | `{output}.theory_vector_biased` | analyze | Biased $C_\ell$ difference vector |

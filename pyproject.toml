@@ -31,7 +31,6 @@ dependencies = [
     "numpy>=2.0",
     "astropy",
     "matplotlib",
-    "pandas",
     "lsstdesc-crow",
     "sacc>=2.4",
     "derivkit",

@@ -10,7 +10,7 @@ import os
 logger = logging.getLogger(__name__)
 
 # prostprocess does not know about transformations, it just reads fisher file and
-# assumes var_pars is maintained. Look for pandas df?
+# assumes var_pars is maintained.
 
 # TODO: needs to be updated
 

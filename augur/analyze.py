@@ -3,11 +3,10 @@ import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
-from augur.utils.config_io import parse_config
+from augur.utils.config_io import parse_config, read_fisher_from_file, write_fisher_to_file
 from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
-import pandas as pd
 import astropy.table
 import os
 from copy import deepcopy
@@ -174,6 +173,67 @@ def _derivative_probe_drop(method, step, derivative_args, x0, par=None):
     return 2.0 * step
 
 
+def _marginalize(fisher, names, drop):
+    """
+    Integrate parameters out of a Fisher matrix (Schur complement).
+
+    Parameters:
+    -----------
+    fisher : np.ndarray
+        Fisher matrix, in the order of `names`.
+    names : list of str
+        Parameter names.
+    drop : collection of str
+        Names of the parameters to integrate out.
+
+    Returns:
+    --------
+    fisher_marg : np.ndarray
+        Fisher matrix of the remaining parameters, which keep their order.
+    names_marg : list of str
+        Names of the remaining parameters.
+    """
+    keep = [i for i, name in enumerate(names) if name not in drop]
+    gone = [i for i, name in enumerate(names) if name in drop]
+    F_gg, F_kg = fisher[np.ix_(gone, gone)], fisher[np.ix_(keep, gone)]
+    # Judge the conditioning on the correlation-like matrix, so units do not matter.
+    diag = np.sqrt(np.clip(np.diag(F_gg), 0.0, None))
+    if np.any(diag == 0.0) or np.linalg.cond(F_gg / np.outer(diag, diag)) > 1.e10:
+        raise ValueError(f'Cannot marginalize over {[names[i] for i in gone]}: the Fisher '
+                         'matrix barely constrains them. Add priors on them to it first.')
+    marg = fisher[np.ix_(keep, keep)] - F_kg @ np.linalg.solve(F_gg, F_kg.T)
+    return 0.5 * (marg + marg.T), [names[i] for i in keep]
+
+
+def _same_on_common(fisher_a, names_a, fisher_b, names_b, rtol=1.e-6):
+    """
+    Check whether two Fisher matrices agree on every entry of the parameters they share,
+    which means the same analysis would be counted twice.
+
+    Parameters:
+    -----------
+    fisher_a, fisher_b : np.ndarray
+        Fisher matrices, in the order of `names_a` and `names_b`.
+    names_a, names_b : list of str
+        Parameter names.
+    rtol : float
+        Relative tolerance of the comparison.
+
+    Returns:
+    --------
+    same : bool
+        True if they share parameters, and agree on all of those entries, which are
+        not all zero.
+    """
+    common = [name for name in names_a if name in names_b]
+    if len(common) == 0:
+        return False
+    ind_a = [names_a.index(name) for name in common]
+    ind_b = [names_b.index(name) for name in common]
+    sub_a, sub_b = fisher_a[np.ix_(ind_a, ind_a)], fisher_b[np.ix_(ind_b, ind_b)]
+    return bool(np.any(sub_a != 0.0) and np.allclose(sub_a, sub_b, rtol=rtol, atol=0.0))
+
+
 class Analyze(object):
     def __init__(self, config, likelihood=None, tools=None, req_params=None,
                  norm_step=False):
@@ -236,7 +296,7 @@ class Analyze(object):
         self.x, self.par_bounds, self.gpriors = [], [], []
         self.var_pars = self.derivatives = self.gprior_pars = None
         self.Fij = self.Fij_with_gprior = None
-        self.Fij_df = self.Fij_with_gprior_df = None
+        self.external_fishers, self.Fij_combined = {}, None
         self.biased_cls = self.bi = self.J = None
         self.norm = self.derivative_method = self.step_size = None
         self.transform_Omega_m, self.Om = False, None
@@ -250,11 +310,35 @@ class Analyze(object):
 
         self._unpack_transformations()
         self._unpack_parameters_and_var_pars()
+        self._unpack_fisher_pars()
         self._unpack_gaussian_priors()
         self._unpack_norm_step()
         self._unpack_derivative_method()
         self._validate_neutrino_fiducial()
         self._validate_neutrino_step()
+        self._unpack_external_fishers()
+
+    def _unpack_fisher_pars(self):
+        """
+        Name the parameters that the Fisher matrix and outputs are reported in:
+        `var_pars`, with Omega_m and S8 in place of Omega_c and sigma8 when those
+        transformations are on. `var_pars` keeps the varied parameters, which the
+        theory evaluations and derivatives use.
+        """
+        self.replaced_pars = {}
+        if self.transform_Omega_m:
+            self.replaced_pars['Omega_c'] = 'Omega_m'
+        if self.transform_S8:
+            self.replaced_pars['sigma8'] = 'S8'
+        self.fisher_pars = [self.replaced_pars.get(par, par) for par in (self.var_pars or [])]
+
+    def _unpack_external_fishers(self):
+        """
+        Add the external Fisher matrices listed under `external_fishers`, each given as
+        a dictionary of `add_external_fisher` arguments.
+        """
+        for spec in self.config.get('external_fishers', []):
+            self.add_external_fisher(**spec)
 
     def _unpack_transformations(self):
         """
@@ -581,6 +665,22 @@ class Analyze(object):
             self.S8 = S8
         return self.S8
 
+    def _fisher_fid_values(self):
+        """
+        Fiducial values of `fisher_pars`, as written to `fid_output`.
+
+        Returns:
+        --------
+        values : np.ndarray
+            Fiducial values, in Fisher-matrix order.
+        """
+        values = np.array(self.x, dtype=np.float64)
+        if self.transform_S8 and 'S8' in self.fisher_pars:
+            values[self.fisher_pars.index('S8')] = self.get_S8()
+        if self.transform_Omega_m and 'Omega_m' in self.fisher_pars:
+            values[self.fisher_pars.index('Omega_m')] = self.get_Om()
+        return values
+
     def Jacobian_transform(self):
         """
         Function that returns the Jacobian to transform the basis from:
@@ -887,25 +987,103 @@ class Analyze(object):
                 np.savetxt(self.config['output']+".priors_only", gprior_only)
                 np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
 
-        # Build a pandas DataFrame indexed by varied parameters (rows and columns)
-        try:
-            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior,
-                                                   index=self.var_pars,
-                                                   columns=self.var_pars
-                                                   )
-        except Exception:
-            # Fallback in case var_pars is None or sizes mismatch
-            self.Fij_with_gprior_df = pd.DataFrame(self.Fij_with_gprior)
         return self.Fij_with_gprior
 
-    def add_external_fisher(self, external_fisher, method=None, save_txt=True):
-        if self.Fij is None:
-            self.get_fisher_matrix(method=method, save_txt=save_txt)
+    def add_external_fisher(self, fisher, fiducials, rename=None, marginalize=()):
+        """
+        Add an independent Fisher matrix, saved in Augur's output format, to this run's.
+        The sum is `Fij_combined`, which has no Gaussian priors.
 
-        # external fisher is a path to an augur-like setup or a pandas datafram
-        # if it is a dataframe, then we read it in and add it directly
-        # if not, we need a helper to read in the text files into a dataframe object to then sum.
-        raise NotImplementedError("External fisher addition not yet implemented.")
+        The external parameters must match `fisher_pars` by name, after renaming, and a
+        warning is given if their fiducial values differ. Parameters that this run does
+        not have must be marginalized over. A matrix that agrees with one already added,
+        or with this run's, on every parameter they share is rejected, so that no
+        analysis is counted twice.
+
+        Parameters:
+        -----------
+        fisher : str
+            Path to the external Fisher matrix, as written to `fisher: output`.
+        fiducials : str
+            Path to its parameter file, as written to `fisher: fid_output`.
+        rename : dict, optional
+            Maps external parameter names to this run's names.
+        marginalize : list of str, optional
+            External parameters, named after renaming, to integrate out before adding.
+        """
+        path = os.path.realpath(fisher)
+        if 'output' in self.config and path == os.path.realpath(self.config['output']):
+            raise ValueError(f'{fisher} is the output of this run.')
+        if path.endswith(('.with_priors', '.priors_only', '.combined')):
+            raise ValueError(f'{fisher} includes priors or other external Fisher matrices. '
+                             'Add the Fisher matrix without them instead.')
+        F_ext, ext_names, ext_fid = read_fisher_from_file(fisher, fiducials, rename)
+        for other, ext in self.external_fishers.items():
+            if _same_on_common(F_ext, ext_names, ext['fisher'], ext['names']):
+                raise ValueError(f'{fisher} matches {other}, which was already added, on '
+                                 'every parameter they share.')
+
+        missing = sorted(set(marginalize) - set(ext_names))
+        if missing:
+            raise ValueError(f'Cannot marginalize over {missing}: they are not parameters '
+                             f'in {fiducials}.')
+        F_marg, marg_names = F_ext, ext_names
+        if len(marginalize) > 0:
+            F_marg, marg_names = _marginalize(F_ext, ext_names, set(marginalize))
+
+        names = self.fisher_pars
+        unknown = [name for name in marg_names if name not in names]
+        if unknown:
+            transformed = [name for name in unknown if name in self.replaced_pars]
+            raise ValueError(f'{fisher}: {unknown} are not parameters of this run. Rename '
+                             'them to match, or list them under marginalize.' +
+                             (f' This run reports {[self.replaced_pars[n] for n in transformed]}'
+                              f' in place of {transformed}.' if transformed else ''))
+        fid = dict(zip(names, self._fisher_fid_values()))
+        mismatched = {name: (ext_fid[name], fid[name]) for name in marg_names
+                      if not np.isclose(ext_fid[name], fid[name], rtol=1.e-4, atol=1.e-8)}
+        if mismatched:
+            warnings.warn(f'{fisher}: fiducial values differ (external, this run): '
+                          f'{mismatched}. Adding it anyway.')
+        shared = [name for name in marg_names if name in self.req_params]
+        if shared:
+            warnings.warn(f'{fisher} shares the nuisance parameters {shared} with this run, '
+                          'so they are treated as the same parameters. Rename them if not.')
+
+        ind = [names.index(name) for name in marg_names]
+        embedded = np.zeros((len(names), len(names)))
+        embedded[np.ix_(ind, ind)] = F_marg
+        self.external_fishers[path] = {'names': ext_names, 'fisher': F_ext,
+                                       'embedded': embedded}
+        self.Fij_combined = None
+        logger.info('Added the external Fisher matrix %s', fisher)
+
+    def get_combined_fisher(self, save_txt=True):
+        """
+        Sum of this run's Fisher matrix and every external one added with
+        `add_external_fisher`. Gaussian priors are not included.
+
+        Parameters:
+        -----------
+        save_txt : bool
+            If `True`, saves the combined matrix to `{output}.combined`.
+
+        Returns:
+        --------
+        Fij_combined : np.ndarray
+            Combined Fisher matrix, in the order of this run's parameters.
+        """
+        if self.Fij is None:
+            self.get_fisher_matrix(save_txt=save_txt)
+        if self.Fij_combined is None:
+            for path, ext in self.external_fishers.items():
+                if _same_on_common(ext['fisher'], ext['names'], self.Fij, self.fisher_pars):
+                    raise ValueError(f'{path} matches this run on every parameter they share.')
+            self.Fij_combined = self.Fij + sum(ext['embedded']
+                                               for ext in self.external_fishers.values())
+            if save_txt:
+                np.savetxt(self.config['output'] + '.combined', self.Fij_combined)
+        return self.Fij_combined
 
     def get_fisher_matrix(self, method=None, save_txt=True, **kwargs):
         """
@@ -939,37 +1117,18 @@ class Analyze(object):
             J = self.Jacobian_transform()
             self.Fij = J.T @ self.Fij @ J
 
-            # Build a pandas DataFrame indexed by varied parameters (rows and columns)
-            try:
-                self.Fij_df = pd.DataFrame(self.Fij, index=self.var_pars, columns=self.var_pars)
-            except Exception:
-                # Fallback in case var_pars is None or sizes mismatch
-                self.Fij_df = pd.DataFrame(self.Fij)
-
-            save_vals = deepcopy(self.x.T)
-            save_names = deepcopy(self.var_pars)
-
-            if self.transform_S8:
-                # swap sigma8 with S8
-                ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
-                save_vals[ind_sigma8] = self.get_S8()
-                save_names[ind_sigma8] = 'S8'
-            if self.transform_Omega_m:
-                # swap Omega_c with Omega_m
-                ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                save_vals[ind_c] = self.get_Om()
-                save_names[ind_c] = 'Omega_m'
-
             if save_txt:
-                np.savetxt(self.config['output'], self.Fij)
-                tab_out = Table(save_vals, names=save_names)
-                tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
+                fid_values = dict(zip(self.fisher_pars, self._fisher_fid_values()))
+                write_fisher_to_file(self.Fij, self.fisher_pars, fid_values,
+                                     self.config['output'], self.config['fid_output'])
                 fid = self.f(self.x, self.var_pars, self.pars_fid, self.req_params)
                 np.savetxt(self.config['output']+".theory_vector", fid)
                 np.savetxt(self.config['output']+".derivatives", self.derivatives)
         if self.gprior_pars is not None:
             logger.info('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
+        if self.external_fishers:
+            self.get_combined_fisher(save_txt=save_txt)
 
         return self.Fij
 
@@ -1086,18 +1245,8 @@ class Analyze(object):
 
             J = self.Jacobian_transform()
             self.bi = J.T @ self.bi
-            save_names = deepcopy(self.var_pars)
-
-            if self.transform_S8:
-                # swap sigma8 with S8
-                ind_sigma8 = np.where(np.array(self.var_pars) == 'sigma8')[0][0]
-                save_names[ind_sigma8] = 'S8'
-            if self.transform_Omega_m:
-                # swap Omega_c with Omega_m
-                ind_c = np.where(np.array(self.var_pars) == 'Omega_c')[0][0]
-                save_names[ind_c] = 'Omega_m'
             if save_txt:
-                tab_out = Table(self.bi, names=save_names)
+                tab_out = Table(self.bi, names=self.fisher_pars)
                 tab_out.write(self.config['fid_output']+".biased_params",
                               format='ascii', overwrite=True)
                 np.savetxt(self.config['output']+".theory_vector_biased", self.biased_cls)

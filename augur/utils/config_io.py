@@ -89,24 +89,83 @@ def parse_config(config):
     return config
 
 
-def read_fisher_from_file(base):
-    '''
-    Helper function to add external Fisher evaluations to the computed Fisher matrix in Augur.
-    Requires the path have two files in the Augur format: fiducial and Fisher.
+def read_fisher_from_file(fisher_path, fid_path, rename=None):
+    """
+    Read a Fisher matrix saved in Augur's output format.
 
-    This function does not check the compatibility of the fiducial systematic parameters
-     or cosmology with the current Augur run; that is the user's responsibility.
-    :param base: base path to the files (without _fiducials.dat or _fisher.dat)
-    :return: fisher matrix and fiducial vector as numpy arrays
-    '''
-    try:
-        fiducials = np.loadtxt(f"{base}_fiducials.dat")
-        fisher = np.loadtxt(f"{base}_fisher.dat")
-        # TODO: If we wind up changing the format of the Analyze object, we may want
-        # to do some additional processing here to ensure compatibility/ease of use.
-        return fisher, fiducials
-    except Exception as e:
-        raise RuntimeError(f"Could not read files at {base}. Exception: {e}")
+    Parameters:
+    -----------
+    fisher_path : str
+        Path to the Fisher matrix, as written to `fisher: output`.
+    fid_path : str
+        Path to the matching parameter file, as written to `fisher: fid_output`:
+        a line of parameter names followed by a line of fiducial values.
+    rename : dict, optional
+        Maps parameter names in `fid_path` to the names to use instead.
+
+    Returns:
+    --------
+    fisher : np.ndarray
+        Fisher matrix, in the order of `names`.
+    names : list of str
+        Parameter names, after renaming.
+    fiducials : dict
+        Fiducial value of each parameter, keyed by its name after renaming.
+    """
+    from astropy.table import Table
+
+    fisher = np.atleast_2d(np.loadtxt(fisher_path))
+    tab = Table.read(fid_path, format='ascii')
+    rename = rename or {}
+    unused = sorted(set(rename) - set(tab.colnames))
+    if unused:
+        raise ValueError(f'rename lists {unused}, which are not parameters in {fid_path}.')
+    names = [rename.get(name, name) for name in tab.colnames]
+    _check_fisher_shape(fisher, names, fisher_path)
+    if not np.allclose(fisher, fisher.T):
+        raise ValueError(f'{fisher_path} is not symmetric.')
+    fiducials = {name: float(tab[col][0]) for name, col in zip(names, tab.colnames)}
+    return fisher, names, fiducials
+
+
+def write_fisher_to_file(fisher, names, fiducials, fisher_path, fid_path):
+    """
+    Write a Fisher matrix in Augur's output format, which `read_fisher_from_file` reads.
+    Use it to turn a Fisher matrix from elsewhere into one that can be added to an
+    Augur run with `external_fishers`.
+
+    Parameters:
+    -----------
+    fisher : array_like
+        Fisher matrix, in the order of `names`.
+    names : list of str
+        Parameter names.
+    fiducials : dict
+        Fiducial value of each parameter, keyed by name.
+    fisher_path : str
+        Path for the Fisher matrix.
+    fid_path : str
+        Path for the parameter file: a line of names followed by a line of values.
+    """
+    from astropy.table import Table
+
+    fisher, names = np.atleast_2d(np.asarray(fisher, dtype=np.float64)), list(names)
+    _check_fisher_shape(fisher, names, fisher_path)
+    missing = [name for name in names if name not in fiducials]
+    if missing:
+        raise ValueError(f'No fiducial values given for {missing}.')
+    np.savetxt(fisher_path, fisher)
+    values = np.array([fiducials[name] for name in names], dtype=np.float64)
+    Table(values, names=names).write(fid_path, format='ascii', overwrite=True)
+
+
+def _check_fisher_shape(fisher, names, source):
+    """Check that the parameter names are unique and match the size of the Fisher matrix."""
+    if len(set(names)) != len(names):
+        raise ValueError(f'{source}: the parameter names are not unique: {names}.')
+    if fisher.shape != (len(names), len(names)):
+        raise ValueError(f'{source} has shape {fisher.shape}, but there are {len(names)} '
+                         'parameter names.')
 
 
 def _check_path_exists(path):
