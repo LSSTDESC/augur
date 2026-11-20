@@ -15,7 +15,7 @@ from firecrown.ccl_factory import (
     CAMBExtraParams,
     PoweSpecAmplitudeParameter,
 )
-from firecrown.metadata_types import Galaxies
+from firecrown.metadata_types import Galaxies, CMB
 from firecrown.data_functions import TwoPointBinFilterCollection, TwoPointBinFilter
 from copy import deepcopy
 import warnings
@@ -38,10 +38,23 @@ PT_CALCULATOR_REGISTRY = {
 
 BARYON_HM_REGISTRY = ['mead2020_feedback', 'mead', 'mead2015', 'mead2016']
 
-TP_FILTER_REGISTRY = {'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
-                      'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
-                      'galaxy_shearDensity_cl_e': [[Galaxies.SHEAR_E, Galaxies.COUNTS]],
-                      }
+TP_FILTER_REGISTRY = {
+    'galaxy_shear_cl_ee': [[Galaxies.SHEAR_E, Galaxies.SHEAR_E]],
+    'galaxy_density_cl': [[Galaxies.COUNTS, Galaxies.COUNTS]],
+    'galaxy_shearDensity_cl_e': [[Galaxies.SHEAR_E, Galaxies.COUNTS]],
+    # Real-space aliases used by TwoPointFactory(correlation_space='real')
+    'galaxy_shear_xi_plus': [[Galaxies.PART_OF_XI_PLUS, Galaxies.PART_OF_XI_PLUS]],
+    'galaxy_shear_xi_minus': [[Galaxies.PART_OF_XI_MINUS, Galaxies.PART_OF_XI_MINUS]],
+    'galaxy_density_xi': [[Galaxies.COUNTS, Galaxies.COUNTS]],
+    'galaxy_shearDensity_xi_t': [[Galaxies.SHEAR_T, Galaxies.COUNTS]],
+    # CMB lensing harmonic correlations
+    'cmb_convergence_cl': [[CMB.CONVERGENCE, CMB.CONVERGENCE]],
+    'cmbGalaxy_convergenceDensity_cl': [[CMB.CONVERGENCE, Galaxies.COUNTS]],
+    'cmbGalaxy_convergenceShear_cl_e': [[CMB.CONVERGENCE, Galaxies.SHEAR_E]],
+    # CMB lensing real-space cross correlations (experimental path)
+    'cmbGalaxy_convergenceDensity_xi': [[CMB.CONVERGENCE, Galaxies.COUNTS]],
+    'cmbGalaxy_convergenceShear_xi_t': [[CMB.CONVERGENCE, Galaxies.SHEAR_T]],
+}
 
 
 # Neutrino mass splits augur accepts: the CCL ones that work with a firecrown CCLFactory.
@@ -165,8 +178,15 @@ def _create_ccl_factory(config):
         )
         return factory, cosmo
 
-    # Build cosmology
-    cosmo = ccl.Cosmology(**cosmo_cfg)
+    # Build cosmology. Re-inject transfer_function / matter_power_spectrum which
+    # were popped above to configure the CCLFactory; otherwise this standalone
+    # cosmo silently defaults to CCL's boltzmann_camb + camb, which (a) ignores
+    # the requested model and (b) fails for w crossing -1 unless ppf is set.
+    cosmo = ccl.Cosmology(
+        **cosmo_cfg,
+        transfer_function=tf_name,
+        **({"matter_power_spectrum": mps_name} if mps_name is not None else {}),
+    )
 
     factory = CCLFactory(
         creation_mode=CCLCreationMode.PURE_CCL_MODE,
@@ -303,6 +323,10 @@ def _create_clusterdeltasigma(config, cosmo):
 
 
 def create_modeling_tools(config):
+    # Deepcopy to avoid mutating the caller's config dict.
+    # The _create_* helpers use config.pop() internally to prevent
+    # passing consumed keys to downstream constructors.
+    config = deepcopy(config)
 
     factory, cosmo = _create_ccl_factory(config)
     pt_calculator = _create_pt_calculator(config, cosmo)

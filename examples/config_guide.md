@@ -300,7 +300,7 @@ Configures **weak lensing source (shear) tracers**.
 |-----|------|----------|-------------|
 | `nbins` | `int` | Yes | Number of source tomographic bins. Tracers are named `src0` … `src{nbins-1}`. |
 | `ndens` | `float` or `list` | Yes | Galaxy number density in arcmin⁻². Scalar = total across bins; list = per-bin. |
-| `ellipticity_error` | `float` | Yes | RMS ellipticity error ($\sigma_e$). Enters shape noise: $N_\ell = \sigma_e^2 / \bar{n}$. |
+| `ellipticity_error` | `float` | Yes | per-component ellipticity error ($\sigma_e$). Enters shape noise: $N_\ell = \sigma_e^2 / \bar{n}$. |
 | `Nz_type` | `str` or `list[str]` | Yes | Redshift distribution class. See below. |
 | `Nz_kwargs` | `dict` | Yes | Keyword arguments for the `Nz_type` constructor. |
 

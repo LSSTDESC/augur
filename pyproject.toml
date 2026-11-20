@@ -26,14 +26,20 @@ dependencies = [
     "qp-prob",
     "scipy>1.12",
     "numdifftools",
-    "tjpcov",
+    "tjpcov>=0.5.1",
     "pyccl>=3.3.1",
     "numpy>=2.0",
     "astropy",
     "matplotlib",
     "pandas",
-    "lsstdesc-crow"
+    "lsstdesc-crow",
+    "sacc>=2.4",
+    "derivkit",
+    "threadpoolctl",
+    "pyyaml"
 ]
+# firecrown>=1.16.0 is also required but is distributed through conda-forge
+# only; see environment.yml.
 
 [project.urls]
 Homepage = "https://github.com/LSSTDESC/augur"
