@@ -367,6 +367,59 @@ lenses:
 
 ---
 
+### `surveys`
+
+*(Optional.)* Survey footprints and NaMaster settings, read by
+`augur/generate_utils/namaster.py`. Data-vector generation and covariances do not
+use this section yet.
+
+`surveys.footprint` holds the masks and NaMaster settings shared by all probes.
+Each probe entry (`sources`, `lenses`, `cmb_lensing`, `cluster_counts`) names the
+mask it uses.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `footprint.nside` | `int` | nside of the first mask file | Common resolution. Masks at another nside are regraded, with a warning. |
+| `footprint.masks.<name>` | `str` or `dict` | — | A file path (HEALPix FITS or `.npy`), or a dict with `file`, `field` (FITS column, default `0`) and `apodize`. A mask without `file` can still be named, for use with supplied workspaces. NaN, inf and UNSEEN pixels are set to 0; negative pixels are an error. |
+| `footprint.masks.<name>.apodize` | `dict` | none | `scale_deg` and `type` (`C1`, `C2` or `Smooth`; default `C1`). The scale must be at least 2 pixels, because pymaster crashes at about one pixel. Needs pymaster. |
+| `footprint.namaster` | `dict` | absent | Presence turns NaMaster on. Needs pymaster ≥2.7, <3. |
+| `namaster.source` | `str` | inferred | `masks` (compute everything), `workspaces` (only the listed files; a missing pair is an error) or `mixed` (listed files where given, the rest computed, with a warning per computed pair). If omitted: `mixed` when both masks and files are given, otherwise whichever is given. |
+| `namaster.lmax` | `int` | `3 * nside - 1` | Maximum multipole of the fields. Must match any supplied files. The last `ell_edges` entry must be at most `lmax + 1`. |
+| `namaster.cache_dir` | `str` | none | Directory for computed workspaces, named by a hash of the masks, spins, `lmax` and NaMaster options, plus a `manifest.json`. Later runs with the same inputs read them instead of recomputing. |
+| `namaster.recompute` | `bool` | `false` | Ignore the cache and recompute. |
+| `namaster.check_workspaces` | `bool` | `true` | Check each supplied workspace against its masks (when the masks have files), using the row sums of its coupling matrix. Exact for spin 0 × 0; spin-2 workspaces only catch gross mismatches. |
+| `namaster.workspaces` | `list` | `[]` | Supplied `NmtWorkspace` files: `{masks: [a, b], spins: [s_a, s_b], file: path}`. `spins` can be omitted unless a spin-0 and a spin-2 field sit on different masks. |
+| `namaster.covariance_workspaces` | `list` | `[]` | Supplied `NmtCovarianceWorkspace` files: `{masks: [a, b, c, d], file: path}`. These do not depend on spin. Files from pymaster 3 must be built with `all_spins=True`; others are rejected. Workspace files from either version work. |
+| `namaster.field_kwargs`, `workspace_kwargs`, `covariance_kwargs` | `dict` | `{}` | Passed to `NmtField`, `compute_coupling_matrix` and `compute_coupling_coefficients`. |
+| `<probe>.mask` | `str` | — | Mask name for the probe. Shear (`sources`) fields are spin 2; `lenses` and `cmb_lensing` are spin 0. |
+| `<probe>.bin_masks` | `dict` | `{}` | Per-bin overrides for `sources` and `lenses`, e.g. `{4: lsst_deep}`. |
+
+Workspaces are shared by every tracer pair with the same masks and spins, and
+changing the binning only re-bins the stored coupling matrix. Bandpower band `i`
+holds the integer multipoles `ell_edges[i] <= ell < ell_edges[i+1]`.
+
+```yaml
+surveys:
+    footprint:
+        nside: 1024
+        masks:
+            lsst_wfd:
+                file: masks/wfd.fits
+                apodize: {scale_deg: 1.0, type: C1}
+            act_kappa: {file: masks/act_kappa.fits}
+        namaster:
+            source: mixed
+            cache_dir: namaster_cache
+            workspaces:
+                - {masks: [lsst_wfd, lsst_wfd], spins: [2, 2], file: ws/w22_wfd.fits}
+    sources: {mask: lsst_wfd}
+    lenses: {mask: lsst_wfd}
+    cmb_lensing: {mask: act_kappa}
+    cluster_counts: {mask: lsst_wfd}
+```
+
+---
+
 ### `statistics`
 
 Defines which two-point statistics to include in the data vector. Each key is a

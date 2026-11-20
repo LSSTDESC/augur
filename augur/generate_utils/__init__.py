@@ -21,6 +21,9 @@ cluster_counts
     Cluster-count statistics (stub).
 covariance
     Covariance-matrix computation (Gaussian, SRD, TJPCov).
+namaster
+    Survey footprints (``surveys`` config section) and NaMaster workspaces and
+    bandpower windows. pymaster is imported only when needed.
 """
 
 from .cosmology import initialize_cosmology          # noqa: F401
@@ -35,6 +38,12 @@ from .real_space import add_real_space_two_point      # noqa: F401
 from .cmb_lensing import add_cmb_lensing              # noqa: F401
 from .cluster_counts import add_cluster_counts        # noqa: F401
 from .covariance import compute_covariance            # noqa: F401
+from .namaster import (                               # noqa: F401
+    SurveyFootprint,
+    NaMasterWorkspaces,
+    load_survey_footprint,
+    load_namaster,
+)
 from .sacc_interface import (                          # noqa: F401
     classify_data_type,
     is_harmonic,
