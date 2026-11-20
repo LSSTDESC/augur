@@ -1083,12 +1083,13 @@ class Analyze(object):
                                                                     self.pars_fid,
                                                                     self.req_params,
                                                                     donorm=False)
-            Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            J = self.Jacobian_transform()
+            # transform to new basis
+            Bj = J.T @ np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            # Fisher already in new basis.
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
 
-            J = self.Jacobian_transform()
-            self.bi = J.T @ self.bi
             save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
