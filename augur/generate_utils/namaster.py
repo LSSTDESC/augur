@@ -309,6 +309,7 @@ class SurveyFootprint:
         self._raw = {}
         self._masks = {}
         self._hashes = {}
+        self._overlaps = {}
 
     # ---- config ------------------------------------------------------------
 
@@ -450,7 +451,10 @@ class SurveyFootprint:
 
     def mean_overlap(self, name_a, name_b):
         """Mean over the sphere of ``mask(a) * mask(b)``."""
-        return float(np.mean(self.mask(name_a) * self.mask(name_b)))
+        key = tuple(sorted((name_a, name_b)))
+        if key not in self._overlaps:
+            self._overlaps[key] = float(np.mean(self.mask(name_a) * self.mask(name_b)))
+        return self._overlaps[key]
 
 
 def _pair_key(mask_a, spin_a, mask_b, spin_b):
@@ -722,7 +726,8 @@ class NaMasterWorkspaces:
 
     # ---- workspaces ----------------------------------------------------------
 
-    def _field(self, mask_name, spin):
+    def field(self, mask_name, spin):
+        """Mask-only NmtField for ``mask_name`` and ``spin``, built once and reused."""
         key = (mask_name, spin)
         if key not in self._fields:
             self._fields[key] = self._nmt.NmtField(
@@ -760,7 +765,7 @@ class NaMasterWorkspaces:
 
         logger.info("Computing NaMaster workspace %s (spin %d) x %s (spin %d), lmax %d",
                     mask_a, spin_a, mask_b, spin_b, self.lmax)
-        wsp.compute_coupling_matrix(self._field(mask_a, spin_a), self._field(mask_b, spin_b),
+        wsp.compute_coupling_matrix(self.field(mask_a, spin_a), self.field(mask_b, spin_b),
                                     bins, **self.workspace_kwargs)
         if path is not None:
             os.makedirs(self.cache_dir, exist_ok=True)
@@ -913,7 +918,7 @@ class NaMasterWorkspaces:
 
         logger.info("Computing NaMaster covariance workspace for masks %s, lmax %d",
                     list(key), self.lmax)
-        cwsp.compute_coupling_coefficients(*[self._field(n, 0) for n in key],
+        cwsp.compute_coupling_coefficients(*[self.field(n, 0) for n in key],
                                            **self.covariance_kwargs)
         if path is not None:
             os.makedirs(self.cache_dir, exist_ok=True)

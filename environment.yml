@@ -12,7 +12,7 @@ dependencies:
   - numdifftools
   - numpydoc
   - qp-prob
-  - tjpcov >= 0.5.1
+  - tjpcov >= 0.6.0
   - derivkit >= 1.1.0
   - pyccl >= 3.3.1
   - derivkit
@@ -21,3 +21,4 @@ dependencies:
   - myst-parser
   - pyyaml
   - sacc >= 2.4
+  - namaster>2,<3

@@ -3,7 +3,7 @@ import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
-from augur.utils.config_io import parse_config
+from augur.utils.config_io import _check_path_exists, parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
@@ -884,8 +884,9 @@ class Analyze(object):
             self.Fij_with_gprior += gprior_only
 
             if save_txt:
-                np.savetxt(self.config['output']+".priors_only", gprior_only)
-                np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
+                np.savetxt(_check_path_exists(self.config['output']+".priors_only"), gprior_only)
+                np.savetxt(_check_path_exists(self.config['output']+".with_priors"),
+                           self.Fij_with_gprior)
 
         # Build a pandas DataFrame indexed by varied parameters (rows and columns)
         try:
@@ -963,10 +964,12 @@ class Analyze(object):
             if save_txt:
                 np.savetxt(self.config['output'], self.Fij)
                 tab_out = Table(save_vals, names=save_names)
-                tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
+                tab_out.write(_check_path_exists(self.config['fid_output']),
+                              format='ascii', overwrite=True)
                 fid = self.f(self.x, self.var_pars, self.pars_fid, self.req_params)
-                np.savetxt(self.config['output']+".theory_vector", fid)
-                np.savetxt(self.config['output']+".derivatives", self.derivatives)
+                np.savetxt(_check_path_exists(self.config['output']+".theory_vector"), fid)
+                np.savetxt(_check_path_exists(self.config['output']+".derivatives"),
+                           self.derivatives)
         if self.gprior_pars is not None:
             logger.info('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
@@ -1080,12 +1083,13 @@ class Analyze(object):
                                                                     self.pars_fid,
                                                                     self.req_params,
                                                                     donorm=False)
-            Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            J = self.Jacobian_transform()
+            # transform to new basis
+            Bj = J.T @ np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            # Fisher already in new basis.
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
 
-            J = self.Jacobian_transform()
-            self.bi = J.T @ self.bi
             save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
@@ -1098,9 +1102,10 @@ class Analyze(object):
                 save_names[ind_c] = 'Omega_m'
             if save_txt:
                 tab_out = Table(self.bi, names=save_names)
-                tab_out.write(self.config['fid_output']+".biased_params",
+                tab_out.write(_check_path_exists(self.config['fid_output']+".biased_params"),
                               format='ascii', overwrite=True)
-                np.savetxt(self.config['output']+".theory_vector_biased", self.biased_cls)
+                np.savetxt(_check_path_exists(self.config['output']+".theory_vector_biased"),
+                           self.biased_cls)
             return self.bi
 
     def compute_new_theory_vector(self, _sys_pars, _pars):

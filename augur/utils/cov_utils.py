@@ -380,14 +380,8 @@ def get_SRD_cov(config, S):
     return cov_sacc_all
 
 
-class TJPCovGaus(FourierGaussianFsky):
-    """
-    Class to patch FourierGaussianFsky to work with Augur
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        # self.tracer_Noise = self.tracer_Noise_coupled
+class AugurTracerInfo:
+    """Mixin for TJPCov Fourier classes: adds Augur's CMB-lensing noise to the tracer info."""
 
     def get_tracer_info(self, return_noise_coupled=False):
         """Return tracer info while ensuring CMB noise keys exist.
@@ -417,6 +411,12 @@ class TJPCovGaus(FourierGaussianFsky):
         if return_noise_coupled:
             return ccl_tracers, tracer_Noise, tracer_Noise_coupled
         return ccl_tracers, tracer_Noise
+
+
+class TJPCovGaus(AugurTracerInfo, FourierGaussianFsky):
+    """
+    Class to patch FourierGaussianFsky to work with Augur
+    """
 
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()
