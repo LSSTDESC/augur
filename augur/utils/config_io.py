@@ -117,11 +117,12 @@ def _check_path_exists(path):
     Parameters
     ----------
     path : str or Path
-        The path to check.
+        The path to check, including the filename.
     """
-    if not Path(path).exists():
+    parent = Path(path).parent
+    if not parent.exists():
         try:
-            Path(path).mkdir(parents=True, exist_ok=True)
+            parent.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            raise FileNotFoundError(f"The specified path does not exist: {path}") from e
+            raise OSError(f"The specified path does not exist: {parent}") from e
     return path
