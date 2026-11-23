@@ -1066,9 +1066,10 @@ class Analyze(object):
                 _x_here = []
                 _labels_here = []
                 # We are allowed to bias in the CCL basis, so we can comment this out.
-                # Checks to make sure we are in the CCL basis 
+                # Checks to make sure we are in the CCL basis
                 # if self.transform_S8 or self.transform_Omega_m:
-                #     raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
+                #     raise ValueError("Fisher Biasing involving
+                #                       derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = deepcopy(self.pars_fid)
                     _sys_here = deepcopy(self.req_params)
