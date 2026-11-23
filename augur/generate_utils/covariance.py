@@ -4,8 +4,9 @@ import numpy as np
 import warnings
 
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
-from augur.utils.cov_utils import TJPCovGaus, TJPCovClusterGaus, TJPCovClusterSSC
+from augur.utils.cov_utils import TJPCovGaus, TJPCovNmt, TJPCovClusterGaus, TJPCovClusterSSC
 from augur.utils.config_io import parse_array
+from augur.generate_utils.namaster import load_namaster
 
 # TJPCov calculator shared with forked covariance workers. Set before the pool
 # is created so children inherit it instead of pickling it per task.
@@ -17,19 +18,24 @@ def _covariance_block(tracer_comb1, tracer_comb2):
 
     Defined at module level so ``multiprocessing`` can pickle it by reference.
     """
+    if isinstance(_POOL_CALC, TJPCovNmt):
+        # NaMaster blocks interleave bands and spin components; this unpacks them.
+        return _POOL_CALC.get_covariance_block_for_sacc(tracer_comb1, tracer_comb2)
     return _POOL_CALC.get_covariance_block(
         tracer_comb1, tracer_comb2, include_b_modes=False
     )
 
 
-def compute_covariance(config, S, lk, cosmo, tools, probes=None):
+def compute_covariance(config, S, lk, cosmo, tools, probes=None, namaster=None):
     """
     Compute and attach a covariance matrix to a SACC object.
 
     Supported covariance types (via ``config['cov_options']['cov_type']``):
       - ``'gaus_internal'`` — analytic Gaussian covariance.
       - ``'SRD'`` — pre-computed SRD covariance.
-      - ``'tjpcov'`` — TJPCov Fourier-space Gaussian fsky covariance.
+      - ``'tjpcov'`` — TJPCov Fourier-space Gaussian covariance: the fsky
+        approximation, or with ``cov_options.gaussian: namaster`` the NaMaster
+        covariance on the masks of ``surveys``.
 
     For probes that TJPCov does not support (real-space correlations),
     the covariance block is filled with an identity matrix and a warning
@@ -58,6 +64,9 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
         'cmb_lensing', 'cluster_counts']``).  Used to decide whether
         TJPCov can handle the full data vector.  If *None*, all probes
         in the SACC are assumed to be harmonic-space.
+    namaster : NaMasterWorkspaces, optional
+        Shared NaMaster products for ``gaussian: namaster``; built from
+        ``config['surveys']`` if not given.
 
     Returns
     -------
@@ -65,6 +74,13 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
     """
     cov_type = config['cov_options']['cov_type']
     cov_type = cov_type.lower()
+    gaussian = str(config['cov_options'].get('gaussian', 'fsky')).lower()
+    if gaussian not in ('fsky', 'namaster'):
+        raise ValueError(f"cov_options.gaussian must be 'fsky' or 'namaster', got '{gaussian}'.")
+    if gaussian == 'namaster' and cov_type != 'tjpcov':
+        raise ValueError("cov_options.gaussian: namaster needs cov_type: tjpcov.")
+    if config['cov_options'].get('noise_coupled') and gaussian != 'namaster':
+        raise ValueError("cov_options.noise_coupled needs gaussian: namaster.")
 
     # ---- check whether TJPCov can handle the requested probes ---------- #
     # unsupported_probes = []
@@ -168,8 +184,6 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
                 tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
             tjpcov_config['tjpcov']['sacc_file'] = S
             tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
-            tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
-            tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
             tjpcov_config['tjpcov']['binning_info'] = dict()
             tjpcov_config['tjpcov']['binning_info']['ell_edges'] = tjpcov_ell_edges
             for tr in S.tracers:
@@ -181,11 +195,30 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
                     tjpcov_config['tjpcov'][f'sigma_e_{tr}'] = \
                         config['sources']['ellipticity_error']
 
-            # Optional CMB lensing noise (default 0.0) for Fourier covariance.
-            cmb_noise = config.get('cmb_lensing', {}).get('noise_cl', 0.0)
-            tjpcov_config['tjpcov']['cmb_noise'] = float(cmb_noise)
+            # Optional CMB lensing noise (default 0.0): a number or a file.
+            tjpcov_config['tjpcov']['cmb_noise'] = \
+                config.get('cmb_lensing', {}).get('noise_cl', 0.0)
 
-            cov_calc = TJPCovGaus(tjpcov_config)
+            combs = list(S.get_tracer_combinations())
+            pairs = [(combs[i], combs[j])
+                     for i in range(len(combs)) for j in range(i, len(combs))]
+            if gaussian == 'namaster':
+                namaster = namaster or load_namaster(config)
+                if namaster is None:
+                    raise ValueError(
+                        "cov_options.gaussian: namaster needs a surveys.footprint.namaster "
+                        "section (it may be empty)."
+                    )
+                tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianNmt']
+                tjpcov_config['tjpcov']['noise_coupled'] = \
+                    config['cov_options'].get('noise_coupled')
+                cov_calc = TJPCovNmt(tjpcov_config, namaster, tjpcov_ell_edges)
+                pairs = [p for p in pairs
+                         if all(t in cov_calc.mask_names for t in (*p[0], *p[1]))]
+            else:
+                tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
+                tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
+                cov_calc = TJPCovGaus(tjpcov_config)
 
             # if config['general']['ignore_scale_cuts']:
             #     cov_fourier = cov_calc.get_covariance()
@@ -203,21 +236,24 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
             #             cov_fourier[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
 
             nproc = int(config['cov_options'].get('nproc', 1))
-            combs = list(S.get_tracer_combinations())
-            pairs = [(combs[i], combs[j])
-                     for i in range(len(combs)) for j in range(i, len(combs))]
             global _POOL_CALC
             _POOL_CALC = cov_calc
-            if nproc == 1:
-                blocks = [_covariance_block(*p) for p in pairs]
-            else:
-                # limits=1 is required, not an optimisation: forking a process
-                # with live BLAS threads deadlocks.
-                import multiprocessing as mp
-                from threadpoolctl import threadpool_limits
-                with threadpool_limits(limits=1), \
-                        mp.get_context('fork').Pool(nproc) as pool:
-                    blocks = pool.starmap(_covariance_block, pairs)
+            try:
+                if isinstance(cov_calc, TJPCovNmt):
+                    cov_calc.precompute(pairs)  # before forking, so workers share them
+                if nproc == 1:
+                    blocks = [_covariance_block(*p) for p in pairs]
+                else:
+                    # limits=1 is required, not an optimisation: forking a process
+                    # with live BLAS threads deadlocks.
+                    import multiprocessing as mp
+                    from threadpoolctl import threadpool_limits
+                    with threadpool_limits(limits=1), \
+                            mp.get_context('fork').Pool(nproc) as pool:
+                        blocks = pool.starmap(_covariance_block, pairs)
+            finally:
+                if isinstance(cov_calc, TJPCovNmt):
+                    cov_calc.cleanup()
 
             cov_fourier = np.zeros((ndata, ndata))
             # scale-cuts taken into account here

@@ -12,12 +12,12 @@ pytest.importorskip('pymaster')
 from tjpcov.covariance_fourier_gaussian_nmt import FourierGaussianNmt  # noqa: E402
 
 from augur.generate_utils import namaster as nm  # noqa: E402
-from augur.utils.cov_utils import AugurTracerInfo  # noqa: E402
-from augur.utils.tjpcov_nmt import TJPCovNmt  # noqa: E402
+from augur.utils.cov_utils import TJPCovNmt, load_noise_cl  # noqa: E402
 
 NSIDE = 16
 LMAX = 3 * NSIDE - 1
 EDGES = [2, 10, 20, 30, 48]
+CMB_NOISE = 1e-7
 
 
 def _cap(theta_max_deg):
@@ -48,7 +48,7 @@ def _sacc(nbands=len(EDGES) - 1):
 def _tjpcov_config(S, **extra):
     tj = {'sacc_file': S, 'cosmo': ccl.CosmologyVanillaLCDM(), 'IA': None,
           'Ngal_src0': 10.0, 'sigma_e_src0': 0.26, 'Ngal_lens0': 5.0, 'bias_lens0': 1.5,
-          'cmb_noise': 1e-7}
+          'cmb_noise': CMB_NOISE}
     tj.update(extra)
     return {'tjpcov': tj}
 
@@ -66,8 +66,13 @@ def namaster(tmp_path):
     }})
 
 
-class _Reference(AugurTracerInfo, FourierGaussianNmt):
+class _Reference(FourierGaussianNmt):
     """Upstream TJPCov NaMaster class, building its own fields and workspaces."""
+
+    def get_tracer_info(self, return_noise_coupled=False):
+        out = super().get_tracer_info(return_noise_coupled)
+        self.tracer_Noise['cmb_convergence'] = CMB_NOISE
+        return out
 
 
 def _pairs(S):
@@ -118,3 +123,47 @@ def test_missing_bands_raise(namaster):
     S = _sacc(nbands=len(EDGES) - 2)
     with pytest.raises(ValueError, match='every band'):
         TJPCovNmt(_tjpcov_config(S), namaster, EDGES)
+
+
+def _block(namaster, comb1, comb2, **extra):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with TJPCovNmt(_tjpcov_config(_sacc(), **extra), namaster, EDGES) as calc:
+            return calc.get_covariance_block_for_sacc(comb1, comb2)
+
+
+def test_noise_file_and_coupled_noise(tmp_path, namaster):
+    # A file holding the same white noise gives the same covariance as the number.
+    path = tmp_path / 'nlkk.dat'
+    ell = np.arange(2, 60)
+    table = np.zeros((ell.size, 8))
+    table[:, 0], table[:, 7] = ell, CMB_NOISE
+    np.savetxt(path, table)
+    kk = ('cmb_convergence', 'cmb_convergence')
+    scalar = _block(namaster, kk, kk)
+    from_file = _block(namaster, kk, kk, cmb_noise={'file': str(path), 'column': 7})
+    assert np.allclose(from_file, scalar, rtol=1e-12, atol=0)
+
+    # Supplying the white-noise coupled value changes nothing; doubling it adds noise.
+    w2 = namaster.footprint.mean_overlap('small', 'small')
+    same = _block(namaster, kk, kk, noise_coupled={'cmb_convergence': CMB_NOISE * w2})
+    assert np.allclose(same, scalar, rtol=1e-12, atol=0)
+    more = _block(namaster, kk, kk, noise_coupled={'cmb_convergence': 2 * CMB_NOISE * w2})
+    assert np.all(np.diag(more) > np.diag(scalar))
+
+    with pytest.raises(ValueError, match='not NaMaster tracers'):
+        _block(namaster, kk, kk, noise_coupled={'lens7': 1.0})
+
+
+def test_load_noise_cl(tmp_path):
+    assert load_noise_cl(2.5)(np.arange(3)) == 2.5
+    assert load_noise_cl('1e-8')(10) == 1e-8  # YAML reads 1e-8 as a string
+    path = tmp_path / 'n.csv'
+    np.savetxt(path, [[2, 1.0], [4, 3.0]], delimiter=',')
+    noise = load_noise_cl(str(path))
+    assert np.allclose(noise(np.array([0, 3, 4])), [1.0, 2.0, 3.0])
+    with pytest.warns(UserWarning, match='stops at ell = 4'):
+        noise(np.arange(6))
+    for bad in (-1.0, {'file': str(path), 'col': 1}, [1, 2]):
+        with pytest.raises(ValueError):
+            load_noise_cl(bad)

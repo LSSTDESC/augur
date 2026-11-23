@@ -22,6 +22,7 @@ dependencies = [
     "click",
     "jinja2",
     "healpy",
+    "pymaster>2,<3",
     "numpydoc",
     "qp-prob",
     "scipy>1.12",

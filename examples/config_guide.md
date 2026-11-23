@@ -370,8 +370,9 @@ lenses:
 ### `surveys`
 
 *(Optional.)* Survey footprints and NaMaster settings, read by
-`augur/generate_utils/namaster.py`. Data-vector generation and covariances do not
-use this section yet.
+`augur/generate_utils/namaster.py`. The NaMaster covariance
+(`cov_options.gaussian: namaster`) uses it; data-vector bandpower windows do not
+use it yet.
 
 `surveys.footprint` holds the masks and NaMaster settings shared by all probes.
 Each probe entry (`sources`, `lenses`, `cmb_lensing`, `cluster_counts`) names the
@@ -510,9 +511,30 @@ cov_options:
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `fsky` | `float` | Fraction of sky. |
+| `fsky` | `float` | Fraction of sky (fsky covariance and clusters). |
 | `IA` | `float` or `None` | IA amplitude for the covariance. |
 | `binning_info.ell_edges` | `str` (evaluable) | Multipole bin edges for TJPCov. |
+| `gaussian` | `str` | `fsky` (default, Knox formula) or `namaster`: the NaMaster Gaussian covariance on the `surveys` masks, with every cross-covariance between probes on different masks. Needs `surveys.footprint.namaster` and every band stored for every pair (`general.ignore_scale_cuts: True`). |
+| `noise_coupled` | `dict` | `namaster` only. Coupled noise (the noise pseudo-C_ell on the tracer's mask, e.g. the mean over noise-only simulations, as from `pymaster.compute_coupled_cell`) per tracer, e.g. `{cmb_convergence: nl_cp.dat, lens0: 2.1e-9}`. Values are read like `cmb_lensing.noise_cl`. Tracers not listed get the white-noise value `N * mean(mask**2)`, which is exact for homogeneous noise on a mask applied to the map. Give it for inhomogeneous noise (depth variations), or for galaxy masks that are weight or completeness maps, where shot noise scales with `mean(mask)` instead. |
+
+CMB-lensing reconstruction noise for every covariance type is set by
+`cmb_lensing.noise_cl`: a number (white noise, default `0`), a text file whose
+first two columns are ell and N_ell, or `{file, column, ell_column}` to pick the
+columns. The Simons Observatory curves
+([so_noise_models](https://github.com/simonsobs/so_noise_models), `LAT_lensing_noise`)
+hold N_L^kk with ell in column 0 and the minimum-variance estimator in column 7.
+Files are interpolated linearly in ell and held at their end values outside their
+range (with a warning above it).
+
+```yaml
+cmb_lensing:
+    noise_cl: {file: so/nlkk_v3_1_0_deproj0_SENS1_fsky0p4_it_lT30-3000_lP30-5000.dat, column: 7}
+cov_options:
+    cov_type: tjpcov
+    gaussian: namaster
+    binning_info:
+        ell_edges: np.geomspace(20, 3000, 21).astype(int)
+```
 
 ---
 

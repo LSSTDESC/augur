@@ -1,10 +1,17 @@
 import logging
+import os
+import shutil
+import tempfile
+import warnings
+
 import numpy as np
 import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
+from tjpcov.covariance_fourier_gaussian_nmt import FourierGaussianNmt
 from tjpcov.covariance_cluster_counts_gaussian import ClusterCountsGaussian as BaseClusterGaussian
 from tjpcov.covariance_cluster_counts_ssc import ClusterCountsSSC as BaseClusterSSC
 from augur.utils.config_io import parse_array
+from augur.generate_utils.namaster import make_nmt_bin, tracer_probe
 
 logger = logging.getLogger(__name__)
 
@@ -246,17 +253,16 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
         ell_edges_by_stat[stat_name] = parse_array(stat_cfg['ell_edges'])
 
     # CMB convergence noise (reconstruction noise floor)
-    cmb_noise_cl = float(
-        config.get('cmb_lensing', {}).get('noise_cl', 0.0)
-    )
+    cmb_noise_cl = load_noise_cl(config.get('cmb_lensing', {}).get('noise_cl', 0.0),
+                                 'cmb_lensing.noise_cl')
 
-    def _noise_between(tr_a_name, tr_b_name):
+    def _noise_between(tr_a_name, tr_b_name, ells):
         """Uncorrelated noise term N_ab (non-zero only for auto-tracer pairs)."""
         if tr_a_name != tr_b_name:
             return 0.0
         # CMB convergence reconstruction noise
         if tr_a_name == 'cmb_convergence':
-            return cmb_noise_cl
+            return cmb_noise_cl(ells)
         return get_noise_power(config, S, tr_a_name)
 
     # Loop over statistic in the likelihood (assuming 3x2pt so far)
@@ -292,10 +298,10 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
 
             # Add uncorrelated noise (shot/shape) terms for auto-tracer pairs:
             # C_ab -> C_ab + N_ab, where N_ab != 0 only if a == b.
-            cls13 += _noise_between(tr1_name, tr3_name)
-            cls24 += _noise_between(tr2_name, tr4_name)
-            cls14 += _noise_between(tr1_name, tr4_name)
-            cls23 += _noise_between(tr2_name, tr3_name)
+            cls13 += _noise_between(tr1_name, tr3_name, ells_here)
+            cls24 += _noise_between(tr2_name, tr4_name, ells_here)
+            cls14 += _noise_between(tr1_name, tr4_name, ells_here)
+            cls23 += _noise_between(tr2_name, tr3_name, ells_here)
 
             # Normalization factor
             dell = np.diff(ell_edges_by_stat[stat_here])[:len(ells_here)]
@@ -380,43 +386,86 @@ def get_SRD_cov(config, S):
     return cov_sacc_all
 
 
-class AugurTracerInfo:
-    """Mixin for TJPCov Fourier classes: adds Augur's CMB-lensing noise to the tracer info."""
+def load_noise_cl(spec, where='noise_cl'):
+    """
+    Noise power spectrum from a config entry.
 
-    def get_tracer_info(self, return_noise_coupled=False):
-        """Return tracer info while ensuring CMB noise keys exist.
+    Parameters
+    ----------
+    spec : float, str or dict
+        A number (white noise); a text file whose first two columns are ell and
+        N_ell; or ``{file: path, column: 1, ell_column: 0}`` to pick the columns,
+        e.g. ``column: 7`` (minimum-variance N_L^kk) for the Simons Observatory
+        lensing-noise files. ``.csv`` files are read as comma-separated.
+    where : str
+        Config location, for error messages.
 
-        TJPCov's default Fourier tracer parser creates CMB tracers but may not
-        populate ``tracer_Noise`` entries for them. For covariance blocks that
-        include CMB auto/cross terms this can cause missing-key failures.
+    Returns
+    -------
+    callable
+        ``noise(ell)``: the number, or the file's column interpolated linearly in
+        ell and held at its end values outside the file's range.
+    """
+    try:
+        value = float(spec)
+    except (TypeError, ValueError):
+        pass
+    else:
+        if not np.isfinite(value) or value < 0:
+            raise ValueError(f"{where} must be a non-negative number, got {spec!r}.")
+        return lambda ell: value
 
-        Augur provides an optional scalar ``tjpcov.cmb_noise`` (default 0.0)
-        and applies it to all ``quantity == 'cmb_convergence'`` tracers.
-        """
-        ccl_tracers, tracer_Noise, tracer_Noise_coupled = super().get_tracer_info(
-            return_noise_coupled=True
+    if isinstance(spec, (str, os.PathLike)):
+        spec = {'file': spec}
+    if not isinstance(spec, dict) or 'file' not in spec \
+            or set(spec) - {'file', 'column', 'ell_column'}:
+        raise ValueError(
+            f"{where} must be a number, a file path or {{file, column, ell_column}}; "
+            f"got {spec!r}."
         )
+    path = os.fspath(spec['file'])
+    table = np.loadtxt(path, delimiter=',' if path.endswith('.csv') else None, ndmin=2)
+    ell_in = table[:, int(spec.get('ell_column', 0))]
+    nl_in = table[:, int(spec.get('column', 1))]
+    if np.any(np.diff(ell_in) <= 0) or not np.all(np.isfinite(nl_in)) or np.any(nl_in < 0):
+        raise ValueError(f"{where}: {path} needs increasing ell and finite, non-negative noise.")
 
-        cmb_noise = float(self.config['tjpcov'].get('cmb_noise', 0.0))
-        sacc_file = self.io.get_sacc_file()
-        for tracer in sacc_file.tracers:
-            tracer_dat = sacc_file.get_tracer(tracer)
-            if getattr(tracer_dat, 'quantity', None) == 'cmb_convergence':
-                tracer_Noise.setdefault(tracer, cmb_noise)
-
-        self.ccl_tracers = ccl_tracers
-        self.tracer_Noise = tracer_Noise
-        self.tracer_Noise_coupled = tracer_Noise_coupled
-
-        if return_noise_coupled:
-            return ccl_tracers, tracer_Noise, tracer_Noise_coupled
-        return ccl_tracers, tracer_Noise
+    def noise(ell):
+        if np.max(ell) > ell_in[-1]:
+            warnings.warn(f"{where}: {path} stops at ell = {ell_in[-1]:g}; holding its last "
+                          f"value up to ell = {np.max(ell):g}.")
+        return np.interp(ell, ell_in, nl_in)
+    return noise
 
 
-class TJPCovGaus(AugurTracerInfo, FourierGaussianFsky):
+def _set_cmb_noise(calc, ells):
     """
-    Class to patch FourierGaussianFsky to work with Augur
+    Give a TJPCov calculator Augur's CMB-lensing noise, ``tjpcov.cmb_noise``.
+
+    TJPCov has no CMB-lensing noise and caches its tracer info on first use, so the
+    cached noise dict is filled in place, on the ells the calculator uses. Returns
+    the noise and coupled-noise dicts.
     """
+    with warnings.catch_warnings():
+        # Augur never stores n_ell_coupled in the SACC; TJPCovNmt sets it instead.
+        warnings.filterwarnings('ignore', message='Missing n_ell_coupled')
+        _, noise, noise_coupled = calc.get_tracer_info(return_noise_coupled=True)
+    cmb_noise = load_noise_cl(calc.config['tjpcov'].get('cmb_noise', 0.0), 'cmb_lensing.noise_cl')
+    sacc_file = calc.io.get_sacc_file()
+    for tracer in sacc_file.tracers:
+        if getattr(sacc_file.get_tracer(tracer), 'quantity', None) == 'cmb_convergence':
+            noise[tracer] = cmb_noise(ells)
+    return noise, noise_coupled
+
+
+class TJPCovGaus(FourierGaussianFsky):
+    """
+    TJPCov's ``FourierGaussianFsky`` with Augur's ell binning and CMB-lensing noise.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        _set_cmb_noise(self, self.get_binning_info()[0])
 
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()
@@ -431,6 +480,150 @@ class TJPCovGaus(AugurTracerInfo, FourierGaussianFsky):
         nbpw = int(ell_max - ell_min)
         ell = np.linspace(ell_min, ell_max, nbpw+1).astype(np.int32)
         return ell, ell_eff, ell_edges
+
+
+def _has_field(tracer_name):
+    try:
+        tracer_probe(tracer_name)
+    except ValueError:
+        return False
+    return True
+
+
+class TJPCovNmt(FourierGaussianNmt):
+    """
+    TJPCov's ``FourierGaussianNmt`` using a :class:`NaMasterWorkspaces` object.
+
+    Fields, workspaces and covariance workspaces come from ``namaster``, where they
+    are computed once and shared with the bandpower windows, instead of being
+    rebuilt or re-read from disk for every block.
+
+    Noise enters as coupled noise (the noise pseudo-C_ell on the tracer's mask):
+    ``tjpcov.noise_coupled[tracer]`` (anything :func:`load_noise_cl` reads) where
+    given, else the white-noise value ``N * mean(mask**2)``, which gives exactly
+    TJPCov's uncoupled-noise covariance.
+
+    TJPCov saves each block to its output directory and reloads it by tracer name
+    on later runs, so unless an ``outdir`` is given this class uses a temporary
+    directory removed by :meth:`cleanup` (or on leaving a ``with`` block).
+
+    Parameters
+    ----------
+    config : dict
+        TJPCov config ``{'tjpcov': {...}}``, as built for :class:`TJPCovGaus`.
+    namaster : NaMasterWorkspaces
+        Shared NaMaster products. Every mask used must have a file.
+    ell_edges : array_like
+        Band edges shared by every harmonic statistic in the SACC.
+    """
+
+    def __init__(self, config, namaster, ell_edges):
+        tj = dict(config['tjpcov'])
+        footprint = namaster.footprint
+        names = {t: footprint.tracer_mask_name(t)
+                 for t in tj['sacc_file'].tracers if _has_field(t)}
+        tj['mask_names'] = names
+        tj['mask_file'] = {t: footprint.mask(n) for t, n in names.items()}
+        tj['binning_info'] = make_nmt_bin(ell_edges, namaster.lmax)
+        given = dict(tj.get('noise_coupled') or {})
+        unknown = sorted(set(given) - set(names))
+        if unknown:
+            raise ValueError(f"cov_options.noise_coupled names {unknown}, which are not "
+                             f"NaMaster tracers of the SACC ({sorted(names)}).")
+        self._tmpdir = None
+        if tj.get('outdir') is None:
+            self._tmpdir = tj['outdir'] = tempfile.mkdtemp(prefix='augur_tjpcov_')
+        try:
+            super().__init__(dict(config, tjpcov=tj))
+            self.namaster = namaster
+            self.ell_edges = np.asarray(ell_edges, dtype=float)
+            self._concise_sacc = None
+            self._check_all_bands()
+
+            ells = np.arange(namaster.lmax + 1)
+            noise, coupled = _set_cmb_noise(self, ells)
+            for tracer, mask_name in names.items():
+                if tracer in given:
+                    where = f"cov_options.noise_coupled.{tracer}"
+                    coupled[tracer] = load_noise_cl(given[tracer], where)(ells)
+                else:
+                    coupled[tracer] = noise[tracer] * footprint.mean_overlap(mask_name,
+                                                                             mask_name)
+        except BaseException:
+            self.cleanup()
+            raise
+
+    def _check_all_bands(self):
+        """TJPCov reshapes every block with the band count of the first pair."""
+        sacc_file = self.io.get_sacc_file()
+        nbands = self.ell_edges.size - 1
+        for dtype in sacc_file.get_data_types():
+            for comb in sacc_file.get_tracer_combinations(data_type=dtype):
+                if not all(t in self.mask_names for t in comb):
+                    continue
+                n = len(sacc_file.indices(data_type=dtype, tracers=comb))
+                if n != nbands:
+                    raise ValueError(
+                        f"{dtype} {comb} has {n} bandpowers in the SACC but the NaMaster "
+                        f"binning has {nbands}. The NaMaster covariance needs every band "
+                        "stored for every pair (general.ignore_scale_cuts: True); scale "
+                        "cuts are then applied by the likelihood filters."
+                    )
+
+    def get_fields_dict(self, tracer_names, cache=None, masks=None, **kwargs):
+        names = self.get_mask_names_dict(tracer_names)
+        spins = self.get_tracers_spin_dict(tracer_names)
+        return {i: self.namaster.field(names[i], spins[i]) for i in range(1, 5)}
+
+    def get_workspaces_dict(self, tracer_names, bins, cache=None, fields=None, masks=None,
+                            **kwargs):
+        names = self.get_mask_names_dict(tracer_names)
+        overlap = self.namaster.footprint.mean_overlap
+        workspaces = {}
+        for i in (12, 34, 13, 23, 14, 24):
+            a, b = divmod(i, 10)
+            if i not in (12, 34) and overlap(names[a], names[b]) == 0:
+                workspaces[i] = None  # TJPCov's convention for non-overlapping masks
+            else:
+                workspaces[i] = self.namaster.workspace(tracer_names[a], tracer_names[b],
+                                                        self.ell_edges)
+        return workspaces
+
+    def get_covariance_workspace(self, f1, f2, f3, f4, m1, m2, m3, m4, **kwargs):
+        return self.namaster.covariance_workspace_from_masks(m1, m2, m3, m4)
+
+    def get_sacc_with_concise_dtypes(self):
+        # TJPCov copies the whole SACC for every block; one copy is enough.
+        if self._concise_sacc is None:
+            self._concise_sacc = super().get_sacc_with_concise_dtypes()
+        return self._concise_sacc
+
+    def precompute(self, pairs):
+        """
+        Build every workspace and covariance workspace needed by ``pairs``.
+
+        Call this before forking workers, which would otherwise each build (and
+        discard) their own copies.
+        """
+        self.get_sacc_with_concise_dtypes()
+        for comb1, comb2 in pairs:
+            tracer_names = dict(zip((1, 2, 3, 4), (*comb1, *comb2)))
+            if all(t in self.mask_names for t in tracer_names.values()):
+                self.get_workspaces_dict(tracer_names, self.binning_info)
+                names = self.get_mask_names_dict(tracer_names)
+                self.namaster.covariance_workspace_from_masks(*(names[i] for i in range(1, 5)))
+
+    def cleanup(self):
+        """Remove the temporary output directory, if this object made one."""
+        if self._tmpdir is not None:
+            shutil.rmtree(self._tmpdir, ignore_errors=True)
+            self._tmpdir = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.cleanup()
 
 
 class TJPCovClusterGaus(BaseClusterGaussian):

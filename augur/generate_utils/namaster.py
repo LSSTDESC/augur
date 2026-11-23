@@ -7,8 +7,8 @@ loads pre-computed workspaces from file. The workspaces give the bandpower
 windows written to the SACC file and can be handed to TJPCov for a NaMaster
 Gaussian covariance.
 
-pymaster is optional. It is imported only when a NaMaster product (or mask
-apodization) is actually needed, so footprints work with healpy alone.
+pymaster is imported only when a NaMaster product (or mask apodization) is
+needed, so reading footprints costs nothing extra.
 
 Config layout
 -------------
