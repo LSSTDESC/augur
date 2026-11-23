@@ -61,6 +61,18 @@ TP_FILTER_REGISTRY = {
 # 'sum' is excluded on purpose, see _create_ccl_factory.
 NEUTRINO_MASS_SPLITS = ('equal', 'normal', 'inverted', 'single', 'list')
 
+HMCODE_PARAMS = ('HMCode_logT_AGN', 'HMCode_eta_baryon', 'HMCode_A_baryon')
+
+
+def _check_hmcode_sources(camb_cfg, sys_cfg):
+    """
+    HMCode values belong under `systematics:`; a copy in the CAMB block may only repeat them.
+    """
+    for name in HMCODE_PARAMS:
+        if name in camb_cfg and name in sys_cfg and not np.isclose(camb_cfg[name], sys_cfg[name]):
+            raise ValueError(f"{name} is {sys_cfg[name]} under systematics but {camb_cfg[name]} "
+                             "under cosmo: extra_parameters: camb. Set it under systematics only.")
+
 
 def _create_ccl_factory(config):
     """
@@ -98,6 +110,7 @@ def _create_ccl_factory(config):
         if extra_params is not None:
             extra_params_camb = extra_params.get("camb", None)
             if extra_params_camb is not None:
+                _check_hmcode_sources(extra_params_camb, config.get('systematics') or {})
                 camb_extra = CAMBExtraParams(**extra_params_camb)
                 if 'halofit_version' in extra_params_camb.keys() and require_nl:
                     halofit_version = extra_params_camb['halofit_version']

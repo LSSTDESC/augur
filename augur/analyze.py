@@ -372,6 +372,16 @@ class Analyze(object):
                     self.par_bounds.append([_val[0], _val[-1]])
                 else:
                     self.x.append(_val)
+                # The data vector was made at the cosmo/systematics value, not this pivot.
+                if var in self.pars_fid.keys():
+                    fid = self.pars_fid[var]
+                elif var in self.req_params.keys():
+                    fid = self.req_params[var]
+                else:
+                    fid = None
+                if isinstance(fid, (int, float)) and not np.isclose(fid, self.x[-1]):
+                    warnings.warn(f"Fisher pivot {var}={self.x[-1]} differs from the fiducial "
+                                  f"{fid} the data vector was generated with.")
 
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
@@ -1055,8 +1065,10 @@ class Analyze(object):
             if _calculate_biased_cls:
                 _x_here = []
                 _labels_here = []
-                if self.transform_S8 or self.transform_Omega_m:
-                    raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
+                # We are allowed to bias in the CCL basis, so we can comment this out.
+                # Checks to make sure we are in the CCL basis 
+                # if self.transform_S8 or self.transform_Omega_m:
+                #     raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = deepcopy(self.pars_fid)
                     _sys_here = deepcopy(self.req_params)
