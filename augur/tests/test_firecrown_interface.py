@@ -164,3 +164,20 @@ def test_mass_split_unknown_rejected(bad):
     """A typo, a wrong case or an explicit null must fail up front, naming the valid choices."""
     with pytest.raises(ValueError, match="Unknown mass_split"):
         fci._create_ccl_factory(_nu_cfg(m_nu=0.06, mass_split=bad))
+
+
+def test_hmcode_camb_copy_must_match_systematics():
+    camb = {'halofit_version': 'mead2020_feedback', 'HMCode_logT_AGN': 7.8}
+    with pytest.raises(ValueError, match='HMCode_logT_AGN'):
+        fci._check_hmcode_sources(camb, {'HMCode_logT_AGN': 8.0})
+    fci._check_hmcode_sources(camb, {'HMCode_logT_AGN': 7.8})  # a matching copy is fine
+    fci._check_hmcode_sources(camb, {})  # so is the CAMB block alone
+
+
+def test_create_ccl_factory_rejects_conflicting_hmcode():
+    cfg = {'cosmo': {'transfer_function': 'boltzmann_camb', 'sigma8': 0.8,
+                     'extra_parameters': {'camb': {'halofit_version': 'mead2020_feedback',
+                                                   'HMCode_logT_AGN': 7.8}}},
+           'systematics': {'HMCode_logT_AGN': 8.0}}
+    with pytest.raises(ValueError, match='under systematics'):
+        fci._create_ccl_factory(cfg)

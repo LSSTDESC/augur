@@ -922,3 +922,31 @@ def test_zero_scalar_mnu_does_not_warn():
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         make_analyze(['Omega_c'], pars)
+
+
+def test_f_steps_hmcode_listed_under_systematics():
+    """Regression: a stepped HMCode_logT_AGN never reached firecrown. The step goes first:
+    with a shallow copy of pars_fid only the first evaluation was overwritten."""
+    from firecrown.parameters import ParamsMap
+    from augur.tests.test_theory_utils import _Recorder
+    pars = {'Omega_c': 0.2, 'sigma8': 0.8,
+            'extra_parameters': {'camb': {'halofit_version': 'mead2020_feedback',
+                                          'HMCode_logT_AGN': 7.8}}}
+    a = make_analyze(['HMCode_logT_AGN'], pars, req_params=ParamsMap({'HMCode_logT_AGN': 7.8}))
+    a.lk, a.tools = _Recorder(), _Recorder()
+    seen = []
+    for x in (8.3, 7.8, 8.3):
+        a.f([x], a.var_pars, a.pars_fid, a.req_params)
+        seen.append(a.tools.pmap['HMCode_logT_AGN'])
+    assert seen == [8.3, 7.8, 8.3]
+
+
+@pytest.mark.parametrize('centre, warns', [(8.0, True), (7.8, False)])
+def test_parameters_pivot_off_fiducial_warns(centre, warns):
+    config = {'fisher': {'parameters': {'HMCode_logT_AGN': [7.0, centre, 8.3]},
+                         'output': 'out', 'fid_output': 'fid'}}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        Analyze(config, likelihood=DummyLikelihood(), tools=DummyTools({'Omega_c': 0.2}),
+                req_params={'HMCode_logT_AGN': 7.8})
+    assert any('Fisher pivot HMCode_logT_AGN' in str(w.message) for w in caught) == warns
