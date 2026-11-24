@@ -2,6 +2,8 @@ import logging
 import numpy as np
 import pyccl as ccl
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
+from tjpcov.covariance_cluster_counts_gaussian import ClusterCountsGaussian as BaseClusterGaussian
+from tjpcov.covariance_cluster_counts_ssc import ClusterCountsSSC as BaseClusterSSC
 from augur.utils.config_io import parse_array
 
 logger = logging.getLogger(__name__)
@@ -32,12 +34,14 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
 
     Note:
     -----
-    The input number_densities are #/arcmin. The output noise has no units.
-    The output number density is in arcmin^-2.
+    The input number_densities are #/arcmin^2.
     """
     if 'src' not in tracer_name and 'lens' not in tracer_name:
-        logger.error("Cannot compute noise for source of kind %s.", tracer_name[:-1])
-        raise NotImplementedError
+        # Not a galaxy source/lens tracer; may be cluster or other (skip gracefully).
+        if return_ndens:
+            return 0.0, 0.0
+        return 0.0
+
     nz_all = dict()
     nz_all['src'] = []
     nz_all['lens'] = []
@@ -45,7 +49,8 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
         trobj = S.get_tracer(tr)
         # obtain some arbitrary number of bins
         prefix = tr.rstrip('0123456789')
-        nz_all[prefix].append(trobj.nz)
+        if prefix in nz_all:
+            nz_all[prefix].append(trobj.nz)
     tracer_prefix = tracer_name.rstrip('0123456789')
     tracer_bin_str = tracer_name[len(tracer_prefix):]
     if tracer_bin_str == '':
@@ -55,17 +60,26 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
     tracer_bin = int(tracer_bin_str)
 
     norm = dict()
-    if 'src' in tracer_name:
-        nz_all['src'] = np.array(nz_all['src'])
-        norm['src'] = np.sum(nz_all['src'], axis=1)/np.sum(nz_all['src'])
+    keyw, section = ('src', 'sources') if 'src' in tracer_name else ('lens', 'lenses')
+    ndens = parse_array(config[section]['ndens'])
+    nbins = len(nz_all[keyw])
+    if ndens.shape == ():
+        # Split between the tomographic bins
+        if ndens <= 0:
+            raise ValueError(f"ndens for {keyw} must be positive.")
+        nz = np.array(nz_all[keyw])
+        norm = np.sum(nz, axis=1)/np.sum(nz)
+        ndens = float(ndens * norm[tracer_bin])
+    elif ndens.shape == (nbins,):
+        # Individually-defined number densities for each tomographic bin
+        if not np.all(ndens > 0):
+            raise ValueError(f"ndens for {keyw} must be positive.")
+        ndens = float(ndens[tracer_bin])
+    else:
+        raise ValueError(
+            f"ndens for {section} must be a scalar or 1D array of length {nbins}."
+        )
 
-        ndens = config['sources']['ndens']
-        ndens *= norm['src'][tracer_bin]
-    elif 'lens' in tracer_name:
-        nz_all['lens'] = np.array(nz_all['lens'])
-        norm['lens'] = np.sum(nz_all['lens'], axis=1)/np.sum(nz_all['lens'])
-        ndens = config['lenses']['ndens']
-        ndens *= norm['lens'][tracer_bin]
     nbar = ndens * (180 * 60 / np.pi) ** 2  # per steradian
 
     if 'src' in tracer_name:
@@ -109,15 +123,27 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
     # Initialize big matrix
     cov_all = np.zeros((len(S.data), len(S.data)))
 
-    ell_edges_by_stat = {
-        stat_name: np.asarray(parse_array(stat_cfg['ell_edges']))
-        for stat_name, stat_cfg in config['statistics'].items()
-    }
+    # Merge ell_edges from all harmonic-space config sections:
+    # standard galaxy statistics and CMB lensing statistics.
+    ell_edges_by_stat = {}
+    for stat_name, stat_cfg in config.get('statistics', {}).items():
+        ell_edges_by_stat[stat_name] = parse_array(stat_cfg['ell_edges'])
+    cmb_stats = config.get('cmb_lensing', {}).get('statistics', {})
+    for stat_name, stat_cfg in cmb_stats.items():
+        ell_edges_by_stat[stat_name] = parse_array(stat_cfg['ell_edges'])
+
+    # CMB convergence noise (reconstruction noise floor)
+    cmb_noise_cl = float(
+        config.get('cmb_lensing', {}).get('noise_cl', 0.0)
+    )
 
     def _noise_between(tr_a_name, tr_b_name):
         """Uncorrelated noise term N_ab (non-zero only for auto-tracer pairs)."""
         if tr_a_name != tr_b_name:
             return 0.0
+        # CMB convergence reconstruction noise
+        if tr_a_name == 'cmb_convergence':
+            return cmb_noise_cl
         return get_noise_power(config, S, tr_a_name)
 
     # Loop over statistic in the likelihood (assuming 3x2pt so far)
@@ -250,6 +276,35 @@ class TJPCovGaus(FourierGaussianFsky):
         super().__init__(config)
         # self.tracer_Noise = self.tracer_Noise_coupled
 
+    def get_tracer_info(self, return_noise_coupled=False):
+        """Return tracer info while ensuring CMB noise keys exist.
+
+        TJPCov's default Fourier tracer parser creates CMB tracers but may not
+        populate ``tracer_Noise`` entries for them. For covariance blocks that
+        include CMB auto/cross terms this can cause missing-key failures.
+
+        Augur provides an optional scalar ``tjpcov.cmb_noise`` (default 0.0)
+        and applies it to all ``quantity == 'cmb_convergence'`` tracers.
+        """
+        ccl_tracers, tracer_Noise, tracer_Noise_coupled = super().get_tracer_info(
+            return_noise_coupled=True
+        )
+
+        cmb_noise = float(self.config['tjpcov'].get('cmb_noise', 0.0))
+        sacc_file = self.io.get_sacc_file()
+        for tracer in sacc_file.tracers:
+            tracer_dat = sacc_file.get_tracer(tracer)
+            if getattr(tracer_dat, 'quantity', None) == 'cmb_convergence':
+                tracer_Noise.setdefault(tracer, cmb_noise)
+
+        self.ccl_tracers = ccl_tracers
+        self.tracer_Noise = tracer_Noise
+        self.tracer_Noise_coupled = tracer_Noise_coupled
+
+        if return_noise_coupled:
+            return ccl_tracers, tracer_Noise, tracer_Noise_coupled
+        return ccl_tracers, tracer_Noise
+
     def get_binning_info(self):
         ell_eff = self.get_ell_eff()
         if 'ell_edges' not in self.config['tjpcov']['binning_info'].keys():
@@ -263,3 +318,71 @@ class TJPCovGaus(FourierGaussianFsky):
         nbpw = int(ell_max - ell_min)
         ell = np.linspace(ell_min, ell_max, nbpw+1).astype(np.int32)
         return ell, ell_eff, ell_edges
+
+
+class TJPCovClusterGaus(BaseClusterGaussian):
+    """
+    Wrapper around TJPCov's ClusterCountsGaussian for Augur integration.
+
+    Provides a minimal pass-through interface for cluster number-count shot noise
+    (Poisson + mass-richness relation) covariance computation.
+
+    Configuration keys (in config['tjpcov']):
+        - sacc_file: SACC object (required)
+        - cosmo: pyccl.Cosmology (required)
+        - fsky: float in [0, 1]
+        - min_halo_mass: float (default 1e13 M_sun)
+        - has_mproxy: bool (default True, include mass-richness scatter)
+
+    Example:
+        config = {'tjpcov': {'sacc_file': S, 'cosmo': cosmo, 'fsky': 0.5}}
+        cov_gauss = TJPCovClusterGaus(config)
+        cov_matrix = cov_gauss.get_covariance()  # Full covariance matrix
+    """
+
+    def __init__(self, config):
+        """
+        Initialize cluster Gaussian covariance wrapper.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dict with 'tjpcov' key containing TJPCov setup.
+            Will be passed directly to parent ClusterCountsGaussian.
+        """
+        tjpcov_config = config.get('tjpcov', {})
+        super().__init__(tjpcov_config)
+
+
+class TJPCovClusterSSC(BaseClusterSSC):
+    """
+    Wrapper around TJPCov's ClusterCountsSSC for Augur integration.
+
+    Provides a minimal pass-through interface for cluster number-count super-sample
+    covariance (large-scale modes) computation.
+
+    Configuration keys (in config['tjpcov']):
+        - sacc_file: SACC object (required)
+        - cosmo: pyccl.Cosmology (required)
+        - fsky: float in [0, 1]
+        - min_halo_mass: float (default 1e13 M_sun)
+        - has_mproxy: bool (default True, include mass-richness scatter)
+
+    Example:
+        config = {'tjpcov': {'sacc_file': S, 'cosmo': cosmo, 'fsky': 0.5}}
+        cov_ssc = TJPCovClusterSSC(config)
+        cov_matrix = cov_ssc.get_covariance()  # Full covariance matrix
+    """
+
+    def __init__(self, config):
+        """
+        Initialize cluster SSC covariance wrapper.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dict with 'tjpcov' key containing TJPCov setup.
+            Will be passed directly to parent ClusterCountsSSC.
+        """
+        tjpcov_config = config.get('tjpcov', {})
+        super().__init__(tjpcov_config)

@@ -1,0 +1,74 @@
+# SRD-like Year 1 example: CMB lensing-only forecast in harmonic space with TJPCov.
+# Usage:
+#   augur examples/srd_y1_cmb_lensing_tjpcov.yml
+
+fiducial_sacc_path: output/srd_y1_cmb_lensing_tjpcov.sacc
+
+general:
+    ignore_scale_cuts: True
+    ignore_scale_cuts_likelihood: False
+    bandpower_windows: None
+
+cosmo:
+    Omega_c: 0.2664
+    Omega_b: 0.0492
+    h: 0.6727
+    n_s: 0.9645
+    sigma8: 0.831
+    w0: -1.0
+    wa: 0.0
+    Omega_k: 0.0
+    transfer_function: 'eisenstein_hu'
+    matter_power_spectrum: 'halofit'
+
+ccl_accuracy:
+    spline_params:
+        K_MAX_SPLINE: 100
+
+# Included for consistency with SRD-format examples.
+systematics: {}
+
+Firecrown_Factory:
+    TwoPointFactory:
+        correlation_space: harmonic
+        number_counts_factories: []
+        weak_lensing_factories: []
+        cmb_factories:
+            - type_source: default
+              z_source: 1100.0
+              scale: 1.0
+        int_options: null
+
+cmb_lensing:
+    z_source: 1100.0
+    # White-noise approximation for CMB kappa reconstruction noise in harmonic space.
+    # Replace with your experiment-specific N_ell^kappa value or map-derived model.
+    noise_cl: 1.0e-8
+    statistics:
+        cmb_convergence_cl:
+            tracer_combs: [[]]
+            ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+            lmax: 3000
+
+cov_options:
+    cov_type: 'tjpcov'
+    fsky: 0.2862
+    binning_info:
+        ell_edges: np.geomspace(20, 15000, 21, endpoint=True)
+
+fisher:
+    var_pars: ['Omega_c', 'sigma8', 'n_s', 'w0', 'wa', 'Omega_b', 'h']
+    step: 1e-4
+    output: 'output/srd_y1_cmb_lensing_tjpcov_fisher.dat'
+    fid_output: 'output/srd_y1_cmb_lensing_tjpcov_fiducials.dat'
+    derivative_method: 'numdifftools'
+
+postprocess:
+  latex_table: output/srd_y1_cmb_lensing_tjpcov_latex_table.tex
+  triangle_plot: output/srd_y1_cmb_lensing_tjpcov_triangle_plot.pdf
+  facecolor: blue
+  pairplots: [(w0, wa), (Omega_m, S8)]
+  outdir: 'output/'
+  CL:
+    - 0.68
+    - 0.95

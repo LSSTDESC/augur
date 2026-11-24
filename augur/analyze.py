@@ -3,7 +3,7 @@ import numpy as np
 import pyccl as ccl
 from augur.utils.diff_utils import five_pt_stencil
 from augur import generate
-from augur.utils.config_io import parse_config
+from augur.utils.config_io import _check_path_exists, parse_config
 from augur.utils.theory_utils import compute_new_theory_vector
 from astropy.table import Table
 import warnings
@@ -372,6 +372,16 @@ class Analyze(object):
                     self.par_bounds.append([_val[0], _val[-1]])
                 else:
                     self.x.append(_val)
+                # The data vector was made at the cosmo/systematics value, not this pivot.
+                if var in self.pars_fid.keys():
+                    fid = self.pars_fid[var]
+                elif var in self.req_params.keys():
+                    fid = self.req_params[var]
+                else:
+                    fid = None
+                if isinstance(fid, (int, float)) and not np.isclose(fid, self.x[-1]):
+                    warnings.warn(f"Fisher pivot {var}={self.x[-1]} differs from the fiducial "
+                                  f"{fid} the data vector was generated with.")
 
         # The other option is to pass just the parameter names and evaluate around
         # the fiducial values
@@ -689,47 +699,27 @@ class Analyze(object):
             if donorm:
                 x = self.norm * x + np.array(self.par_bounds[:, 0]).astype(np.float64)
 
-            if x.ndim == 1:
-                _pars = deepcopy(pars_fid)
-                _sys_pars = deepcopy(sys_fid)
-                for i in range(len(labels)):
-                    if labels[i] in pars_fid.keys():
-                        _pars.update({labels[i]: x[i]})
-                    elif labels[i] in sys_fid.keys():
-                        _sys_pars[labels[i]] = x[i]
-                    elif 'extra_parameters' in pars_fid.keys():
-                        if 'camb' in pars_fid['extra_parameters'].keys():
-                            if labels[i] in pars_fid['extra_parameters']['camb'].keys():
-                                _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                # Updating _sys_pars for consistency
-                                _sys_pars[labels[i]] = x[i]
+            def theory_at(xi):
+                _pars, _sys_pars = deepcopy(pars_fid), deepcopy(sys_fid)
+                camb = (_pars.get('extra_parameters') or {}).get('camb') or {}
+                for label, value in zip(labels, xi):
+                    if label in pars_fid:
+                        _pars[label] = value
+                    elif label in sys_fid:
+                        _sys_pars[label] = value
+                    elif label in camb:
+                        # Also in _sys_pars, for consistency
+                        camb[label] = _sys_pars[label] = value
                     else:
-                        raise ValueError(f'Parameter name {labels[i]} not recognized!')
+                        raise ValueError(f'Parameter name {label} not recognized!')
+                return self.compute_new_theory_vector(_sys_pars, _pars)
 
-                f_out = self.compute_new_theory_vector(_sys_pars, _pars)
-
+            if x.ndim == 1:
+                f_out = theory_at(x)
             elif x.ndim == 2:
                 if (x.shape != (len(labels), len(labels))):
                     raise ValueError('The labels should have the same length as the parameters!')
-                f_out = []
-                for i in range(len(labels)):
-                    _pars = deepcopy(pars_fid)
-                    _sys_pars = deepcopy(sys_fid)
-                    xi = x[i]
-                    for j in range(len(labels)):
-                        if labels[j] in pars_fid.keys():
-                            _pars.update({labels[j]: xi[j]})
-                        elif labels[j] in sys_fid.keys():
-                            _sys_pars[labels[j]] = xi[j]
-                        elif 'extra_parameters' in pars_fid.keys():
-                            if 'camb' in pars_fid['extra_parameters'].keys():
-                                if labels[j] in pars_fid['extra_parameters']['camb'].keys():
-                                    _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
-                                    # Updating _sys_pars for consistency
-                                    _sys_pars[labels[j]] = xi[j]
-                        else:
-                            raise ValueError(f'Parameter name {labels[j]} not recognized')
-                    f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
+                f_out = [theory_at(xi) for xi in x]
             else:
                 raise ValueError('x should be either 1D or 2D array!')
             return np.array(f_out)
@@ -884,8 +874,9 @@ class Analyze(object):
             self.Fij_with_gprior += gprior_only
 
             if save_txt:
-                np.savetxt(self.config['output']+".priors_only", gprior_only)
-                np.savetxt(self.config['output']+".with_priors", self.Fij_with_gprior)
+                np.savetxt(_check_path_exists(self.config['output']+".priors_only"), gprior_only)
+                np.savetxt(_check_path_exists(self.config['output']+".with_priors"),
+                           self.Fij_with_gprior)
 
         # Build a pandas DataFrame indexed by varied parameters (rows and columns)
         try:
@@ -961,12 +952,14 @@ class Analyze(object):
                 save_names[ind_c] = 'Omega_m'
 
             if save_txt:
-                np.savetxt(self.config['output'], self.Fij)
+                np.savetxt(_check_path_exists(self.config['output']), self.Fij)
                 tab_out = Table(save_vals, names=save_names)
-                tab_out.write(self.config['fid_output'], format='ascii', overwrite=True)
+                tab_out.write(_check_path_exists(self.config['fid_output']),
+                              format='ascii', overwrite=True)
                 fid = self.f(self.x, self.var_pars, self.pars_fid, self.req_params)
-                np.savetxt(self.config['output']+".theory_vector", fid)
-                np.savetxt(self.config['output']+".derivatives", self.derivatives)
+                np.savetxt(_check_path_exists(self.config['output']+".theory_vector"), fid)
+                np.savetxt(_check_path_exists(self.config['output']+".derivatives"),
+                           self.derivatives)
         if self.gprior_pars is not None:
             logger.info('adding priors')
             self.add_gaussian_priors(save_txt=save_txt)
@@ -1052,8 +1045,11 @@ class Analyze(object):
             if _calculate_biased_cls:
                 _x_here = []
                 _labels_here = []
-                if self.transform_S8 or self.transform_Omega_m:
-                    raise ValueError("Fisher Biasing involving derived parameters is ill-defined.")
+                # We are allowed to bias in the CCL basis, so we can comment this out.
+                # Checks to make sure we are in the CCL basis
+                # if self.transform_S8 or self.transform_Omega_m:
+                #     raise ValueError("Fisher Biasing involving
+                #                       derived parameters is ill-defined.")
                 if 'bias_params' in self.config['fisher_bias'].keys():
                     _pars_here = deepcopy(self.pars_fid)
                     _sys_here = deepcopy(self.req_params)
@@ -1080,12 +1076,13 @@ class Analyze(object):
                                                                     self.pars_fid,
                                                                     self.req_params,
                                                                     donorm=False)
-            Bj = np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            J = self.Jacobian_transform()
+            # transform to new basis
+            Bj = J.T @ np.einsum('l, lm, jm', self.biased_cls, self.lk.inv_cov, self.derivatives)
+            # Fisher already in new basis.
             bi = np.einsum('ij, j', np.linalg.inv(self.Fij), Bj)
             self.bi = bi
 
-            J = self.Jacobian_transform()
-            self.bi = J.T @ self.bi
             save_names = deepcopy(self.var_pars)
 
             if self.transform_S8:
@@ -1098,9 +1095,10 @@ class Analyze(object):
                 save_names[ind_c] = 'Omega_m'
             if save_txt:
                 tab_out = Table(self.bi, names=save_names)
-                tab_out.write(self.config['fid_output']+".biased_params",
+                tab_out.write(_check_path_exists(self.config['fid_output']+".biased_params"),
                               format='ascii', overwrite=True)
-                np.savetxt(self.config['output']+".theory_vector_biased", self.biased_cls)
+                np.savetxt(_check_path_exists(self.config['output']+".theory_vector_biased"),
+                           self.biased_cls)
             return self.bi
 
     def compute_new_theory_vector(self, _sys_pars, _pars):
