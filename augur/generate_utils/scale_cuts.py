@@ -7,6 +7,8 @@ across probe generators.  A list value is interpreted as one value per
 
 from numbers import Real
 
+from augur.generate_utils.tracers import get_tracers
+
 
 # Conservative pair-combination rule by cut type.
 # For lower limits, conservative means larger threshold; for upper limits,
@@ -72,7 +74,15 @@ def _extract_bin_index(tracer_name):
     return int(tracer_name[i + 1:])
 
 
-def parse_combination_scale_cut(stat_cfg, key_name, comb, tracer_combs_key='tracer_combs'):
+def _config_tracer_names(statistic, comb):
+    """Tracer names of a config bin pair, in config order (``lens`` before ``src``)."""
+    tr1, tr2 = get_tracers(statistic, comb)
+    # get_tracers returns galaxy_shearDensity pairs as (src, lens); the config lists (lens, src).
+    return (tr2, tr1) if 'sheardensity' in statistic.lower() else (tr1, tr2)
+
+
+def parse_combination_scale_cut(stat_cfg, key_name, comb, tracer_combs_key='tracer_combs',
+                                statistic=None):
     """Resolve a scale-cut value for one tracer combination.
 
         The config value may be:
@@ -100,6 +110,9 @@ def parse_combination_scale_cut(stat_cfg, key_name, comb, tracer_combs_key='trac
         Current tracer combination (tuple of tracer names like ('lens0', 'src1')).
     tracer_combs_key : str
         Key holding tracer-combination definitions in ``stat_cfg``.
+    statistic : str, optional
+        SACC data type. If given, ``comb`` and the ``tracer_combs`` entries are bin-index
+        pairs, as in the config, and are mapped to tracer names first.
 
     Returns
     -------
@@ -110,6 +123,9 @@ def parse_combination_scale_cut(stat_cfg, key_name, comb, tracer_combs_key='trac
 
     if isinstance(raw_value, list):
         tracer_combs = stat_cfg.get(tracer_combs_key, [])
+        if statistic is not None:
+            comb = _config_tracer_names(statistic, comb)
+            tracer_combs = [_config_tracer_names(statistic, c) for c in tracer_combs]
         comb_norm = _normalize_combination(comb)
 
         # Mode 1: explicit per-combination list (legacy behaviour).

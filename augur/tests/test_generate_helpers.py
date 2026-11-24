@@ -196,6 +196,57 @@ def test_get_scale_cuts_real_space_per_bin_theta_min_conservative_max():
     assert theta_max is None
 
 
+def test_get_scale_cuts_per_bin_with_config_bin_pairs():
+    # Regression: configs give tracer_combs as bin-index pairs, which the per-bin
+    # parser could not read (TypeError) unless the statistic maps them to names.
+    # galaxy_shearDensity: config pairs are (lens, src); list is [lens0, lens1, src0, src1, src2].
+    stat_cfg = {'lmax': [3000, 2500, 4000, 3500, 2000],
+                'tracer_combs': [[0, 0], [0, 1], [0, 2], [1, 2]]}
+    lmax, _ = _get_scale_cuts(stat_cfg, [1, 2], 'galaxy_shearDensity_cl_e')
+    assert lmax == 2000  # min(lens1 = 2500, src2 = 2000)
+    lmax, _ = _get_scale_cuts(stat_cfg, [0, 1], 'galaxy_shearDensity_cl_e')
+    assert lmax == 3000  # min(lens0 = 3000, src1 = 3500)
+
+    # Auto statistic: one entry per bin.
+    stat_cfg = {'kmax': [0.1, 0.2, 0.3], 'tracer_combs': [[0, 0], [0, 1], [1, 1], [1, 2]]}
+    _, kmax = _get_scale_cuts(stat_cfg, [1, 2], 'galaxy_density_cl')
+    assert kmax == 0.2
+
+    # Per-combination lists keep working with bin-index pairs.
+    stat_cfg = {'lmax': [100, 200], 'tracer_combs': [[0, 0], [1, 1]]}
+    assert _get_scale_cuts(stat_cfg, [1, 1], 'galaxy_shear_cl_ee')[0] == 200
+
+    stat_cfg = {'theta_min': [2.0, 5.0, 8.0], 'tracer_combs': [[0, 0], [0, 1], [1, 2]]}
+    theta_min, _ = _get_scale_cuts_real_space(stat_cfg, [1, 2], statistic='galaxy_shear_xi_plus')
+    assert theta_min == 8.0
+
+
+def test_refill_keeps_data_types_sharing_a_tracer_pair_apart():
+    # Regression: xi_plus and xi_minus of one pair overwrote each other's theta grid.
+    import types
+    from augur.generate import _refill_sacc_with_theory
+    S = sacc.Sacc()
+    for t in ('src0', 'src1'):
+        S.add_tracer('NZ', t, np.linspace(0, 2, 5), np.ones(5))
+    S.add_theta_xi('galaxy_shear_xi_plus', 'src0', 'src1', [1., 2., 3.], np.zeros(3))
+    S.add_theta_xi('galaxy_shear_xi_minus', 'src0', 'src1', [2., 3.], np.zeros(2))
+
+    def stat(data_type, n):
+        st = types.SimpleNamespace(source0=types.SimpleNamespace(sacc_tracer='src0'),
+                                   source1=types.SimpleNamespace(sacc_tracer='src1'),
+                                   sacc_data_type=data_type, ready=True,
+                                   get_theory_vector=lambda: np.arange(1., n + 1))
+        return types.SimpleNamespace(statistic=st)
+
+    lk = types.SimpleNamespace(statistics=[stat('galaxy_shear_xi_plus', 3),
+                                           stat('galaxy_shear_xi_minus', 2)])
+    _refill_sacc_with_theory(S, lk)
+    theta, xi = S.get_theta_xi('galaxy_shear_xi_plus', 'src0', 'src1')
+    assert np.allclose(theta, [1., 2., 3.]) and np.allclose(xi, [1., 2., 3.])
+    theta, xi = S.get_theta_xi('galaxy_shear_xi_minus', 'src0', 'src1')
+    assert np.allclose(theta, [2., 3.]) and np.allclose(xi, [1., 2.])
+
+
 def test_get_scale_cuts_real_space_per_bin_theta_max_conservative_min():
     # Symmetric rectangular grid: 3 lens bins + 3 src bins = 6 values
     # Per-bin list: [lens0, lens1, lens2, src0, src1, src2]

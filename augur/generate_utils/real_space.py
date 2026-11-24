@@ -39,7 +39,7 @@ _THETA_MAX_WARN = 1000.0
 
 
 def _get_scale_cuts_real_space(stat_cfg, comb, cosmo=None, dndz=None,
-                               tr1=None, tr2=None):
+                               tr1=None, tr2=None, statistic=None):
     """Return angular scale cuts (in arcmin) for a tracer combination.
 
     The config block may specify *either* ``theta_min`` / ``theta_max``
@@ -69,6 +69,8 @@ def _get_scale_cuts_real_space(stat_cfg, comb, cosmo=None, dndz=None,
     tr1, tr2 : str, optional
         Tracer names for the bin pair.  Required when scale cuts are given
         in ``r``.
+    statistic : str, optional
+        SACC data type, needed for per-bin lists when ``comb`` holds bin indices.
 
     Returns
     -------
@@ -85,8 +87,8 @@ def _get_scale_cuts_real_space(stat_cfg, comb, cosmo=None, dndz=None,
         )
 
     if has_theta:
-        theta_min = parse_combination_scale_cut(stat_cfg, 'theta_min', comb)
-        theta_max = parse_combination_scale_cut(stat_cfg, 'theta_max', comb)
+        theta_min = parse_combination_scale_cut(stat_cfg, 'theta_min', comb, statistic=statistic)
+        theta_max = parse_combination_scale_cut(stat_cfg, 'theta_max', comb, statistic=statistic)
         return theta_min, theta_max
 
     if not has_r:
@@ -108,8 +110,8 @@ def _get_scale_cuts_real_space(stat_cfg, comb, cosmo=None, dndz=None,
     a12 = np.array([1.0 / (1.0 + zmean1), 1.0 / (1.0 + zmean2)])
     chi12 = ccl.comoving_radial_distance(cosmo, a12)  # Mpc (not Mpc/h)
 
-    r_min = parse_combination_scale_cut(stat_cfg, 'r_min', comb)
-    r_max = parse_combination_scale_cut(stat_cfg, 'r_max', comb)
+    r_min = parse_combination_scale_cut(stat_cfg, 'r_min', comb, statistic=statistic)
+    r_max = parse_combination_scale_cut(stat_cfg, 'r_max', comb, statistic=statistic)
     theta_min = None
     theta_max = None
     if r_min is not None:
@@ -206,7 +208,7 @@ def add_real_space_two_point(config, S, sources, dndz, cosmo):
             tr1, tr2 = get_tracers(key, comb)
 
             theta_min_cut, theta_max_cut = _get_scale_cuts_real_space(
-                stat_cfg[key], comb, cosmo=cosmo, dndz=dndz, tr1=tr1, tr2=tr2
+                stat_cfg[key], comb, cosmo=cosmo, dndz=dndz, tr1=tr1, tr2=tr2, statistic=key
             )
 
             # Build boolean mask for scale cuts

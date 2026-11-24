@@ -857,6 +857,25 @@ def test_f_raises_for_unrecognized_parameter():
         a.f(np.array([0.3]), ['unknown_param'], pars, sys_fid)
 
 
+def test_f_raises_for_unrecognized_parameter_with_camb_block():
+    # Regression: with extra_parameters present an unknown label was skipped silently,
+    # leaving it unstepped (zero derivative).
+    pars = {'Omega_c': 0.25, 'A_s': 1e-9,
+            'extra_parameters': {'camb': {'halofit_version': 'mead', 'kmax': 10.0}}}
+    a = make_analyze(['Omega_c'], pars)
+    captured = []
+    a.compute_new_theory_vector = lambda s, p: captured.append((s, p)) or np.array([0.0])
+
+    for x in (np.array([0.3, 1.0]), np.array([[0.3, 1.0], [0.3, 1.0]])):
+        with pytest.raises(ValueError, match='Parameter name typo not recognized!'):
+            a.f(x, ['Omega_c', 'typo'], pars, {})
+
+    a.f(np.array([20.0]), ['kmax'], pars, {})
+    sys_pars, stepped = captured[-1]
+    assert stepped['extra_parameters']['camb']['kmax'] == 20.0 == sys_pars['kmax']
+    assert pars['extra_parameters']['camb']['kmax'] == 10.0  # fiducial left untouched
+
+
 def test_f_2d_input_with_wrong_shape_raises():
     pars = {'Omega_c': 0.25, 'A_s': 1e-9, 'mass_split': 0.0}
     sys_fid = {}
@@ -950,3 +969,16 @@ def test_parameters_pivot_off_fiducial_warns(centre, warns):
         Analyze(config, likelihood=DummyLikelihood(), tools=DummyTools({'Omega_c': 0.2}),
                 req_params={'HMCode_logT_AGN': 7.8})
     assert any('Fisher pivot HMCode_logT_AGN' in str(w.message) for w in caught) == warns
+
+
+def test_get_fisher_matrix_creates_output_directory(tmp_path):
+    # Regression: the Fisher matrix itself was the one output written without
+    # creating its directory first.
+    out = tmp_path / 'new_dir' / 'fisher.dat'
+    a = make_analyze(['Omega_c'], {'Omega_c': 0.25, 'A_s': 1e-9},
+                     extra_fisher_cfg={'output': str(out),
+                                       'fid_output': str(tmp_path / 'other_dir' / 'pars.dat')})
+    a.compute_new_theory_vector = lambda s, p: np.array([])
+    a.derivatives = np.zeros((1, 0))
+    a.get_fisher_matrix()
+    assert out.is_file()

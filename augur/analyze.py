@@ -699,47 +699,27 @@ class Analyze(object):
             if donorm:
                 x = self.norm * x + np.array(self.par_bounds[:, 0]).astype(np.float64)
 
-            if x.ndim == 1:
-                _pars = deepcopy(pars_fid)
-                _sys_pars = deepcopy(sys_fid)
-                for i in range(len(labels)):
-                    if labels[i] in pars_fid.keys():
-                        _pars.update({labels[i]: x[i]})
-                    elif labels[i] in sys_fid.keys():
-                        _sys_pars[labels[i]] = x[i]
-                    elif 'extra_parameters' in pars_fid.keys():
-                        if 'camb' in pars_fid['extra_parameters'].keys():
-                            if labels[i] in pars_fid['extra_parameters']['camb'].keys():
-                                _pars['extra_parameters']['camb'].update({labels[i]: x[i]})
-                                # Updating _sys_pars for consistency
-                                _sys_pars[labels[i]] = x[i]
+            def theory_at(xi):
+                _pars, _sys_pars = deepcopy(pars_fid), deepcopy(sys_fid)
+                camb = (_pars.get('extra_parameters') or {}).get('camb') or {}
+                for label, value in zip(labels, xi):
+                    if label in pars_fid:
+                        _pars[label] = value
+                    elif label in sys_fid:
+                        _sys_pars[label] = value
+                    elif label in camb:
+                        # Also in _sys_pars, for consistency
+                        camb[label] = _sys_pars[label] = value
                     else:
-                        raise ValueError(f'Parameter name {labels[i]} not recognized!')
+                        raise ValueError(f'Parameter name {label} not recognized!')
+                return self.compute_new_theory_vector(_sys_pars, _pars)
 
-                f_out = self.compute_new_theory_vector(_sys_pars, _pars)
-
+            if x.ndim == 1:
+                f_out = theory_at(x)
             elif x.ndim == 2:
                 if (x.shape != (len(labels), len(labels))):
                     raise ValueError('The labels should have the same length as the parameters!')
-                f_out = []
-                for i in range(len(labels)):
-                    _pars = deepcopy(pars_fid)
-                    _sys_pars = deepcopy(sys_fid)
-                    xi = x[i]
-                    for j in range(len(labels)):
-                        if labels[j] in pars_fid.keys():
-                            _pars.update({labels[j]: xi[j]})
-                        elif labels[j] in sys_fid.keys():
-                            _sys_pars[labels[j]] = xi[j]
-                        elif 'extra_parameters' in pars_fid.keys():
-                            if 'camb' in pars_fid['extra_parameters'].keys():
-                                if labels[j] in pars_fid['extra_parameters']['camb'].keys():
-                                    _pars['extra_parameters']['camb'].update({labels[j]: xi[j]})
-                                    # Updating _sys_pars for consistency
-                                    _sys_pars[labels[j]] = xi[j]
-                        else:
-                            raise ValueError(f'Parameter name {labels[j]} not recognized')
-                    f_out.append(self.compute_new_theory_vector(_sys_pars, _pars))
+                f_out = [theory_at(xi) for xi in x]
             else:
                 raise ValueError('x should be either 1D or 2D array!')
             return np.array(f_out)
@@ -972,7 +952,7 @@ class Analyze(object):
                 save_names[ind_c] = 'Omega_m'
 
             if save_txt:
-                np.savetxt(self.config['output'], self.Fij)
+                np.savetxt(_check_path_exists(self.config['output']), self.Fij)
                 tab_out = Table(save_vals, names=save_names)
                 tab_out.write(_check_path_exists(self.config['fid_output']),
                               format='ascii', overwrite=True)

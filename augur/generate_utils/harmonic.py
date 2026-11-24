@@ -11,7 +11,7 @@ from augur.generate_utils.scale_cuts import parse_combination_scale_cut
 from augur.utils.config_io import parse_array
 
 
-def _get_scale_cuts(stat_cfg, comb):
+def _get_scale_cuts(stat_cfg, comb, statistic=None):
     """
     Extract the ell/k scale-cut for a tracer combination.
 
@@ -24,6 +24,8 @@ def _get_scale_cuts(stat_cfg, comb):
         Per-statistic config block.
     comb : tuple
         Tracer-bin pair.
+    statistic : str, optional
+        SACC data type, needed for per-bin lists when ``comb`` holds bin indices.
 
     Returns
     -------
@@ -33,8 +35,8 @@ def _get_scale_cuts(stat_cfg, comb):
     if 'kmax' in stat_cfg and 'lmax' in stat_cfg:
         raise ValueError('Cannot specify both lmax and kmax for scale cuts.')
 
-    lmax = parse_combination_scale_cut(stat_cfg, 'lmax', comb)
-    kmax = parse_combination_scale_cut(stat_cfg, 'kmax', comb)
+    lmax = parse_combination_scale_cut(stat_cfg, 'lmax', comb, statistic=statistic)
+    kmax = parse_combination_scale_cut(stat_cfg, 'kmax', comb, statistic=statistic)
     return lmax, kmax
 
 
@@ -83,7 +85,7 @@ def add_harmonic_two_point(config, S, sources, dndz, cosmo):
         ells = np.sqrt(ell_edges[:-1] * ell_edges[1:])  # geometric mean
 
         for comb in tracer_combs:
-            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
+            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb, key)
             tr1, tr2 = get_tracers(key, comb)
 
             if (kmax is not None) and (kmax != 'None'):

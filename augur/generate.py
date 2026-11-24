@@ -74,9 +74,9 @@ def _get_tracers(statistic, comb):
     return _get_tracers_impl(statistic, comb)
 
 
-def _get_scale_cuts(stat_cfg, comb):
+def _get_scale_cuts(stat_cfg, comb, statistic=None):
     """Backward-compatible wrapper — see :func:`augur.generate_utils.harmonic._get_scale_cuts`."""
-    return _get_scale_cuts_impl(stat_cfg, comb)
+    return _get_scale_cuts_impl(stat_cfg, comb, statistic)
 
 
 def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
@@ -122,7 +122,7 @@ def _build_tp_filters_from_sacc(stat_cfg, S, cosmo, ignore_sc_likelihood):
         config_pairs = set()
 
         for comb in config_stats:
-            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb)
+            lmax, kmax = _get_scale_cuts(stat_cfg[key], comb, key)
             tr1, tr2 = _get_tracers(key, comb)
             config_pairs.add((tr1, tr2))
 
@@ -355,7 +355,8 @@ def _refill_sacc_with_theory(S, lk):
             tr1, tr2 = tr2, tr1
         oriented_stats.append((st, tr1, tr2))
         lk_tracer_keys.add((dtype, tr1, tr2))
-        x_dict[(tr1, tr2)], win_dict[(tr1, tr2)] = extract_x_and_windows(
+        # Keyed by data type too: xi_plus and xi_minus share a tracer pair.
+        x_dict[(dtype, tr1, tr2)], win_dict[(dtype, tr1, tr2)] = extract_x_and_windows(
             S, dtype, tr1, tr2,
         )
 
@@ -375,10 +376,11 @@ def _refill_sacc_with_theory(S, lk):
 
     for st, tr1, tr2 in oriented_stats:
         st.ready = False
+        key = (st.sacc_data_type, tr1, tr2)
         add_data_points(
             S, st.sacc_data_type, tr1, tr2,
-            x_dict[(tr1, tr2)], st.get_theory_vector(),
-            window=win_dict[(tr1, tr2)],
+            x_dict[key], st.get_theory_vector(),
+            window=win_dict[key],
         )
 
     S.data.extend(other_data)
