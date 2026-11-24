@@ -85,9 +85,12 @@ def compute_new_theory_vector(lk, tools, _sys_pars, _pars, return_all=False):
                                    'mead',
                                    'mead2015',
                                    'mead2016'):
-                dict_all['HMCode_logT_AGN'] = hm.get('HMCode_logT_AGN', 7.8)
-                dict_all['HMCode_eta_baryon'] = hm.get('HMCode_eta_baryon', 0.603)
-                dict_all['HMCode_A_baryon'] = hm.get('HMCode_A_baryon', 3.13)
+                # HMCode values belong under `systematics:`, where Analyze.f steps them.
+                # The CAMB block (then CAMB's default) only fills in a missing one;
+                # overwriting would undo the step and zero the derivative.
+                dict_all.setdefault('HMCode_logT_AGN', hm.get('HMCode_logT_AGN', 7.8))
+                dict_all.setdefault('HMCode_eta_baryon', hm.get('HMCode_eta_baryon', 0.603))
+                dict_all.setdefault('HMCode_A_baryon', hm.get('HMCode_A_baryon', 3.13))
 
     # Handle modified gravity parameters
     mg = dict_all.pop('mg_parametrization', None)

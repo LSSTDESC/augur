@@ -47,3 +47,24 @@ def test_compute_new_theory_vector_keeps_one_amplitude(A_s, kept, dropped):
     keys = set(tools.pmap.keys())
     assert kept in keys
     assert dropped not in keys
+
+
+def test_compute_new_theory_vector_keeps_systematics_hmcode():
+    """Regression: the CAMB-block fiducial overwrote a stepped HMCode value (zero derivative)."""
+    lk, tools = _Recorder(), _Recorder()
+    camb = {'halofit_version': 'mead2020_feedback', 'HMCode_logT_AGN': 7.8}
+    pars = {'Omega_c': 0.25, 'sigma8': 0.8, 'extra_parameters': {'camb': camb}}
+    compute_new_theory_vector(lk, tools, {'HMCode_logT_AGN': 8.3}, pars)
+    assert tools.pmap['HMCode_logT_AGN'] == 8.3
+
+
+@pytest.mark.parametrize('camb_logT, expected', [(7.9, 7.9), (None, 7.8)])
+def test_compute_new_theory_vector_fills_missing_hmcode(camb_logT, expected):
+    """Without a systematics entry, the CAMB block and then CAMB's default supply the value."""
+    camb = {'halofit_version': 'mead2020_feedback'}
+    if camb_logT is not None:
+        camb['HMCode_logT_AGN'] = camb_logT
+    lk, tools = _Recorder(), _Recorder()
+    pars = {'Omega_c': 0.25, 'sigma8': 0.8, 'extra_parameters': {'camb': camb}}
+    compute_new_theory_vector(lk, tools, {}, pars)
+    assert tools.pmap['HMCode_logT_AGN'] == expected
