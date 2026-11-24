@@ -1,170 +1,147 @@
-"""Cluster-count statistics for SACC generation.
+"""Binned cluster number counts and mean log10 mass for SACC generation.
 
-This module provides the stub infrastructure for adding cluster-count
-observables (number counts in mass/redshift bins) to a SACC data vector.
+The ``cluster_counts`` config section describes one cluster sample: its
+redshift-richness binning and its crow model, written as a firecrown
+``ClusterModelFactory``::
 
-TJPCov Covariance Support:
-==========================
-TJPCov (via ClusterCountsGaussian, ClusterCountsSSC) supports cluster number
-count covariance including shot noise, Gaussian contributions, and super-sample
-covariance (SSC). To enable TJPCov cluster covariance, the SACC file must have:
+    cluster_counts:
+      survey_name: clusters            # SACC survey tracer (default 'clusters')
+      survey_area: 18000               # deg^2
+      z_edges: [0.2, 0.4, 0.6, 0.8]
+      richness_log_edges: [1.3, 1.5, 1.8, 2.3]   # log10(richness)
+      observables: [counts, mass]      # default [counts]
+      model:
+        mass_distribution: {type: MurataUnbinnedFactory,
+                            pivot_log_mass: 14.3, pivot_redshift: 0.5}
+        recipe: {type: GridBinnedClusterRecipeFactory,
+                 mass_interval: [13.0, 16.0], true_z_interval: [0.1, 1.5]}
+      covariance:
+        ssc: true                      # TJPCov super-sample term of the counts
+        halo_bias: Tinker10            # used by the SSC term only
+        mean_log_mass_sigma: 0.25      # dex scatter of log10 M in a bin; needed for 'mass'
 
-1. **Redshift bin tracers**: bin_z_0, bin_z_1, ... with (z_min, z_max) edges
-2. **Richness/Lambda bin tracers**: bin_richness_0, ... with (log10(λ_min), log10(λ_max))
-3. **Survey metadata**: survey tracer with total area in steradians
-4. **Data type**: sacc.standard_types.cluster_counts
-5. **Data points**: cluster counts in each (z_bin, richness_bin) combination
-
-See :func:`setup_cluster_sacc_tracers_for_tjpcov` for tracer setup.
-
-.. warning::
-
-    Cluster counts datavector generation is **not yet implemented** in Augur.
-    Calling :func:`add_cluster_counts` will register placeholder tracers and
-    issue a warning. Firecrown factories for cluster counts with CROW are
-    not yet available. However, the covariance layer is prepared to handle
-    cluster counts if the SACC structure is set up correctly (see above).
+The likelihood statistics come from firecrown's ``BinnedClusterFactory``
+(``firecrown.likelihood.clusters``), so augur needs a firecrown that has it.
 """
 
+import logging
+
 import numpy as np
+import sacc
+from firecrown.likelihood.two_point import TwoPoint
+from firecrown.parameters import ParamsMap
 
 from augur.utils.config_io import parse_array
-import warnings
+
+logger = logging.getLogger(__name__)
+
+CLUSTER_DATA_TYPES = {
+    'counts': sacc.standard_types.cluster_counts,
+    'mass': sacc.standard_types.cluster_mean_log_mass,
+}
+CLUSTER_TRACER_TYPES = ('survey', 'bin_z', 'bin_richness', 'bin_radius')
 
 
-def add_cluster_counts(config, S, sources, cosmo):
+def _cluster_settings(cc_cfg):
+    """Return the survey name and the observables of a cluster_counts section."""
+    observables = list(cc_cfg.get('observables', ['counts']))
+    unknown = set(observables) - set(CLUSTER_DATA_TYPES)
+    if unknown:
+        raise ValueError(f"Unknown cluster_counts observables {sorted(unknown)}; "
+                         f"expected a subset of {list(CLUSTER_DATA_TYPES)}.")
+    if 'mass' in observables and 'counts' not in observables:
+        raise ValueError("cluster_counts: 'mass' needs 'counts' too; the mean-mass "
+                         "variance is set by the expected number of clusters.")
+    return cc_cfg.get('survey_name', 'clusters'), observables
+
+
+def make_cluster_factory(config):
+    """Build the firecrown BinnedClusterFactory of the cluster_counts section.
+
+    Returns None when the config has no cluster_counts section.
     """
-    Populate a SACC object with cluster-count data points.
+    cc_cfg = config.get('cluster_counts')
+    if cc_cfg is None:
+        return None
+    try:
+        from firecrown.likelihood.factories import BinnedClusterFactory
+    except ImportError as exc:
+        raise ImportError(
+            "cluster_counts needs a firecrown with firecrown.likelihood.clusters "
+            "(BinnedClusterFactory)."
+        ) from exc
+    survey_name, observables = _cluster_settings(cc_cfg)
+    if 'model' not in cc_cfg:
+        raise ValueError("cluster_counts needs a 'model' (a firecrown ClusterModelFactory).")
+    return BinnedClusterFactory.model_validate({'abundance_factories': [{
+        'survey_name': survey_name,
+        'observables': observables,
+        'model': cc_cfg['model'],
+    }]})
 
-    Currently a **stub**: it reads the ``cluster_counts`` block of the
-    config, adds placeholder data-points to the SACC, and warns that no
-    firecrown likelihood objects are returned.
 
-    Parameters
-    ----------
-    config : dict
-        Full Augur config dict (should contain ``cluster_counts``).
-    S : sacc.Sacc
-        SACC object to populate.
-    sources : dict
-        Tracer-name → firecrown source mapping (updated in-place if
-        cluster tracers are added).
-    cosmo : pyccl.Cosmology
-        Fiducial cosmology (needed for mass-function evaluations once
-        implemented).
+def add_cluster_counts(config, S):
+    """Add the cluster tracers and placeholder data points to a SACC object.
+
+    Writes a ``survey`` tracer (area in deg^2), ``bin_z_i`` and ``bin_rich_j``
+    tracers, and one point per (z, richness) bin and observable, on the
+    tracers ``(survey, bin_z_i, bin_rich_j)``, as firecrown and TJPCov read them.
 
     Returns
     -------
     stats : list
-        Empty — no firecrown statistics are built yet.
+        The firecrown cluster statistics, not yet read from *S*.
     tp_filters : list
-        Empty — no filters are built yet.
+        Always empty: scale cuts apply to two-point data only.
     """
-    cc_cfg = config.get('cluster_counts', None)
-    if cc_cfg is None:
-        return [], []
+    cc_cfg = config['cluster_counts']
+    survey_name, observables = _cluster_settings(cc_cfg)
+    z_edges = parse_array(cc_cfg['z_edges'])
+    rich_edges = parse_array(cc_cfg['richness_log_edges'])
+    for name, edges in (('z_edges', z_edges), ('richness_log_edges', rich_edges)):
+        if len(edges) < 2 or np.any(np.diff(edges) <= 0):
+            raise ValueError(f"cluster_counts.{name} must be increasing with >= 2 edges.")
+    area = float(cc_cfg['survey_area'])
+    if area <= 0:
+        raise ValueError("cluster_counts.survey_area must be positive (deg^2).")
 
-    warnings.warn(
-        "Cluster count generation is not yet implemented in Augur. "
-        "Placeholder tracers will be added to the SACC, but no firecrown "
-        "likelihood objects are created. "
-        "Firecrown factories for cluster counts with CROW are not yet available."
-    )
+    S.add_tracer('survey', survey_name, area)
+    z_labels = [f'bin_z_{i}' for i in range(len(z_edges) - 1)]
+    rich_labels = [f'bin_rich_{j}' for j in range(len(rich_edges) - 1)]
+    for label, lo, hi in zip(z_labels, z_edges[:-1], z_edges[1:]):
+        S.add_tracer('bin_z', label, float(lo), float(hi))
+    for label, lo, hi in zip(rich_labels, rich_edges[:-1], rich_edges[1:]):
+        S.add_tracer('bin_richness', label, float(lo), float(hi))
+    for obs in observables:
+        for z_label in z_labels:
+            for rich_label in rich_labels:
+                S.add_data_point(CLUSTER_DATA_TYPES[obs],
+                                 (survey_name, z_label, rich_label), 0.0)
 
-    # Expected config structure (for future implementation):
-    #   cluster_counts:
-    #     z_edges: [0.2, 0.4, 0.6, 0.8, 1.0]
-    #     mass_proxy_edges: [13.0, 13.5, 14.0, 14.5, 15.0]  # log10(M/Msun)
-    #     survey_area: 18000  # deg^2
-
-    z_edges = np.array(cc_cfg.get('z_edges', [0.2, 0.5, 0.8, 1.1]))
-    mass_edges = np.array(cc_cfg.get('mass_proxy_edges', [14.0, 14.5, 15.0]))
-    n_z_bins = len(z_edges) - 1
-    n_m_bins = len(mass_edges) - 1
-
-    # Register a cluster tracer per (z, M) bin
-    for iz in range(n_z_bins):
-        for im in range(n_m_bins):
-            tracer_name = f'cluster_z{iz}_m{im}'
-            S.add_tracer('Map', tracer_name,
-                         quantity='generic', spin=0,
-                         ell=None, beam=None)
-
-    return [], []
+    return create_cluster_statistics(config), []
 
 
-def setup_cluster_sacc_tracers_for_tjpcov(S, config):
+def create_cluster_statistics(config):
+    """Return new, unread firecrown statistics of the cluster_counts section."""
+    factory = make_cluster_factory(config)
+    return [] if factory is None else [f.create() for f in factory.abundance_factories]
+
+
+def cluster_statistics(lk):
+    """Return the statistics of a likelihood that are not two-point."""
+    return [g.statistic for g in lk.statistics if not isinstance(g.statistic, TwoPoint)]
+
+
+def add_cluster_parameter_defaults(lk, sys_params):
+    """Return *sys_params* with crow defaults for the cluster parameters it lacks.
+
+    Firecrown raises on missing sampler parameters, and the cluster ones
+    (``mass_distribution_mu0`` ...) are rarely all listed under ``systematics``.
     """
-    Set up cluster bin tracers in SACC for TJPCov covariance compatibility.
-
-    This creates the tracer structure that TJPCov's ClusterCountsGaussian and
-    ClusterCountsSSC classes expect when calling load_from_sacc():
-      - bin_z tracers with redshift bin edges
-      - bin_richness tracers with log10(richness) bin edges
-      - survey tracer with total area in steradians
-
-    When present, the covariance layer (:func:`augur.generate_utils.covariance.compute_covariance`)
-    passes these tracers to TJPCov, which automatically computes shot noise and SSC
-    from the Halo Mass Function and mass-richness relation.
-
-    Parameters
-    ----------
-    S : sacc.Sacc
-        SACC object to populate with cluster tracers (modified in-place).
-    config : dict
-        Augur configuration dict with ``cluster_counts`` section.
-
-    Returns
-    -------
-    None
-        Tracers are added directly to *S*.
-
-    Config Structure (cluster_counts section):
-    -------------------------------------------
-    cluster_counts:
-      z_edges: [0.3, 0.5, 0.7, 1.2]           # Cluster redshift bin edges
-      richness_log_edges: [1.0, 1.48, 1.90, 2.30]  # log10(richness) edges
-      survey_area: 4000                        # Survey area in deg^2
-
-      tjpcov_options:                          # Optional TJPCov settings
-        min_halo_mass: 1e13                    # Minimum halo mass (M_sun)
-        has_mproxy: true                       # Include mass-richness scatter
-
-    Notes
-    -----
-    This function assumes the config keys are present. If any are missing,
-    defaults are used from TJPCov's internal logic.
-    """
-    cluster_cfg = config.get('cluster_counts', {})
-
-    if not cluster_cfg:
-        return
-
-    # Parse redshift and richness bin edges
-    z_edges = parse_array(cluster_cfg.get('z_edges', None))
-    richness_log_edges = parse_array(
-        cluster_cfg.get('richness_log_edges', None)
-    )
-    if z_edges is None or richness_log_edges is None:
-        raise ValueError(
-            "Cluster counts require 'z_edges' and 'richness_log_edges' in config."
-        )
-
-    # Add bin_z tracers (redshift bins)
-    for i in range(len(z_edges) - 1):
-        tracer_name = f"bin_z_{i}"
-        z_min, z_max = float(z_edges[i]), float(z_edges[i + 1])
-        # SACC tracer type 'bin_z' with (lower, upper) redshift bounds
-        S.add_tracer("bin_z", tracer_name, z_min, z_max)
-
-    # Add bin_richness tracers (richness/lambda bins in log10 scale)
-    for i in range(len(richness_log_edges) - 1):
-        tracer_name = f"bin_richness_{i}"
-        log_lam_min = float(richness_log_edges[i])
-        log_lam_max = float(richness_log_edges[i + 1])
-        # SACC tracer type 'bin_richness' with (log10_lambda_min, log10_lambda_max)
-        S.add_tracer("bin_richness", tracer_name, log_lam_min, log_lam_max)
-
-    # Add survey metadata tracer, sacc takes degrees^2
-    survey_area_deg2 = float(cluster_cfg.get('survey_area', 4000.0))
-    S.add_tracer("survey", "mock_survey", survey_area_deg2)
+    out = dict(sys_params.items())
+    for st in cluster_statistics(lk):
+        for name, value in st.required_parameters().get_default_values().items():
+            if name not in out:
+                logger.info("Cluster parameter %s not in systematics; using %g", name, value)
+                out[name] = value
+    return ParamsMap(out) if isinstance(sys_params, ParamsMap) else out

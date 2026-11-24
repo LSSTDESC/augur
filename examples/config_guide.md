@@ -458,6 +458,63 @@ statistics:
 
 ---
 
+### `cluster_counts`
+
+Binned cluster number counts and mean $\log_{10}$ mass of one cluster sample,
+predicted by firecrown's `BinnedClusterFactory` with a crow model. This needs a
+firecrown with `firecrown.likelihood.clusters`. The section works on its own
+or next to `statistics`, and with or without `Firecrown_Factory`.
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `survey_name` | `str` | No | SACC survey tracer name (default `clusters`). |
+| `survey_area` | `float` | Yes | Survey area in deg². |
+| `z_edges` | `list` / `str` | Yes | Cluster redshift bin edges. |
+| `richness_log_edges` | `list` / `str` | Yes | $\log_{10}$ richness bin edges. |
+| `observables` | `list` | No | Subset of `[counts, mass]` (default `[counts]`); `mass` needs `counts`. |
+| `model` | `dict` | Yes | A firecrown `ClusterModelFactory`: `halo_mass_function`, `mass_distribution`, `recipe`, optional `completeness`, `purity`, `parameter_prefix`. |
+| `covariance.ssc` | `bool` | No | Add the TJPCov super-sample covariance to the counts (default `true`). |
+| `covariance.halo_bias` | `str` | No | Halo bias of the SSC term (default `Tinker10`). |
+| `covariance.mean_log_mass_sigma` | `float` | With `mass` | Scatter (dex) of $\log_{10}M$ within a bin; the mean-mass variance is $\sigma^2/N$. |
+
+The covariance of the cluster points is block-diagonal with respect to the
+two-point data, whatever `cov_options.cov_type` is:
+- counts get Poisson $N$ (crow's fiducial counts) plus SSC;
+- mean masses get $\sigma^2/N$, with no counts–mass cross terms.
+
+The SSC comes from TJPCov, using the halo mass function, mass range and
+Murata parameters of `model` with exact (spectroscopic) redshift bins.
+TJPCov's own counts $G$ leave out crow's completeness and purity, so the SSC
+is rescaled to crow's counts:
+$\mathrm{SSC}_{ij} N_i N_j / (G_i G_j)$.
+Both this and the Poisson term follow CLPipe's `CLPCovariance` stage
+(LSSTDESC/CLPipe, `clpipe/clp_covariance.py`, `replace_crow_counts`).
+TJPCov integrates true redshift only up to $z=0.91$, so bins above that get
+too little SSC (augur warns).
+
+The mass-proxy parameters (`mass_distribution_mu0`, `mu1`, `mu2`, `sigma0`,
+`sigma1`, `sigma2`, plus any completeness or purity ones) take crow's defaults
+unless they are set under `systematics`. They can go in `fisher.var_pars`.
+For Fisher forecasts, prefer `GridBinnedClusterRecipeFactory` with
+`MurataUnbinnedFactory`: its fixed grids keep derivatives smooth.
+
+```yaml
+cluster_counts:
+    survey_area: 18000
+    z_edges: [0.2, 0.4, 0.6, 0.8]
+    richness_log_edges: [1.3, 1.5, 1.8, 2.3]
+    observables: [counts, mass]
+    model:
+        halo_mass_function: {name: Tinker08, mass_def: 200c}
+        mass_distribution: {type: MurataUnbinnedFactory, pivot_log_mass: 14.3, pivot_redshift: 0.5}
+        recipe: {type: GridBinnedClusterRecipeFactory, mass_interval: [13.0, 16.0], true_z_interval: [0.1, 1.2]}
+    covariance:
+        ssc: true
+        mean_log_mass_sigma: 0.25
+```
+
+---
+
 ### `fiducial_sacc_path`
 
 Output path for the generated SACC file containing the fiducial data vector and

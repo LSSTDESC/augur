@@ -56,7 +56,9 @@ from augur.generate_utils.harmonic import (
 )
 from augur.generate_utils.real_space import add_real_space_two_point
 from augur.generate_utils.cmb_lensing import add_cmb_lensing
-from augur.generate_utils.cluster_counts import add_cluster_counts
+from augur.generate_utils.cluster_counts import (
+    add_cluster_counts, add_cluster_parameter_defaults, create_cluster_statistics,
+)
 from augur.generate_utils.covariance import compute_covariance
 from augur.generate_utils.sacc_interface import (
     extract_x_and_windows, add_data_points,
@@ -347,6 +349,12 @@ def _refill_sacc_with_theory(S, lk):
     oriented_stats = []
     for st in lk.statistics:
         st = st.statistic
+        if not isinstance(st, TwoPoint):
+            # Cluster statistics: fill their points in place; they are kept
+            # below as non-two-point data.
+            for idx, value in zip(st.sacc_indices, st.get_theory_vector()):
+                S.data[idx].value = float(value)
+            continue
         tr1 = st.source0.sacc_tracer
         tr2 = st.source1.sacc_tracer
         dtype = st.sacc_data_type
@@ -416,6 +424,9 @@ def _build_final_lk(config, S, tools, stats, tp_filters, *,
         )
         lk = load_likelihood_from_yaml(config, tools.ccl_factory, sacc_for_rebuild)
     else:
+        # A statistic can be read only once: give the cluster ones new objects.
+        stats = [st for st in stats if isinstance(st, TwoPoint)]
+        stats += create_cluster_statistics(config)
         lk = ConstGaussian(statistics=stats)
         lk.read(S)
     return lk
@@ -437,7 +448,7 @@ def generate_sacc_and_stats(config):
     * ``statistics``  →  harmonic-space C_ell (always required for now)
     * ``statistics_real_space``  →  real-space xi (experimental stub)
     * ``cmb_lensing``  →  CMB-lensing cross-/auto-spectra (stub)
-    * ``cluster_counts``  →  cluster number counts (stub)
+    * ``cluster_counts``  →  binned cluster counts and mean log mass
 
     Parameters
     ----------
@@ -518,19 +529,9 @@ def generate_sacc_and_stats(config):
             all_tp_filters.extend(filters_cmb)
             active_probes.append('cmb_lensing')
 
-    # 4d. Cluster counts (stub — registers SACC tracers for TJPCov but
-    #     no firecrown statistics are returned yet)
+    # 4d. Binned cluster counts and mean log mass (firecrown + crow)
     if 'cluster_counts' in config:
-        warnings.warn(
-            "Cluster count datavector generation is not yet implemented in "
-            "Augur. Placeholder tracers will be registered in the SACC for "
-            "TJPCov covariance, but no firecrown likelihood statistics are "
-            "created. Firecrown factories for cluster counts with CROW are "
-            "not yet available."
-        )
-        stats_cc, filters_cc = add_cluster_counts(
-            config, S, sources, cosmo
-        )
+        stats_cc, filters_cc = add_cluster_counts(config, S)
         all_stats.extend(stats_cc)
         all_tp_filters.extend(filters_cc)
         active_probes.append('cluster_counts')
@@ -655,6 +656,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
                             "%d (scale cuts applied); using Firecrown's filtered "
                             "covariance.", n_lk, n_cov,
                         )
+                sys_params = add_cluster_parameter_defaults(lk, sys_params)
                 _, lk, tools = compute_new_theory_vector(
                     lk, tools, sys_params, _pars, return_all=True
                 )
@@ -697,6 +699,7 @@ def generate(configs, return_all_outputs=False, write_sacc=True, use_sacc=None,
         else:
             lk = ConstGaussian(statistics=stats)
             lk.read(S)
+    sys_params = add_cluster_parameter_defaults(lk, sys_params)
 
     _pars = deepcopy(cosmo.to_dict())
     _, lk, tools = compute_new_theory_vector(

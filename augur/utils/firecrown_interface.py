@@ -381,6 +381,11 @@ def load_likelihood_from_yaml(config, ccl_factory, S, filters=[]):
             filters=filters,
         )
 
+    # Cluster statistics from the cluster_counts section join the same likelihood.
+    # Imported here: augur.generate_utils imports this module.
+    from augur.generate_utils.cluster_counts import make_cluster_factory
+    cluster_factory = make_cluster_factory(config)
+    extra = {} if cluster_factory is None else {'cluster_factory': cluster_factory}
     two_point_experiment = TwoPointExperiment(
                                 two_point_factory=tpf,
                                 ccl_factory=ccl_factory,
@@ -388,6 +393,7 @@ def load_likelihood_from_yaml(config, ccl_factory, S, filters=[]):
                                     sacc_data_file=S,
                                     filters=tpbfc,
                                     ),
+                                **extra,
                                 )
     lk = two_point_experiment.make_likelihood()
 

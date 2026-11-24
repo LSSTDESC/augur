@@ -1,6 +1,9 @@
 import logging
+import warnings
 import numpy as np
 import pyccl as ccl
+import sacc
+from firecrown.likelihood.two_point import TwoPoint
 from tjpcov.covariance_gaussian_fsky import FourierGaussianFsky
 from tjpcov.covariance_cluster_counts_gaussian import ClusterCountsGaussian as BaseClusterGaussian
 from tjpcov.covariance_cluster_counts_ssc import ClusterCountsSSC as BaseClusterSSC
@@ -95,119 +98,6 @@ def get_noise_power(config, S, tracer_name, return_ndens=False):
         return noise_power
 
 
-def get_cluster_noise_power(config, S, cluster_tracer_name, return_cluster_density=False):
-    """
-    Compute cluster shot noise (Poisson fluctuation noise) for TJPCov.
-
-    Cluster counts have Poisson shot noise proportional to 1/N_cluster.
-    TJPCov's ClusterCountsGaussian computes this automatically from redshift
-    and richness bin definitions in the SACC tracer metadata.
-
-    This function provides a placeholder interface for Augur to extract or
-    configure cluster-specific noise parameters. Currently, TJPCov handles
-    the full computation internally via the Halo Mass Function and Mass-Richness
-    relation, so this mainly returns a flag indicating that cluster noise is
-    handled separately.
-
-    Parameters:
-    -----------
-    config : dict
-        Augur configuration dictionary.
-    S : sacc.Sacc
-        SACC object containing cluster tracers.
-    cluster_tracer_name : str
-        Name of the cluster tracer (e.g., 'cluster_0').
-    return_cluster_density : bool
-        If True, also return an effective cluster density estimate.
-
-    Returns:
-    --------
-    noise : float
-        Placeholder noise value (TJPCov computes actual shot noise).
-        Returns 0.0 as a signal that cluster noise is handled by TJPCov.
-    cluster_density : float, optional
-        Estimated cluster number density if return_cluster_density=True.
-    """
-    # Cluster noise is handled internally by TJPCov via ClusterCountsGaussian.
-    # This function exists as an interface for future cluster-specific
-    # configuration (e.g., if Augur needs to override TJPCov defaults).
-
-    # tracer_obj = S.get_tracer(cluster_tracer_name)
-
-    # Estimate cluster density if available from config
-    cluster_density = config.get('cluster_counts', {}).get('ndens', 0.0)
-
-    if return_cluster_density:
-        return 0.0, cluster_density
-    return 0.0
-
-
-def get_cluster_properties(config, S):
-    """
-    Extract cluster tracer metadata and properties from SACC for TJPCov.
-
-    TJPCov's ClusterCountsGaussian and ClusterCountsSSC extract
-    cluster properties automatically via load_from_sacc(). This function
-    provides a reference point for Augur to cross-check or override
-    cluster-specific settings (e.g., min_halo_mass, has_mproxy).
-
-    Parameters:
-    -----------
-    config : dict
-        Augur configuration dictionary with optional cluster_counts section.
-    S : sacc.Sacc
-        SACC object with cluster tracers and data points.
-
-    Returns:
-    --------
-    cluster_info : dict
-        Dictionary with cluster metadata:
-        - 'tracer_names': list of cluster tracer names in SACC
-        - 'z_bins': list of (z_min, z_max) tuples
-        - 'richness_bins': list of (log10_lambda_min, log10_lambda_max) tuples
-        - 'survey_area': survey area in steradians
-        - 'min_halo_mass': minimum mass for integration (from config or default 1e13)
-    """
-    cluster_info = {}
-
-    # Find all cluster tracers and bin definitions
-    # cluster_tracers = []
-    z_bins = []
-    richness_bins = []
-
-    for tracer in S.tracers:
-        tracer_obj = S.get_tracer(tracer)
-
-        # Identify bin_z tracers
-        if hasattr(tracer_obj, 'quantity') and tracer_obj.quantity == 'redshift':
-            # Assuming tracer has (z_min, z_max) or similar metadata
-            z_bins.append(tracer)
-
-        # Identify richness/lambda bin tracers
-        if hasattr(tracer_obj, 'quantity') and 'richness' in str(tracer_obj.quantity).lower():
-            richness_bins.append(tracer)
-
-        # Identify cluster data tracers (those in cluster_counts data points)
-        # This is detected via SACC data type, done at covariance.py level
-
-    cluster_info['z_bins'] = z_bins
-    cluster_info['richness_bins'] = richness_bins
-    cluster_info['min_halo_mass'] = config.get('cluster_counts', {}).get('min_halo_mass', 1e13)
-    cluster_info['has_mproxy'] = config.get('cluster_counts', {}).get('has_mproxy', True)
-
-    # Extract survey area from survey tracer or assume full sky
-    survey_area = 4 * np.pi  # Full sky in steradians
-    for tracer in S.tracers:
-        tracer_obj = S.get_tracer(tracer)
-        if hasattr(tracer_obj, 'quantity') and tracer_obj.quantity == 'survey_area':
-            survey_area = tracer_obj.scale  # If SACC stores it as a scale factor
-            break
-
-    cluster_info['survey_area'] = survey_area
-
-    return cluster_info
-
-
 def get_gaus_cov(S, lk, cosmo, fsky, config):
     """
     Basic implementation of Gaussian covariance using the mode-counting formula
@@ -259,18 +149,17 @@ def get_gaus_cov(S, lk, cosmo, fsky, config):
             return cmb_noise_cl
         return get_noise_power(config, S, tr_a_name)
 
-    # Loop over statistic in the likelihood (assuming 3x2pt so far)
-    for i, myst1 in enumerate(lk.statistics):
-        myst1 = myst1.statistic
+    # Loop over the two-point statistics; cluster blocks are filled separately.
+    stats = [g.statistic for g in lk.statistics if isinstance(g.statistic, TwoPoint)]
+    for i, myst1 in enumerate(stats):
         tr1_name = myst1.source0.sacc_tracer
         tr2_name = myst1.source1.sacc_tracer
         tr1 = myst1.source0.tracers[0].ccl_tracer  # Pulling out the tracers
         tr2 = myst1.source1.tracers[0].ccl_tracer
         ell12 = myst1.ells
         # Loop over upper-triangle and fill lower-triangle by symmetry
-        for j in range(i, len(lk.statistics)):
-            myst2 = lk.statistics[j]
-            myst2 = myst2.statistic
+        for j in range(i, len(stats)):
+            myst2 = stats[j]
             tr3_name = myst2.source0.sacc_tracer
             tr4_name = myst2.source1.sacc_tracer
             tr3 = myst2.source0.tracers[0].ccl_tracer
@@ -433,69 +322,101 @@ class TJPCovGaus(FourierGaussianFsky):
         return ell, ell_eff, ell_edges
 
 
-class TJPCovClusterGaus(BaseClusterGaussian):
-    """
-    Wrapper around TJPCov's ClusterCountsGaussian for Augur integration.
+class _SpectroscopicRedshiftKernel:
+    """Top-hat observed-redshift kernel for ``photo-z: sigma_0: 0``.
 
-    Provides a minimal pass-through interface for cluster number-count shot noise
-    (Poisson + mass-richness relation) covariance computation.
-
-    Configuration keys (in config['tjpcov']):
-        - sacc_file: SACC object (required)
-        - cosmo: pyccl.Cosmology (required)
-        - fsky: float in [0, 1]
-        - min_halo_mass: float (default 1e13 M_sun)
-        - has_mproxy: bool (default True, include mass-richness scatter)
-
-    Example:
-        config = {'tjpcov': {'sacc_file': S, 'cosmo': cosmo, 'fsky': 0.5}}
-        cov_gauss = TJPCovClusterGaus(config)
-        cov_matrix = cov_gauss.get_covariance()  # Full covariance matrix
+    Matches crow's SpectroscopicRedshift; TJPCov's Gaussian photo-z kernel
+    would divide by zero there. Other values of sigma_0 keep TJPCov's kernel.
     """
 
-    def __init__(self, config):
-        """
-        Initialize cluster Gaussian covariance wrapper.
-
-        Parameters
-        ----------
-        config : dict
-            Configuration dict with 'tjpcov' key containing TJPCov setup.
-            Will be passed directly to parent ClusterCountsGaussian.
-        """
-        tjpcov_config = config.get('tjpcov', {})
-        super().__init__(tjpcov_config)
+    def observed_photo_z(self, z_true, z_i, sigma_0):
+        if sigma_0 > 0:
+            return super().observed_photo_z(z_true, z_i, sigma_0)
+        return float(self.z_bins[z_i] <= z_true < self.z_bins[z_i + 1])
 
 
-class TJPCovClusterSSC(BaseClusterSSC):
+class TJPCovClusterSSC(_SpectroscopicRedshiftKernel, BaseClusterSSC):
+    """TJPCov cluster-count SSC with the spectroscopic-redshift kernel."""
+
+
+class TJPCovClusterGaussian(_SpectroscopicRedshiftKernel, BaseClusterGaussian):
+    """TJPCov cluster counts (shot noise) with the spectroscopic-redshift kernel."""
+
+    def shot_noise(self, z_i, lbd_i):
+        if self.sigma_0 > 0:
+            return super().shot_noise(z_i, lbd_i)
+        # With the top-hat kernel, integrate over the bin only: same value, but
+        # quad over TJPCov's wide range resolves the kernel steps ~100x slower.
+
+        def integrand(z):
+            return (self.mass_richness_integral(z, lbd_i, remove_bias=True)
+                    * self.comoving_volume_element(z, z_i, self.sigma_0))
+        return self.survey_area * self._quad_integrate(
+            integrand, self.z_bins[z_i], self.z_bins[z_i + 1])
+
+
+def get_cluster_ssc(S, recipe, cosmo, counts, halo_bias='Tinker10'):
+    """Super-sample covariance of the cluster counts in *S*, from TJPCov.
+
+    The mass function, mass range and Murata mass-richness relation (at its
+    fiducial values) are read from the crow *recipe* of the firecrown
+    statistic, so the covariance describes the model of the data vector.
+
+    TJPCov integrates its own counts, without crow's completeness and purity
+    models. Following CLPipe (LSSTDESC/CLPipe, ``clpipe/clp_covariance.py``,
+    ``CLPCovariance.replace_crow_counts``, commit 4a6128d), the SSC is rescaled
+    to crow's counts *N*: ``SSC_ij * N_i N_j / (G_i G_j)``, where *G* are
+    TJPCov's own counts (its Gaussian term). Since SSC_ij is proportional to
+    the bias-weighted counts of both bins, this carries the selection over to
+    the SSC. It assumes the selection leaves the mean halo bias of each bin
+    unchanged.
+
+    Parameters
+    ----------
+    counts : array
+        crow's fiducial counts, in the order of
+        ``S.indices(data_type='cluster_counts')``.
+
+    Returns
+    -------
+    np.ndarray
+        (n_counts, n_counts) matrix in the order of
+        ``S.indices(data_type='cluster_counts')``.
     """
-    Wrapper around TJPCov's ClusterCountsSSC for Augur integration.
+    counts_type = sacc.standard_types.cluster_counts
+    S_cl = S.copy()
+    S_cl.covariance = None
+    S_cl.keep_selection(data_type=counts_type)
+    S_cl.remove_tracers([n for n, t in S_cl.tracers.items()
+                         if t.tracer_type not in ('survey', 'bin_z', 'bin_richness')])
 
-    Provides a minimal pass-through interface for cluster number-count super-sample
-    covariance (large-scale modes) computation.
+    z_max = max(t.upper for t in S_cl.tracers.values() if t.tracer_type == 'bin_z')
+    if z_max > 0.91:
+        warnings.warn(
+            "TJPCov ClusterCountsSSC stops its true-redshift integral at z=0.91; "
+            f"the SSC of cluster bins above it (z_max={z_max}) is underestimated."
+        )
 
-    Configuration keys (in config['tjpcov']):
-        - sacc_file: SACC object (required)
-        - cosmo: pyccl.Cosmology (required)
-        - fsky: float in [0, 1]
-        - min_halo_mass: float (default 1e13 M_sun)
-        - has_mproxy: bool (default True, include mass-richness scatter)
+    mor = recipe.mass_distribution
+    hmf = recipe.cluster_theory.halo_mass_function
+    lo, hi = recipe.mass_interval
+    mor_parameters = {
+        'mass_func': hmf.name, 'mass_def': hmf.mass_def.name, 'halo_bias': halo_bias,
+        'min_halo_mass': 10**lo, 'max_halo_mass': 10**hi,
+        'm_pivot': mor.pivot_ln_mass / np.log(10), 'z_pivot': mor.pivot_redshift,
+    }
+    for i in range(3):
+        mor_parameters[f'mu_p{i}'] = mor.parameters[f'mu{i}']
+        mor_parameters[f'sigma_p{i}'] = mor.parameters[f'sigma{i}']
 
-    Example:
-        config = {'tjpcov': {'sacc_file': S, 'cosmo': cosmo, 'fsky': 0.5}}
-        cov_ssc = TJPCovClusterSSC(config)
-        cov_matrix = cov_ssc.get_covariance()  # Full covariance matrix
-    """
-
-    def __init__(self, config):
-        """
-        Initialize cluster SSC covariance wrapper.
-
-        Parameters
-        ----------
-        config : dict
-            Configuration dict with 'tjpcov' key containing TJPCov setup.
-            Will be passed directly to parent ClusterCountsSSC.
-        """
-        tjpcov_config = config.get('tjpcov', {})
-        super().__init__(tjpcov_config)
+    def config():
+        return {
+            'tjpcov': {'sacc_file': S_cl, 'cosmo': cosmo, 'use_mpi': False},
+            'parameters': {'h': cosmo['h']},
+            'photo-z': {'sigma_0': 0.0},
+            'mor_parameters': mor_parameters,
+        }
+    ssc = TJPCovClusterSSC(config()).get_covariance()
+    tjpcov_counts = np.diag(TJPCovClusterGaussian(config()).get_covariance())
+    ratio = np.asarray(counts) / tjpcov_counts
+    return ssc * np.outer(ratio, ratio)

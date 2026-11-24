@@ -3,9 +3,13 @@
 import numpy as np
 import warnings
 
+from firecrown.likelihood.two_point import TwoPoint
 from augur.utils.cov_utils import get_gaus_cov, get_SRD_cov, get_noise_power
-from augur.utils.cov_utils import TJPCovGaus, TJPCovClusterGaus, TJPCovClusterSSC
+from augur.utils.cov_utils import TJPCovGaus, get_cluster_ssc
 from augur.utils.config_io import parse_array
+from augur.generate_utils.cluster_counts import (
+    CLUSTER_DATA_TYPES, CLUSTER_TRACER_TYPES, cluster_statistics,
+)
 
 # TJPCov calculator shared with forked covariance workers. Set before the pool
 # is created so children inherit it instead of pickling it per task.
@@ -38,8 +42,10 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
     TJPCov Supported Probes:
       - ``'harmonic'`` — galaxy weak lensing (WL), clustering (GCl).
       - ``'cmb_lensing'`` — CMB convergence auto/cross-correlations.
-      - ``'cluster_counts'`` — cluster number counts (Gaussian + SSC via ClusterCountsGaussian
-        and ClusterCountsSSC; shot noise computed automatically from HMF).
+
+    Cluster counts and mean log mass (probe ``'cluster_counts'``) get their
+    own block, whatever the two-point covariance type, with zero cross-terms
+    to the two-point data (block-diagonal); see :func:`cluster_covariance`.
 
     Parameters
     ----------
@@ -73,9 +79,10 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
     #     unsupported_probes = [p for p in probes if p not in tjpcov_capable]
 
     # ---- Probe support check for gaus_internal / SRD ---------- #
-    _gaus_supported = {'harmonic', 'cmb_lensing'}
-    _srd_supported = {'harmonic'}  # SRD matrices are pre-computed for WL+GCl only
+    _gaus_supported = {'harmonic', 'cmb_lensing', 'cluster_counts'}
+    _srd_supported = {'harmonic', 'cluster_counts'}  # SRD: WL+GCl only
     _active = set(probes) if probes else {'harmonic'}
+    has_clusters = 'cluster_counts' in _active
 
     if cov_type == 'gaus_internal':
         unsupported = _active - _gaus_supported
@@ -87,7 +94,6 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
             )
         fsky = config['cov_options']['fsky']
         cov = get_gaus_cov(S, lk, cosmo, fsky, config)
-        S.add_covariance(cov)
 
     elif cov_type == 'srd':
         unsupported = _active - _srd_supported
@@ -98,13 +104,11 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
                 "will receive a placeholder (variance = 1e30)."
             )
         cov = get_SRD_cov(config['cov_options'], S)
-        S.add_covariance(cov)
 
     elif cov_type == 'tjpcov':
         # ---- Separate probes by type: Fourier (harmonic+CMB) vs. Cluster ---- #
         has_fourier = 'harmonic' in (probes or ['harmonic'])
         has_cmb = 'cmb_lensing' in (probes or [])
-        has_clusters = 'cluster_counts' in (probes or [])
 
         fourier_probes = ['harmonic', 'cmb_lensing']
         cluster_probes = ['cluster_counts']
@@ -153,20 +157,22 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
             tjpcov_config['tjpcov']['cosmo'] = tools.ccl_cosmo
             ccl_tracers = dict()
             bias_all = dict()
-            for i, myst1 in enumerate(lk.statistics):
-                trname1 = myst1.statistic.source0.sacc_tracer
-                trname2 = myst1.statistic.source1.sacc_tracer
-                tr1 = myst1.statistic.source0.tracers[0].ccl_tracer
-                tr2 = myst1.statistic.source1.tracers[0].ccl_tracer
-                ccl_tracers[trname1] = tr1
-                ccl_tracers[trname2] = tr2
+            for myst1 in lk.statistics:
+                myst1 = myst1.statistic
+                if not isinstance(myst1, TwoPoint):
+                    continue
+                trname1 = myst1.source0.sacc_tracer
+                trname2 = myst1.source1.sacc_tracer
+                ccl_tracers[trname1] = myst1.source0.tracers[0].ccl_tracer
+                ccl_tracers[trname2] = myst1.source1.tracers[0].ccl_tracer
                 if 'lens' in trname1:
-                    bias_all[trname1] = myst1.statistic.source0.bias
+                    bias_all[trname1] = myst1.source0.bias
                 if 'lens' in trname2:
-                    bias_all[trname2] = myst1.statistic.source1.bias
+                    bias_all[trname2] = myst1.source1.bias
             for key in bias_all:
                 tjpcov_config['tjpcov'][f'bias_{key}'] = bias_all[key]
-            tjpcov_config['tjpcov']['sacc_file'] = S
+            # TJPCov's Fourier builder only understands two-point tracers.
+            tjpcov_config['tjpcov']['sacc_file'] = _two_point_sacc(S) if has_clusters else S
             tjpcov_config['tjpcov']['IA'] = config['cov_options'].get('IA', None)
             tjpcov_config['tjpcov']['cov_type'] = ['FourierGaussianFsky']
             tjpcov_config['tjpcov']['fsky'] = config['cov_options']['fsky']
@@ -203,7 +209,7 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
             #             cov_fourier[jj_all.T, ii_all.T] = cov_here[:len(ii), :len(jj)].T
 
             nproc = int(config['cov_options'].get('nproc', 1))
-            combs = list(S.get_tracer_combinations())
+            combs = [c for c in S.get_tracer_combinations() if len(c) == 2]
             pairs = [(combs[i], combs[j])
                      for i in range(len(combs)) for j in range(i, len(combs))]
             global _POOL_CALC
@@ -229,44 +235,7 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
 
             cov_all += cov_fourier
 
-        # ---- Compute Cluster Number Counts Covariance ---- #
-        if has_clusters:
-            # Check that SACC has cluster count data
-            if 'cluster_counts' not in S.get_data_types():
-                raise ValueError(
-                    "Cluster count covariance requested but no cluster_counts "
-                    "data type found in SACC file."
-                )
-
-            cluster_tjpcov_config = dict()
-            cluster_tjpcov_config['tjpcov'] = {
-                'sacc_file': S,
-                'cosmo': tools.ccl_cosmo,
-                'fsky': config['cov_options']['fsky'],
-            }
-
-            # Optional cluster-specific TJPCov settings
-            cluster_opts = config.get('cluster_counts', {}).get('tjpcov_options', {})
-            cluster_tjpcov_config['tjpcov'].update(cluster_opts)
-
-            # Compute Gaussian (shot noise) covariance for clusters.
-            # TJPCov's get_covariance() returns the full (n_data x n_data) matrix
-            # with zeros outside the cluster_counts data type blocks.
-            cov_gauss = TJPCovClusterGaus(cluster_tjpcov_config).get_covariance()
-
-            # Compute SSC (super-sample covariance) for clusters.
-            # Also returns full matrix with zeros outside cluster blocks.
-            cov_ssc = TJPCovClusterSSC(cluster_tjpcov_config).get_covariance()
-
-            # Combine: TJPCov ensures that each builder only populates its own
-            # data-type blocks, so addition is safe and correct for multi-probe.
-            cov_cluster = cov_gauss + cov_ssc
-
-            # Add cluster contribution to full covariance.
-            # No indexing issues: each builder filters to its data types automatically.
-            cov_all += cov_cluster
-
-        S.add_covariance(cov_all)
+        cov = cov_all
 
     elif cov_type == 'none':
         ndata = len(S.mean)
@@ -277,6 +246,7 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
              "but may be useful for testing or debugging."
         )
         S.add_covariance(np.eye(ndata))
+        return
 
     else:
         warnings.warn(
@@ -286,3 +256,59 @@ def compute_covariance(config, S, lk, cosmo, tools, probes=None):
         )
         ndata = len(S.mean)
         S.add_covariance(np.eye(ndata))
+        return
+
+    if has_clusters:
+        idx, block = cluster_covariance(config, S, lk, tools.ccl_cosmo)
+        cov[np.ix_(idx, idx)] = block
+    S.add_covariance(cov)
+
+
+def _two_point_sacc(S):
+    """Return a copy of *S* without the cluster data points and tracers."""
+    S2 = S.copy()
+    for data_type in CLUSTER_DATA_TYPES.values():
+        S2.remove_selection(data_type=data_type)
+    S2.remove_tracers([n for n, t in S2.tracers.items()
+                       if t.tracer_type in CLUSTER_TRACER_TYPES])
+    return S2
+
+
+def cluster_covariance(config, S, lk, cosmo):
+    """Covariance block of the cluster counts and mean log10 mass in *S*.
+
+    * counts: Poisson variance equal to crow's fiducial counts in *S*, plus the
+      TJPCov super-sample term rescaled to those counts (``covariance.ssc``,
+      default on). Both follow CLPipe (LSSTDESC/CLPipe,
+      ``clpipe/clp_covariance.py``, ``CLPCovariance.replace_crow_counts``,
+      commit 4a6128d); see :func:`augur.utils.cov_utils.get_cluster_ssc`;
+    * mean log10 mass: ``mean_log_mass_sigma**2 / N`` per bin, with N the
+      fiducial count of that bin; no cross-terms with the counts.
+
+    Returns the SACC indices of the cluster points and their covariance.
+    """
+    cov_cfg = config['cluster_counts'].get('covariance', {})
+    i_n = S.indices(data_type=CLUSTER_DATA_TYPES['counts'])
+    i_m = S.indices(data_type=CLUSTER_DATA_TYPES['mass'])
+    counts = S.mean[i_n]
+    if np.any(counts <= 0):
+        raise ValueError("Some cluster bins have no expected clusters; their "
+                         "covariance is singular. Change the binning or the model.")
+    # Poisson term from crow's counts rather than TJPCov's own (CLPipe convention):
+    # crow includes the completeness and purity models, TJPCov does not.
+    block_n = np.diag(counts)
+    if cov_cfg.get('ssc', True):
+        (st,) = cluster_statistics(lk)
+        block_n = block_n + get_cluster_ssc(S, st.cluster_recipe, cosmo, counts,
+                                            cov_cfg.get('halo_bias', 'Tinker10'))
+    idx = np.concatenate([i_n, i_m])
+    block = np.zeros((len(idx), len(idx)))
+    block[:len(i_n), :len(i_n)] = block_n
+    if len(i_m):
+        if 'mean_log_mass_sigma' not in cov_cfg:
+            raise ValueError("cluster_counts.covariance.mean_log_mass_sigma (dex) is "
+                             "needed for the mean log mass covariance.")
+        n_of_bin = {S.data[i].tracers: S.data[i].value for i in i_n}
+        var_m = [cov_cfg['mean_log_mass_sigma']**2 / n_of_bin[S.data[i].tracers] for i in i_m]
+        block[len(i_n):, len(i_n):] = np.diag(var_m)
+    return idx, block

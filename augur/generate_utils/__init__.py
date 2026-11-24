@@ -18,7 +18,7 @@ real_space
 cmb_lensing
     CMB lensing statistics (stub).
 cluster_counts
-    Cluster-count statistics (stub).
+    Binned cluster counts and mean log mass (firecrown BinnedClusterFactory).
 covariance
     Covariance-matrix computation (Gaussian, SRD, TJPCov).
 namaster
